@@ -6,6 +6,7 @@ import { useDevice } from "@/lib/device";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
+import { Plus } from "lucide-react";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { listTournaments } from "@/lib/firestore/repo";
 import type { TournamentDoc } from "@/lib/firestore/types";
@@ -43,7 +44,10 @@ function DashboardDesktop({ stats }: { stats: Stats }) {
           <p className="text-ash-400 text-sm mt-1">League operations overview</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/tournaments"><Button size="sm">Tournaments</Button></Link>
+          <Link href="/tournaments/new">
+            <Button size="sm"><Plus className="h-3.5 w-3.5" /> New Tournament</Button>
+          </Link>
+          <Link href="/tournaments"><Button variant="outline" size="sm">Tournaments</Button></Link>
         </div>
       </div>
 
@@ -65,9 +69,15 @@ function DashboardDesktop({ stats }: { stats: Stats }) {
             : "Use the tournaments page to view live brackets, registrations, and results."}
         </p>
         <div className="mt-5 flex gap-2">
-          <Link href="/tournaments">
-            <Button variant="outline" size="sm">View Tournaments →</Button>
-          </Link>
+          {stats.tournaments === 0 ? (
+            <Link href="/tournaments/new">
+              <Button size="sm"><Plus className="h-3.5 w-3.5" /> Create First Tournament</Button>
+            </Link>
+          ) : (
+            <Link href="/tournaments">
+              <Button variant="outline" size="sm">View Tournaments →</Button>
+            </Link>
+          )}
         </div>
       </Panel>
     </div>
@@ -100,9 +110,15 @@ function DashboardMobile({ stats }: { stats: Stats }) {
             : "View brackets, registrations, and results."}
         </p>
         <div className="mt-3">
-          <Link href="/tournaments">
-            <Button variant="outline" size="sm" className="w-full">View Tournaments</Button>
-          </Link>
+          {stats.tournaments === 0 ? (
+            <Link href="/tournaments/new">
+              <Button size="sm" className="w-full"><Plus className="h-3.5 w-3.5" /> Create First Tournament</Button>
+            </Link>
+          ) : (
+            <Link href="/tournaments">
+              <Button variant="outline" size="sm" className="w-full">View Tournaments</Button>
+            </Link>
+          )}
         </div>
       </Panel>
     </div>
