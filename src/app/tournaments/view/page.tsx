@@ -91,6 +91,28 @@ function TournamentView() {
     [regs],
   );
 
+  // Build in-memory Bracket for rendering from the persisted nodes.
+  // NOTE: hooks must be called before any early returns.
+  const renderBracket: Bracket | null = useMemo(() => {
+    if (!bracket || nodes.length === 0) return null;
+    const engineNodes: EngineNode[] = nodes.map((n) => ({
+      id: n.id, roundIndex: n.roundIndex, positionInRound: n.positionInRound,
+      a: n.a ?? null, b: n.b ?? null,
+      isByeA: n.isByeA, isByeB: n.isByeB,
+      seedA: n.seedA ?? undefined, seedB: n.seedB ?? undefined,
+      winnerNext: n.winnerNext ?? undefined,
+      loserNext: n.loserNext ?? undefined,
+    }));
+    return {
+      type: bracket.format === "DOUBLE_ELIM" ? "DOUBLE_ELIM"
+          : bracket.format === "ROUND_ROBIN" ? "ROUND_ROBIN" : "SINGLE_ELIM",
+      side: "main",
+      nodes: Object.fromEntries(engineNodes.map((n) => [n.id, n])),
+      initialSeeding: [],
+      rounds: bracket.rounds.map((r, i) => ({ index: i, label: r.label, nodeIds: r.nodeIds })),
+    };
+  }, [bracket, nodes]);
+
   if (loading) {
     return (
       <main className="container py-10">
@@ -184,28 +206,7 @@ function TournamentView() {
         bestOf: tournament.bestOf ?? 3,
         createdBy: user.uid,
       });
-      // Notify confirmed entrants.
-      const userIds = confirmed.map((r) => r.userId).filter((x): x is string => !!x);
-      notifyMany(userIds, {
-        title: `Bracket published: ${tournament.name}`,
-        body: `Check the bracket — your first match is ready.`,
-        href: `/tournaments/view?slug=${tournament.slug}`,
-        kind: "BRACKET_PUBLISHED",
-        createdBy: user.uid,
-      }).catch(() => {});
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Publish failed.");
-    } finally { setBusy(false); }
-  }
-
-  async function onStart() {
-    if (!tournament) return;
-    setBusy(true);
-    try { await startTournament(tournament.id); }
-    catch (err) { alert(err instanceof Error ? err.message : "Failed."); }
-    finally { setBusy(false); }
-  }
-
+  
   // Build in-memory Bracket for rendering from the persisted nodes.
   const renderBracket: Bracket | null = useMemo(() => {
     if (!bracket || nodes.length === 0) return null;
