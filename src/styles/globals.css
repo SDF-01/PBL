@@ -182,6 +182,16 @@ body {
   .data-table tr:hover td {
     @apply bg-obsidian-600;
   }
+
+  /* Form inputs */
+  .input {
+    @apply block w-full rounded-pixel bg-obsidian-700 border border-obsidian-400
+           px-3 py-2 text-ash-100 text-sm placeholder:text-ash-500
+           focus:outline-none focus:border-ember-500 focus:ring-1 focus:ring-ember-500/40
+           transition-colors;
+  }
+  textarea.input { @apply leading-relaxed; }
+  select.input   { @apply pr-8; }
 }
 
 /* Subtle pixel scanline texture for themed surfaces (opt-in) */

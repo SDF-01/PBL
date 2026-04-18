@@ -191,3 +191,15 @@ export interface AchievementDoc {
   description: string;
   tier: Tier;
 }
+
+export interface NotificationDoc {
+  id: string;
+  userId: string;
+  title: string;
+  body: string;
+  href?: string | null;
+  kind: "TOURNAMENT_CREATED" | "BRACKET_PUBLISHED" | "MATCH_READY" | "ANNOUNCEMENT" | "GENERAL";
+  read: boolean;
+  createdAt: string;
+  createdBy?: string;
+}

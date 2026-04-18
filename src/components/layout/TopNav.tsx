@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { Button } from "@/components/ui/Button";
-import { Swords } from "lucide-react";
+import { SignInButton } from "@/components/ui/SignInButton";
+import { Plus } from "lucide-react";
 
 const NAV = [
   { href: "/tournaments", label: "Tournaments" },
@@ -32,11 +33,12 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <Link href="/dashboard" className="hidden sm:block">
+          <Link href="/tournaments/new" className="hidden sm:block">
             <Button variant="outline" size="sm">
-              <Swords className="h-3.5 w-3.5" /> Open Dashboard
+              <Plus className="h-3.5 w-3.5" /> New Tournament
             </Button>
           </Link>
+          <SignInButton />
         </div>
       </div>
       <div className="ember-divider" />

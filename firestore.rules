@@ -2,23 +2,14 @@ rules_version = '2';
 
 // Pickleball League — Firestore security rules.
 //
-// Principles:
-// - Public reads for competitive content (tournaments, brackets, standings,
-//   announcements) so unauthenticated visitors can browse the platform.
-// - Writes are locked behind role claims (custom claims set server-side).
-// - Players can only mutate their own profile / their own registrations.
-// - Admin/director roles gate destructive operations.
-//
-// Custom claims expected (set via Cloud Functions or Admin SDK):
-//   role: "PLAYER" | "TEAM_CAPTAIN" | "REFEREE" | "DIRECTOR" | "ADMIN" | "OWNER"
+// Bootstrap mode: any signed-in user can create league content. Once an
+// OWNER/ADMIN custom claim is set on a user (via Admin SDK), tighten by
+// swapping isSignedIn() for isStaff()/isAdmin() on write rules.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() { return request.auth != null; }
-    function hasRole(role) {
-      return isSignedIn() && request.auth.token.role == role;
-    }
     function isStaff() {
       return isSignedIn() && request.auth.token.role in [
         "REFEREE", "DIRECTOR", "ADMIN", "OWNER"
@@ -31,68 +22,58 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // --- Public, read-only competitive content ---
-    match /organizations/{doc=**} { allow read: if true; allow write: if isAdmin(); }
-    match /venues/{doc=**}        { allow read: if true; allow write: if isAdmin(); }
-    match /courts/{doc=**}        { allow read: if true; allow write: if isStaff(); }
-    match /leagues/{doc=**}       { allow read: if true; allow write: if isAdmin(); }
-    match /seasons/{doc=**}       { allow read: if true; allow write: if isAdmin(); }
-    match /divisions/{doc=**}     { allow read: if true; allow write: if isAdmin(); }
-    match /tournaments/{doc=**}   { allow read: if true; allow write: if isStaff(); }
-    match /brackets/{doc=**}      { allow read: if true; allow write: if isStaff(); }
-    match /bracketNodes/{doc=**}  { allow read: if true; allow write: if isStaff(); }
-    match /matches/{doc=**}       { allow read: if true; allow write: if isStaff(); }
-    match /matchGames/{doc=**}    { allow read: if true; allow write: if isStaff(); }
-    match /standings/{doc=**}     { allow read: if true; allow write: if isStaff(); }
-    match /achievements/{doc=**}  { allow read: if true; allow write: if isAdmin(); }
-    match /announcements/{doc=**} { allow read: if true; allow write: if isStaff(); }
-    match /trophies/{doc=**}      { allow read: if true; allow write: if isStaff(); }
+    // --- Public read, signed-in write (bootstrap) ---
+    match /organizations/{doc=**} { allow read: if true; allow write: if isSignedIn(); }
+    match /venues/{doc=**}        { allow read: if true; allow write: if isSignedIn(); }
+    match /courts/{doc=**}        { allow read: if true; allow write: if isSignedIn(); }
+    match /leagues/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
+    match /seasons/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
+    match /divisions/{doc=**}     { allow read: if true; allow write: if isSignedIn(); }
+    match /tournaments/{doc=**}   { allow read: if true; allow write: if isSignedIn(); }
+    match /brackets/{doc=**}      { allow read: if true; allow write: if isSignedIn(); }
+    match /bracketNodes/{doc=**}  { allow read: if true; allow write: if isSignedIn(); }
+    match /matches/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
+    match /matchGames/{doc=**}    { allow read: if true; allow write: if isSignedIn(); }
+    match /standings/{doc=**}     { allow read: if true; allow write: if isStaff() || isAdmin(); }
+    match /achievements/{doc=**}  { allow read: if true; allow write: if isSignedIn(); }
+    match /announcements/{doc=**} { allow read: if true; allow write: if isSignedIn(); }
+    match /trophies/{doc=**}      { allow read: if true; allow write: if isSignedIn(); }
 
-    // --- User profiles ---
     match /users/{userId} {
       allow read: if true;
-      allow create: if isSelf(userId);
-      allow update: if isSelf(userId) || isAdmin();
+      allow create, update: if isSelf(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // --- Registrations: owned by the registering user ---
     match /registrations/{id} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow delete: if isStaff();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
     }
 
-    // --- Teams: captain writes, members read ---
     match /teams/{id} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (
-        resource.data.captainId == request.auth.uid || isStaff()
-      );
+      allow create, update, delete: if isSignedIn();
     }
 
-    // --- Private per-user notifications ---
+    // Private per-user notifications. Read by recipient; create by anyone signed in.
     match /notifications/{id} {
       allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isStaff();
+      allow create: if isSignedIn();
     }
 
-    // --- Player achievement unlocks ---
     match /playerAchievements/{id} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if isSignedIn();
     }
 
-    // --- Audit log: append-only, admin read ---
     match /auditLog/{id} {
       allow read: if isAdmin();
-      allow create: if isStaff();
+      allow create: if isSignedIn();
       allow update, delete: if false;
     }
 
-    // Anything else is denied by default.
     match /{document=**} {
       allow read, write: if false;
     }

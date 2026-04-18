@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Trophy, LayoutDashboard } from "lucide-react";
+import { Home, Trophy, Bell, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const TABS = [
-  { href: "/",            label: "Home",   icon: Home },
-  { href: "/tournaments", label: "Events", icon: Trophy },
-  { href: "/dashboard",   label: "Arena",  icon: LayoutDashboard },
+  { href: "/",                 label: "Home",   icon: Home },
+  { href: "/tournaments",      label: "Events", icon: Trophy },
+  { href: "/tournaments/new",  label: "Create", icon: Plus },
+  { href: "/notifications",    label: "Inbox",  icon: Bell },
 ] as const;
 
 export function MobileTabBar() {
@@ -19,7 +20,7 @@ export function MobileTabBar() {
       className="fixed bottom-0 inset-x-0 z-40 bg-obsidian-900/95 backdrop-blur-md border-t border-obsidian-700"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-3">
+      <ul className="grid grid-cols-4">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (

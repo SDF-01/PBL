@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 import { Inter, JetBrains_Mono, Press_Start_2P, Cinzel } from "next/font/google";
 import { DeviceProvider } from "@/lib/device";
+import { AuthProvider } from "@/lib/auth-context";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -32,7 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${pixel.variable} ${cinzel.variable}`}>
       <body className="antialiased">
-        <DeviceProvider>{children}</DeviceProvider>
+        <DeviceProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </DeviceProvider>
         <AnalyticsLoader />
       </body>
     </html>

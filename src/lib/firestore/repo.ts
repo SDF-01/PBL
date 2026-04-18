@@ -10,10 +10,12 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   where,
   type QueryConstraint,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { COLLECTIONS } from "./collections";
@@ -21,6 +23,7 @@ import type {
   AnnouncementDoc,
   BracketDoc,
   BracketNodeDoc,
+  NotificationDoc,
   RegistrationDoc,
   TournamentDoc,
 } from "./types";
@@ -76,4 +79,29 @@ export async function getDocById<T>(name: string, id: string): Promise<T | null>
   const snap = await getDoc(doc(db(), name, id));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as T;
+}
+
+/**
+ * Subscribe to a user's notifications inbox in real time.
+ * Returns the Firestore unsubscribe function.
+ */
+export function subscribeNotifications(
+  userId: string,
+  callback: (notifications: NotificationDoc[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db(), COLLECTIONS.notifications),
+    where("userId", "==", userId),
+    orderBy("createdAt", "desc"),
+    limit(50),
+  );
+  return onSnapshot(q, (snap) => {
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as NotificationDoc);
+    callback(items);
+  });
+}
+
+export async function listUserIds(max = 500): Promise<string[]> {
+  const snap = await getDocs(query(collection(db(), COLLECTIONS.users), limit(max)));
+  return snap.docs.map((d) => d.id);
 }

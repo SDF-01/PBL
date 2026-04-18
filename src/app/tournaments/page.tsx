@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays, MapPin, Plus } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
@@ -54,6 +54,11 @@ export default function TournamentsPage() {
               Open registrations, live brackets, and resolved campaigns.
             </p>
           </div>
+          <Link href="/tournaments/new">
+            <Button size="sm">
+              <Plus className="h-3.5 w-3.5" /> New Tournament
+            </Button>
+          </Link>
         </div>
 
         {error ? (
@@ -74,8 +79,10 @@ export default function TournamentsPage() {
               brackets, and standings.
             </p>
             <div className="mt-5">
-              <Link href="/dashboard">
-                <Button variant="outline" size="sm">Open Dashboard</Button>
+              <Link href="/tournaments/new">
+                <Button variant="outline" size="sm">
+                  <Plus className="h-3.5 w-3.5" /> Create First Tournament
+                </Button>
               </Link>
             </div>
           </Panel>
