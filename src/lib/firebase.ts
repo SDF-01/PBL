@@ -14,6 +14,7 @@ const config = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 let _app: FirebaseApp | null = null;
@@ -45,4 +46,18 @@ export function auth(): Auth {
   if (_auth) return _auth;
   _auth = getAuth(getFirebaseApp());
   return _auth;
+}
+
+/**
+ * Initialize Analytics lazily on the client only. Safe to no-op on server /
+ * static-export build (browser-only APIs). Call from a client component
+ * effect once, e.g. in a top-level AnalyticsLoader.
+ */
+export async function initAnalytics(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (!config.measurementId || !isFirebaseConfigured()) return;
+  const { isSupported, getAnalytics } = await import("firebase/analytics");
+  if (await isSupported()) {
+    getAnalytics(getFirebaseApp());
+  }
 }
