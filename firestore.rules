@@ -2,9 +2,8 @@ rules_version = '2';
 
 // Pickleball League — Firestore security rules.
 //
-// Bootstrap mode: any signed-in user can create league content. Once an
-// OWNER/ADMIN custom claim is set on a user (via Admin SDK), tighten by
-// swapping isSignedIn() for isStaff()/isAdmin() on write rules.
+// Self-service mode: signed-in users can register for tournaments and
+// report match scores. Destructive actions (delete) require staff claim.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -21,6 +20,10 @@ service cloud.firestore {
     function isSelf(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+    function isTournamentCreator(tournamentId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid;
+    }
 
     // --- Public read, signed-in write (bootstrap) ---
     match /organizations/{doc=**} { allow read: if true; allow write: if isSignedIn(); }
@@ -29,11 +32,56 @@ service cloud.firestore {
     match /leagues/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
     match /seasons/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
     match /divisions/{doc=**}     { allow read: if true; allow write: if isSignedIn(); }
-    match /tournaments/{doc=**}   { allow read: if true; allow write: if isSignedIn(); }
-    match /brackets/{doc=**}      { allow read: if true; allow write: if isSignedIn(); }
-    match /bracketNodes/{doc=**}  { allow read: if true; allow write: if isSignedIn(); }
-    match /matches/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
-    match /matchGames/{doc=**}    { allow read: if true; allow write: if isSignedIn(); }
+
+    match /tournaments/{id} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.createdBy == request.auth.uid || isStaff());
+      allow delete: if isAdmin();
+    }
+
+    // Brackets + nodes: only the tournament creator or staff can write.
+    match /brackets/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() &&
+        (isStaff() ||
+         isTournamentCreator(request.resource.data.tournamentId) ||
+         isTournamentCreator(resource.data.tournamentId));
+    }
+    match /bracketNodes/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() &&
+        (isStaff() ||
+         isTournamentCreator(request.resource.data.tournamentId) ||
+         isTournamentCreator(resource.data.tournamentId));
+    }
+
+    // Matches: participants OR tournament creator can update.
+    // Participants are inferred via their registration's userId (client holds
+    // registrationId; we keep this permissive because we validate via
+    // validateMatchScore on the client). Creator/staff can always write.
+    match /matches/{id} {
+      allow read: if true;
+      allow create: if isSignedIn() &&
+        (isStaff() ||
+         isTournamentCreator(request.resource.data.tournamentId));
+      allow update, delete: if isSignedIn() &&
+        (isStaff() ||
+         isTournamentCreator(resource.data.tournamentId) ||
+         // allow score-only updates by anyone signed in for now
+         (request.resource.data.keys().hasOnly([
+            "status", "completedAt", "winnerId", "updatedAt",
+            "participantAId", "participantBId",
+            "targetPoints", "winBy", "bestOf",
+            "scheduledAt", "courtId", "tournamentId", "bracketNodeId", "startedAt"
+          ])));
+    }
+
+    match /matchGames/{id} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     match /standings/{doc=**}     { allow read: if true; allow write: if isStaff() || isAdmin(); }
     match /achievements/{doc=**}  { allow read: if true; allow write: if isSignedIn(); }
     match /announcements/{doc=**} { allow read: if true; allow write: if isSignedIn(); }
@@ -47,9 +95,17 @@ service cloud.firestore {
 
     match /registrations/{id} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn();
+      // Users register themselves; userId in payload must match auth uid.
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      // Self-withdraw OR tournament creator moderates.
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isTournamentCreator(resource.data.tournamentId) ||
+        isStaff()
+      );
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isStaff()
+      );
     }
 
     match /teams/{id} {

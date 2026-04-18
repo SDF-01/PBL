@@ -23,6 +23,8 @@ import type {
   AnnouncementDoc,
   BracketDoc,
   BracketNodeDoc,
+  MatchDoc,
+  MatchGameDoc,
   NotificationDoc,
   RegistrationDoc,
   TournamentDoc,
@@ -104,4 +106,82 @@ export function subscribeNotifications(
 export async function listUserIds(max = 500): Promise<string[]> {
   const snap = await getDocs(query(collection(db(), COLLECTIONS.users), limit(max)));
   return snap.docs.map((d) => d.id);
+}
+
+/**
+ * Realtime subscription to all registrations for a tournament.
+ */
+export function subscribeRegistrations(
+  tournamentId: string,
+  callback: (regs: RegistrationDoc[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db(), COLLECTIONS.registrations),
+    where("tournamentId", "==", tournamentId),
+  );
+  return onSnapshot(q, (snap) => {
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RegistrationDoc);
+    callback(items);
+  });
+}
+
+/**
+ * Realtime subscription to all matches in a tournament.
+ */
+export function subscribeMatches(
+  tournamentId: string,
+  callback: (matches: MatchDoc[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db(), COLLECTIONS.matches),
+    where("tournamentId", "==", tournamentId),
+  );
+  return onSnapshot(q, (snap) => {
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MatchDoc);
+    callback(items);
+  });
+}
+
+/**
+ * Realtime subscription to all bracket nodes in a tournament.
+ */
+export function subscribeBracketNodes(
+  tournamentId: string,
+  callback: (nodes: BracketNodeDoc[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db(), COLLECTIONS.bracketNodes),
+    where("tournamentId", "==", tournamentId),
+  );
+  return onSnapshot(q, (snap) => {
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as BracketNodeDoc);
+    callback(items);
+  });
+}
+
+/**
+ * Realtime subscription to the persisted bracket doc for a tournament.
+ * Returns null until published.
+ */
+export function subscribeBracket(
+  tournamentId: string,
+  callback: (bracket: BracketDoc | null) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db(), COLLECTIONS.brackets),
+    where("tournamentId", "==", tournamentId),
+    limit(1),
+  );
+  return onSnapshot(q, (snap) => {
+    if (snap.empty) { callback(null); return; }
+    const d = snap.docs[0]!;
+    callback({ id: d.id, ...d.data() } as BracketDoc);
+  });
+}
+
+export async function listMatchGames(matchId: string): Promise<MatchGameDoc[]> {
+  return getAll<MatchGameDoc>(
+    COLLECTIONS.matchGames,
+    where("matchId", "==", matchId),
+  );
 }
