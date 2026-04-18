@@ -7,170 +7,103 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { BracketView } from "@/components/bracket/BracketView";
-import { generateSingleElim, type Entrant } from "@/domain/bracket";
+import { generateSingleElim, type Entrant, type Bracket } from "@/domain/bracket";
 import { isFirebaseConfigured } from "@/lib/firebase";
-import {
-  getTournamentBySlug,
-  listRegistrations,
-  getBracketForTournament,
-  listBracketNodes,
-} from "@/lib/firestore/repo";
-import type {
-  TournamentDoc,
-  RegistrationDoc,
-  BracketDoc,
-  BracketNodeDoc,
-} from "@/lib/firestore/types";
-
-// Fallback entrants used when Firebase isn't configured (e.g. preview build).
-// This keeps the page viewable before data is seeded.
-const DEMO_ENTRANTS: Entrant[] = [
-  { id: "e1", name: "Vex · Solen", rating: 2100 },
-  { id: "e2", name: "Nyx · Kael",  rating: 2080 },
-  { id: "e3", name: "Mira · Jor",  rating: 2050 },
-  { id: "e4", name: "Velo · Brand",rating: 2020 },
-  { id: "e5", name: "Rune · Ash",  rating: 1990 },
-  { id: "e6", name: "Ira · Ost",   rating: 1970 },
-  { id: "e7", name: "Sylva · Thorne", rating: 1940 },
-  { id: "e8", name: "Fen · Orin",  rating: 1900 },
-];
+import { getTournamentBySlug, listRegistrations } from "@/lib/firestore/repo";
+import type { TournamentDoc, RegistrationDoc } from "@/lib/firestore/types";
 
 interface ViewState {
-  tournament: TournamentDoc | null;
+  tournament: TournamentDoc;
   entrants: Entrant[];
   nameById: Record<string, string>;
-  persistedBracket?: { bracket: BracketDoc; nodes: BracketNodeDoc[] } | null;
+  bracket: Bracket | null;
 }
 
 function TournamentView() {
   const params = useSearchParams();
-  const slug = params.get("slug") ?? "ember-open";
+  const slug = params.get("slug");
   const [state, setState] = useState<ViewState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
-      if (!isFirebaseConfigured()) {
-        // Preview mode — use demo data so the page still renders.
-        const nameById = Object.fromEntries(DEMO_ENTRANTS.map((e) => [e.id, e.name]));
-        setState({ tournament: null, entrants: DEMO_ENTRANTS, nameById });
-        return;
-      }
+      if (!slug) { setError("No tournament selected."); setLoading(false); return; }
+      if (!isFirebaseConfigured()) { setError("Firebase is not configured."); setLoading(false); return; }
       try {
         const tournament = await getTournamentBySlug(slug);
         if (!tournament) {
-          if (!cancelled) setError(`No tournament found for "${slug}".`);
+          if (!cancelled) { setError(`No tournament found for "${slug}".`); setLoading(false); }
           return;
         }
         const regs = await listRegistrations(tournament.id);
-        const confirmed = regs.filter((r: RegistrationDoc) => r.status === "CONFIRMED");
-        const entrants: Entrant[] = confirmed.map((r) => ({
-          id: r.id,
-          name: r.displayName,
-          rating: r.rating,
-          seed: r.seed,
-        }));
+        const entrants: Entrant[] = regs
+          .filter((r: RegistrationDoc) => r.status === "CONFIRMED")
+          .map((r) => ({ id: r.id, name: r.displayName, rating: r.rating, seed: r.seed }));
         const nameById = Object.fromEntries(entrants.map((e) => [e.id, e.name]));
-        const persisted = await getBracketForTournament(tournament.id);
-        const nodes = persisted ? await listBracketNodes(persisted.id) : [];
-        if (!cancelled) {
-          setState({
-            tournament,
-            entrants,
-            nameById,
-            persistedBracket: persisted ? { bracket: persisted, nodes } : null,
-          });
-        }
+        const bracket = entrants.length >= 2
+          ? generateSingleElim({ entrants, seeding: { method: "RANK_BASED" } })
+          : null;
+        if (!cancelled) { setState({ tournament, entrants, nameById, bracket }); setLoading(false); }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load.");
+        if (!cancelled) { setError(err instanceof Error ? err.message : "Failed to load."); setLoading(false); }
       }
     }
-
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [slug]);
 
-  if (error) {
+  if (loading) {
+    return (
+      <main className="container py-10">
+        <Panel variant="base" padding="lg">
+          <p className="text-ash-400 text-sm">Loading tournament…</p>
+        </Panel>
+      </main>
+    );
+  }
+
+  if (error || !state) {
     return (
       <main className="container py-10">
         <Panel variant="base" padding="lg">
           <h2 className="heading-fantasy text-lg text-crimson-500 mb-2">Unable to load</h2>
-          <p className="text-ash-400 text-sm">{error}</p>
-          <Link href="/tournaments" className="text-spectral-500 hover:text-spectral-400 text-sm mt-3 inline-block">
-            ← All Tournaments
-          </Link>
+          <p className="text-ash-400 text-sm">{error ?? "Unknown error."}</p>
+          <Link href="/tournaments" className="text-spectral-500 hover:text-spectral-400 text-sm mt-3 inline-block">← All Tournaments</Link>
         </Panel>
       </main>
     );
   }
 
-  if (!state) {
-    return (
-      <main className="container py-10">
-        <Panel variant="base" padding="lg">
-          <p className="text-ash-400 text-sm">Summoning bracket…</p>
-        </Panel>
-      </main>
-    );
-  }
-
-  // Project engine output whether we have a persisted bracket or not. The
-  // persisted nodes take precedence for ids and winner state; otherwise we
-  // generate a fresh bracket live so the UI is always interactive.
-  const { tournament, entrants, nameById } = state;
-  const bracket = generateSingleElim({
-    entrants: entrants.length ? entrants : DEMO_ENTRANTS,
-    seeding: { method: "RANK_BASED" },
-  });
-
-  const headline = tournament?.name ?? slug.replace(/-/g, " ");
-  const formatLabel = tournament
-    ? tournament.format.replace(/_/g, " ").toLowerCase()
-    : "single elimination";
+  const { tournament, entrants, nameById, bracket } = state;
+  const formatLabel = tournament.format.replace(/_/g, " ").toLowerCase();
 
   return (
     <main className="container py-10 space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <RuneChip tone="ember" pulse>Live</RuneChip>
             <RuneChip tone="rune" className="capitalize">{formatLabel}</RuneChip>
-            <RuneChip tone="neutral">
-              {entrants.length || DEMO_ENTRANTS.length} Entrants
-            </RuneChip>
+            <RuneChip tone="neutral">{entrants.length} Entrants</RuneChip>
           </div>
-          <h1 className="heading-fantasy text-display-md text-ash-100 capitalize">
-            {headline}
-          </h1>
-          {tournament?.description ? (
+          <h1 className="heading-fantasy text-display-md text-ash-100 capitalize">{tournament.name}</h1>
+          {tournament.description ? (
             <p className="text-ash-400 text-sm mt-1">{tournament.description}</p>
           ) : (
-            <p className="text-ash-400 text-sm mt-1">
-              Scored to {tournament?.targetPoints ?? 11}, win by {tournament?.winBy ?? 2}
-            </p>
+            <p className="text-ash-400 text-sm mt-1">Scored to {tournament.targetPoints ?? 11}, win by {tournament.winBy ?? 2}</p>
           )}
         </div>
-        <Link href="/tournaments" className="text-spectral-500 hover:text-spectral-400 text-sm">
-          ← All Tournaments
-        </Link>
+        <Link href="/tournaments" className="text-spectral-500 hover:text-spectral-400 text-sm">← All Tournaments</Link>
       </div>
 
       <Panel variant="base" padding="lg">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="heading-fantasy text-lg text-ash-100">Bracket</h2>
-          <span className="text-xs text-ash-500 font-mono">
-            {tournament ? "Live from Firestore" : "Preview data"}
-          </span>
-        </div>
-        <BracketView
-          bracket={bracket}
-          resolveName={(id) => (id ? (nameById[id] ?? "TBD") : "")}
-          highlightNodeId={bracket.rounds[0]?.nodeIds[0]}
-        />
+        <h2 className="heading-fantasy text-lg text-ash-100 mb-4">Bracket</h2>
+        {bracket ? (
+          <BracketView bracket={bracket} resolveName={(id) => (id ? (nameById[id] ?? "TBD") : "")} highlightNodeId={bracket.rounds[0]?.nodeIds[0]} />
+        ) : (
+          <p className="text-ash-400 text-sm">Bracket will appear once at least 2 entrants are confirmed.</p>
+        )}
       </Panel>
     </main>
   );

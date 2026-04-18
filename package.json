@@ -6,15 +6,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:pages": "GITHUB_PAGES=true next build",
     "start": "npx serve out",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed-firestore.ts",
-    "rules:deploy": "firebase deploy --only firestore:rules",
-    "indexes:deploy": "firebase deploy --only firestore:indexes"
+    "deploy": "next build && firebase deploy --only hosting --project pickleballleague",
+    "deploy:all": "next build && firebase deploy --project pickleballleague",
+    "rules:deploy": "firebase deploy --only firestore:rules --project pickleballleague",
+    "indexes:deploy": "firebase deploy --only firestore:indexes --project pickleballleague"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

@@ -13,3 +13,5 @@ coverage
 prisma/*.db
 prisma/*.db-journal
 tsconfig.tsbuildinfo
+pickleballleague-firebase-adminsdk-*.json
+.firebase/

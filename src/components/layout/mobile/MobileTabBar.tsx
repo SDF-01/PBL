@@ -2,18 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Trophy, Swords, User, Bell } from "lucide-react";
+import { Home, Trophy, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-// Bottom tab bar — native-app pattern. Large tap targets, fixed to viewport,
-// safe-area aware for notched devices.
-
 const TABS = [
-  { href: "/",                label: "Home",      icon: Home },
-  { href: "/tournaments",     label: "Events",    icon: Trophy },
-  { href: "/dashboard",       label: "Arena",     icon: Swords },
-  { href: "/standings",       label: "Ranks",     icon: Bell },
-  { href: "/dashboard/player",label: "You",       icon: User },
+  { href: "/",            label: "Home",   icon: Home },
+  { href: "/tournaments", label: "Events", icon: Trophy },
+  { href: "/dashboard",   label: "Arena",  icon: LayoutDashboard },
 ] as const;
 
 export function MobileTabBar() {
@@ -24,7 +19,7 @@ export function MobileTabBar() {
       className="fixed bottom-0 inset-x-0 z-40 bg-obsidian-900/95 backdrop-blur-md border-t border-obsidian-700"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="grid grid-cols-5">
+      <ul className="grid grid-cols-3">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (

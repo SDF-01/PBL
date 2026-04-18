@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy to Firebase Hosting
 
 on:
   push:
@@ -7,15 +7,9 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,13 +28,8 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Build (static export with /PBL base path)
+      - name: Build (static export)
         env:
-          GITHUB_PAGES: "true"
-          # Firebase Web app config — these values are PUBLIC identifiers,
-          # not secrets. They end up in the client bundle regardless;
-          # security is enforced by Firestore rules + App Check.
-          # Project: https://console.firebase.google.com/project/pickleballleague
           NEXT_PUBLIC_FIREBASE_API_KEY:             "AIzaSyAITxJd0I7Hc5TGwtkkK2BNiJ0S_AnF5wI"
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         "pickleballleague.firebaseapp.com"
           NEXT_PUBLIC_FIREBASE_PROJECT_ID:          "pickleballleague"
@@ -50,20 +39,10 @@ jobs:
           NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID:      "G-KD1JTE4ET6"
         run: npm run build
 
-      - name: Add .nojekyll
-        run: touch out/.nojekyll
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          path: out
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PICKLEBALLLEAGUE }}
+          channelId: live
+          projectId: pickleballleague
