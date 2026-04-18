@@ -28,16 +28,25 @@ export function slugify(s: string): string {
     .slice(0, 60);
 }
 
+// Firestore rejects `undefined` field values — strip them before writes.
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out as Partial<T>;
+}
+
 type NewTournament = Omit<TournamentDoc, "id"> & { createdBy: string };
 
 export async function createTournament(input: NewTournament): Promise<string> {
   // Use slug as document id when provided so the URL is stable.
   const id = input.slug || slugify(input.name);
-  await setDoc(doc(db(), COLLECTIONS.tournaments, id), {
+  await setDoc(doc(db(), COLLECTIONS.tournaments, id), stripUndefined({
     ...input,
     slug: id,
     createdAt: serverTimestamp(),
-  });
+  }));
   return id;
 }
 
