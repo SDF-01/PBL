@@ -21,6 +21,14 @@ export const COLLECTIONS = {
   trophies: "trophies",
   notifications: "notifications",
   auditLog: "auditLog",
+  // ==== Ladder League (spec v4) ====
+  playDates: "playDates",
+  ladderSessions: "ladderSessions",
+  ladderCourts: "ladderCourts",
+  ladderMatches: "ladderMatches",
+  checkIns: "checkIns",
+  standingsSnapshots: "standingsSnapshots",
+  audits: "audits",
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

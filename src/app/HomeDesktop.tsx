@@ -16,33 +16,33 @@ export function HomeDesktop() {
         <div className="container relative py-20 md:py-28 grid lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7">
             <RuneChip tone="rune" pulse className="mb-5">
-              <Flame className="h-3 w-3" /> Pickleball League
+              <Flame className="h-3 w-3" /> Ladder League
             </RuneChip>
             <h1 className="heading-fantasy text-display-lg md:text-display-xl text-ash-100 leading-[1.05]">
-              Build your league.{" "}
-              <span className="text-ember-500">Run your tournaments.</span>
+              Run your ladder.{" "}
+              <span className="text-ember-500">Win the court.</span>
             </h1>
             <p className="mt-5 text-ash-300 max-w-xl text-lg leading-relaxed">
-              A competitive pickleball platform for leagues, tournaments, and
-              clubs. Create events, seed brackets, track rankings, and run
-              seasons end-to-end.
+              A mobile-first doubles ladder platform. Check in, play your
+              session, verify scores, climb the ladder. Admins run attendance,
+              generation, live monitoring, and finalization.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/tournaments"><Button size="lg">Browse Tournaments</Button></Link>
-              <Link href="/dashboard"><Button variant="rune" size="lg">Open Dashboard</Button></Link>
+              <Link href="/ladder/check-in"><Button size="lg">Player Check-in</Button></Link>
+              <Link href="/dashboard"><Button variant="rune" size="lg">Admin Dashboard</Button></Link>
             </div>
           </div>
 
           <Panel variant="hud" padding="lg" glow="rune" className="lg:col-span-5 relative">
             <RuneChip tone="spectral" className="mb-3">Get Started</RuneChip>
-            <div className="heading-fantasy text-2xl text-ash-100">No tournaments yet</div>
+            <div className="heading-fantasy text-2xl text-ash-100">No play dates yet</div>
             <div className="text-sm text-ash-400 mt-1">
-              Create your first tournament to see live brackets, entrants, and
-              results right here.
+              Admins: create a season and schedule your first play date to open
+              check-in for players.
             </div>
             <div className="ember-divider my-6" />
-            <Link href="/tournaments">
-              <Button variant="outline" size="sm">View Tournaments →</Button>
+            <Link href="/ladder/seasons">
+              <Button variant="outline" size="sm">Manage Seasons →</Button>
             </Link>
           </Panel>
         </div>
@@ -51,18 +51,18 @@ export function HomeDesktop() {
       <section className="container py-16 grid md:grid-cols-3 gap-4">
         <FeatureCard
           icon={<Swords className="h-5 w-5" />} tone="ember"
-          title="Live Brackets"
-          copy="Single elimination, double elimination, round robin, and pool-to-bracket formats."
+          title="Court-Centric Play"
+          copy="Check in, see your court, play your rotation, enter and verify scores — all one-handed."
         />
         <FeatureCard
           icon={<Trophy className="h-5 w-5" />} tone="gold"
-          title="Seasonal Rankings"
-          copy="Rating-based seeding, season standings, and long-term player progression."
+          title="Ladder Standings"
+          copy="Individual rankings generated from doubles play. Live standings update on verified scores only."
         />
         <FeatureCard
           icon={<Flame className="h-5 w-5" />} tone="rune"
-          title="League Operations"
-          copy="Manage venues, courts, schedules, referees, and registrations in one place."
+          title="Admin Control"
+          copy="Attendance review, deterministic session generation, live monitoring, and explicit finalization."
         />
       </section>
     </main>

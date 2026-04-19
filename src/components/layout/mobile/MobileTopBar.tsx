@@ -29,7 +29,7 @@ export function MobileTopBar() {
         <Link href="/" className="flex items-center gap-2">
           <CrestLogo className="w-7 h-7 text-ember-500" />
           <span className="heading-fantasy text-ash-100 text-base tracking-wide">
-            Pickleball League
+            Ladder League
           </span>
         </Link>
         <div className="flex items-center gap-2">

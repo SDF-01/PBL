@@ -11,43 +11,43 @@ export function HomeMobile() {
     <div className="px-4 py-5 space-y-5">
       <section>
         <RuneChip tone="rune" pulse className="mb-3">
-          <Flame className="h-3 w-3" /> Pickleball League
+          <Flame className="h-3 w-3" /> Ladder League
         </RuneChip>
         <h1 className="heading-fantasy text-3xl leading-[1.1] text-ash-100">
-          Build your league.
+          Run your ladder.
         </h1>
         <p className="text-ember-500 heading-fantasy text-2xl leading-[1.1] mt-1">
-          Run your tournaments.
+          Win the court.
         </p>
         <p className="text-ash-300 text-sm mt-3 leading-relaxed">
-          Competitive leagues, tournaments, and clubs — brackets, rankings,
-          and season-long play.
+          Mobile-first doubles ladder play — check in, rotate, verify,
+          climb.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Link href="/tournaments"><Button size="md" className="w-full">Tournaments</Button></Link>
+          <Link href="/ladder/check-in"><Button size="md" className="w-full">Check In</Button></Link>
           <Link href="/dashboard"><Button variant="rune" size="md" className="w-full">Dashboard</Button></Link>
         </div>
       </section>
 
       <Panel variant="hud" padding="md" glow="rune">
         <RuneChip tone="spectral" className="mb-2">Get Started</RuneChip>
-        <div className="heading-fantasy text-xl text-ash-100">No tournaments yet</div>
+        <div className="heading-fantasy text-xl text-ash-100">No play dates yet</div>
         <div className="text-xs text-ash-400 mt-1">
-          Create your first event to see brackets and results.
+          Admins: create a season and schedule a play date to open check-in.
         </div>
         <div className="ember-divider my-4" />
-        <Link href="/tournaments">
-          <Button variant="outline" size="sm" className="w-full">View Tournaments</Button>
+        <Link href="/ladder/seasons">
+          <Button variant="outline" size="sm" className="w-full">Manage Seasons</Button>
         </Link>
       </Panel>
 
       <div className="grid grid-cols-1 gap-2">
         <FeatureRow icon={<Swords className="h-5 w-5" />} tone="ember"
-          title="Live Brackets" copy="Single elim, double elim, round robin." />
+          title="Court-Centric Play" copy="Check in, rotate, verify, climb." />
         <FeatureRow icon={<Trophy className="h-5 w-5" />} tone="gold"
-          title="Seasonal Rankings" copy="Ratings, standings, progression." />
+          title="Ladder Standings" copy="Individual rankings from doubles play." />
         <FeatureRow icon={<Flame className="h-5 w-5" />} tone="rune"
-          title="League Ops" copy="Venues, courts, referees, registrations." />
+          title="Admin Control" copy="Attendance, generation, monitoring, finalization." />
       </div>
     </div>
   );

@@ -13,7 +13,7 @@ export function SiteFooter() {
             </span>
           </div>
           <p className="mt-3 text-xs text-ash-400 leading-relaxed max-w-sm">
-            A competitive pickleball league, tournament, and community platform.
+            A mobile-first doubles ladder platform — session play, court rotations, live standings.
           </p>
         </div>
         <nav className="flex flex-wrap gap-5 text-sm">
@@ -23,7 +23,7 @@ export function SiteFooter() {
       </div>
       <div className="rune-divider" />
       <div className="container py-4 flex items-center justify-between text-xs text-ash-500">
-        <span>© {new Date().getFullYear()} Pickleball League</span>
+        <span>© {new Date().getFullYear()} Ladder League</span>
         <span className="font-mono">v0.1.0</span>
       </div>
     </footer>

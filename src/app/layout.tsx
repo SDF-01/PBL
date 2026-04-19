@@ -12,12 +12,12 @@ const cinzel = Cinzel({ subsets: ["latin"], variable: "--font-heading", display:
 
 export const metadata: Metadata = {
   title: {
-    default: "Pickleball League — Tournament & Community Platform",
-    template: "%s · Pickleball League",
+    default: "Ladder League — Doubles Ladder Platform",
+    template: "%s · Ladder League",
   },
   description:
-    "Competitive pickleball leagues, tournament brackets, and community — live scoring, seasonal rankings, and a forged-in-ember aesthetic.",
-  applicationName: "Pickleball League",
+    "A mobile-first doubles ladder platform — session-based play, court rotations, live standings, and admin-controlled operational flow.",
+  applicationName: "Ladder League",
 };
 
 export const viewport: Viewport = {

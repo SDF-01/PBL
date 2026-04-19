@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { LayoutDashboard, Swords, Bell, Plus } from "lucide-react";
+import { LayoutDashboard, MapPin, Bell, CalendarDays, Users } from "lucide-react";
 
 const ITEMS: Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { href: "/dashboard",      label: "Overview",     icon: LayoutDashboard },
-  { href: "/tournaments",    label: "Tournaments",  icon: Swords },
-  { href: "/tournaments/new",label: "New Tournament", icon: Plus },
-  { href: "/notifications",  label: "Notifications", icon: Bell },
+  { href: "/dashboard",        label: "Overview",      icon: LayoutDashboard },
+  { href: "/ladder/seasons",   label: "Seasons",       icon: CalendarDays },
+  { href: "/ladder/play-dates",label: "Play Dates",    icon: Users },
+  { href: "/ladder/check-in",  label: "Check-In",      icon: MapPin },
+  { href: "/notifications",    label: "Notifications", icon: Bell },
 ];
 
 export function AppSidebar() {
