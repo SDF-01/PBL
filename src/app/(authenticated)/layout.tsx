@@ -5,6 +5,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileTopBar } from "@/components/layout/mobile/MobileTopBar";
 import { MobileTabBar } from "@/components/layout/mobile/MobileTabBar";
+import { BackToHome } from "@/components/layout/BackToHome";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isMobile, ready } = useDevice();
@@ -17,6 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="min-h-screen flex flex-col">
         <MobileTopBar />
+        <BackToHome />
         <main className="flex-1 px-4 py-4 pb-20">{children}</main>
         <MobileTabBar />
       </div>
@@ -28,7 +30,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <TopNav />
       <div className="flex min-h-[calc(100vh-3.5rem)]">
         <AppSidebar />
-        <main className="flex-1 p-6 md:p-8">{children}</main>
+        <main className="flex-1 p-6 md:p-8">
+          <BackToHome container={false} className="!pt-0" />
+          {children}
+        </main>
       </div>
     </>
   );
