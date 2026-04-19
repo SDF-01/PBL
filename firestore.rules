@@ -169,6 +169,35 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ========== Player profiles + ELO ==========
+    // Player doc id == Firebase Auth uid. Anyone signed in (or any caller,
+    // for public profile reads) may read. Only the owner may write the
+    // editable identity fields; ELO / stats are updated by server-side
+    // match flows (writes allowed for any signed-in user because the
+    // computation is validated client-side via validateMatchScore and
+    // applyMatchEloDeltas — to be tightened when Cloud Functions land).
+    match /players/{uid} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.userId == uid;
+      allow update: if isSignedIn() && (
+        request.auth.uid == uid || isStaff() ||
+        // allow ELO/stat writes from any signed-in user (match-flow writes).
+        request.resource.data.keys().hasOnly([
+          "elo", "eloPeak",
+          "stats", "stats.matches", "stats.wins", "stats.losses",
+          "stats.pointsFor", "stats.pointsAgainst", "stats.updatedAt",
+          "updatedAt"
+        ])
+      );
+      allow delete: if isAdmin();
+    }
+    match /eloEvents/{id} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

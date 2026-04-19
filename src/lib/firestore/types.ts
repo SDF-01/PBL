@@ -51,13 +51,8 @@ export interface OrganizationDoc {
   createdAt: string;
 }
 
-export interface VenueDoc {
-  id: string;
-  orgId: string;
-  name: string;
-  city?: string;
-  region?: string;
-}
+// NOTE: VenueDoc is defined below in the Ladder League section
+// (with geofence lat/lng/radiusMeters). Do not redeclare it here.
 
 export interface CourtDoc {
   id: string;
@@ -383,5 +378,84 @@ export interface AuditDoc {
   targetKind?: string;
   /** Arbitrary JSON-safe payload describing before/after. */
   payload?: Record<string, unknown>;
+  createdAt: string;
+}
+
+// ============================================================
+// PLAYER PROFILES + ELO
+// Public-facing player identity surface. Separate from UserDoc so
+// authentication profile data (email, photoURL) stays minimal while
+// discretionary profile fields live here.
+// ============================================================
+
+export type DominantHand = "RIGHT" | "LEFT" | "AMBI";
+export type PlayerSkillBand =
+  | "NOVICE"    // < 1200
+  | "BEGINNER"  // 1200-1399
+  | "INTERMEDIATE" // 1400-1599
+  | "ADVANCED"  // 1600-1799
+  | "EXPERT"    // 1800-1999
+  | "ELITE";    // 2000+
+
+export interface PlayerStats {
+  matches: number;
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  /** Set to now whenever stats last changed. */
+  updatedAt?: string;
+}
+
+export interface PlayerProfileDoc {
+  /** Firestore doc id == Firebase Auth uid. */
+  id: string;
+  userId: string;
+  displayName: string;
+  photoURL?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  /** Favored venue for quick lookup; denormalized VenueDoc.id. */
+  homeVenueId?: string;
+  homeVenueName?: string;
+  dominantHand?: DominantHand;
+  paddleBrand?: string;
+  paddleModel?: string;
+  yearsPlaying?: number;
+  bio?: string;
+  /** ELO-style rating; seed at 1500. */
+  elo: number;
+  /** Peak ELO ever seen. */
+  eloPeak: number;
+  /** DUPR rating if linked externally; not auto-synced in V1. */
+  duprRating?: number;
+  duprId?: string | null;
+  stats: PlayerStats;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * One row per rating delta applied to a player — keeps an auditable
+ * trail of how their ELO evolved over time. Used by the leaderboard
+ * drill-down and future charts.
+ */
+export interface EloEventDoc {
+  id: string;
+  playerId: string;
+  /** Positive = gained, negative = lost. */
+  delta: number;
+  eloBefore: number;
+  eloAfter: number;
+  /** Source that produced this delta, e.g. "ladderMatch". */
+  source: string;
+  sourceId?: string;
+  /** Opponent context for display; all denormalized. */
+  opponentIds?: string[];
+  partnerIds?: string[];
+  won?: boolean;
+  pointsFor?: number;
+  pointsAgainst?: number;
   createdAt: string;
 }

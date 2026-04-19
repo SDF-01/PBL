@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { LayoutDashboard, MapPin, Bell, CalendarDays, Users } from "lucide-react";
+import { LayoutDashboard, MapPin, Bell, CalendarDays, Users, Trophy } from "lucide-react";
 
 const ITEMS: Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { href: "/dashboard",        label: "Overview",      icon: LayoutDashboard },
+  { href: "/players",          label: "Leaderboard",   icon: Trophy },
   { href: "/ladder/seasons",   label: "Seasons",       icon: CalendarDays },
   { href: "/ladder/play-dates",label: "Play Dates",    icon: Users },
   { href: "/ladder/check-in",  label: "Check-In",      icon: MapPin },

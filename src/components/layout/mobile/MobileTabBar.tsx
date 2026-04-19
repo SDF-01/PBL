@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPin, Bell, CalendarDays } from "lucide-react";
+import { Home, MapPin, Trophy, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const TABS = [
   { href: "/",                  label: "Home",     icon: Home },
   { href: "/ladder/check-in",   label: "Check In", icon: MapPin },
   { href: "/ladder/play-dates", label: "Dates",    icon: CalendarDays },
-  { href: "/notifications",     label: "Inbox",    icon: Bell },
+  { href: "/players",           label: "Ranks",    icon: Trophy },
 ] as const;
 
 export function MobileTabBar() {

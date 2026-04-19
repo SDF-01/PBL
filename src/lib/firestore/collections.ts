@@ -29,6 +29,9 @@ export const COLLECTIONS = {
   checkIns: "checkIns",
   standingsSnapshots: "standingsSnapshots",
   audits: "audits",
+  // ==== Player profiles + ELO ====
+  players: "players",
+  eloEvents: "eloEvents",
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
