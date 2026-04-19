@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, Home } from "lucide-react";
 
 /**
- * Tiny utility shown on every non-home screen so users always have an
- * obvious "return to home" affordance, independent of the top nav
- * (which collapses on mobile and can scroll out of reach on long pages).
+ * Breadcrumb row shown on every non-home screen. Provides two always-
+ * visible affordances:
+ *   • Back   — pops browser history (falls back to Home if no history)
+ *   • Home   — hard link to '/'
  *
- * Rendered by layout shells; pages don't need to add it manually.
- * The `container` prop controls whether a centered container is added
- * (needed for chromeless / mobile branches) or not (authenticated
- * layout's <main> already provides padding).
+ * Rendered by layout shells; individual pages don't add it manually.
+ * The `container` prop controls whether a centered container wraps the
+ * row (needed for chromeless / mobile branches) — authenticated dashboard
+ * main already has padding so it passes container={false}.
  */
 export function BackToHome({
   container = true,
@@ -22,18 +23,41 @@ export function BackToHome({
   className?: string;
 }) {
   const pathname = usePathname() ?? "/";
+  const router = useRouter();
   if (pathname === "/" || pathname === "") return null;
-  const link = (
-    <Link
-      href="/"
-      className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.15em] text-ash-500 hover:text-ember-400 transition-colors"
-    >
-      <Home className="h-3.5 w-3.5" />
-      Home
-    </Link>
-  );
-  if (!container) {
-    return <div className={`pt-3 pb-1 ${className}`}>{link}</div>;
+
+  function goBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
   }
-  return <div className={`container pt-3 pb-1 ${className}`}>{link}</div>;
+
+  const row = (
+    <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.15em]">
+      <button
+        type="button"
+        onClick={goBack}
+        className="inline-flex items-center gap-1.5 text-ash-500 hover:text-ember-400 transition-colors cursor-pointer"
+        aria-label="Go back"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back
+      </button>
+      <span className="text-obsidian-400" aria-hidden="true">·</span>
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1.5 text-ash-500 hover:text-ember-400 transition-colors"
+      >
+        <Home className="h-3.5 w-3.5" />
+        Home
+      </Link>
+    </div>
+  );
+
+  if (!container) {
+    return <div className={`pt-3 pb-1 ${className}`}>{row}</div>;
+  }
+  return <div className={`container pt-3 pb-1 ${className}`}>{row}</div>;
 }
