@@ -5,10 +5,11 @@ import { SignInButton } from "@/components/ui/SignInButton";
 import { Plus } from "lucide-react";
 
 const NAV = [
+  { href: "/games",             label: "Games" },
   { href: "/ladder/check-in",   label: "Check-In" },
   { href: "/ladder/play-dates", label: "Play Dates" },
-  { href: "/ladder/seasons",    label: "Seasons" },
   { href: "/players",           label: "Leaderboard" },
+  { href: "/tournaments",       label: "Tournaments" },
   { href: "/dashboard",         label: "Dashboard" },
 ] as const;
 

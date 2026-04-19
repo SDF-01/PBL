@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, MapPin, Trophy, CalendarDays } from "lucide-react";
+import { Home, Swords, Trophy, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const TABS = [
   { href: "/",                  label: "Home",     icon: Home },
-  { href: "/ladder/check-in",   label: "Check In", icon: MapPin },
+  { href: "/games",             label: "Games",    icon: Swords },
   { href: "/ladder/play-dates", label: "Dates",    icon: CalendarDays },
   { href: "/players",           label: "Ranks",    icon: Trophy },
 ] as const;

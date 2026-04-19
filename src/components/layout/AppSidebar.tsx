@@ -2,15 +2,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { LayoutDashboard, MapPin, Bell, CalendarDays, Users, Trophy, UserCircle2 } from "lucide-react";
+import { LayoutDashboard, MapPin, Bell, CalendarDays, Users, Trophy, UserCircle2, Swords, Activity } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const ITEMS: Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { href: "/dashboard",        label: "Overview",      icon: LayoutDashboard },
+  { href: "/games",            label: "Local Games",   icon: Activity },
   { href: "/players",          label: "Leaderboard",   icon: Trophy },
   { href: "/ladder/seasons",   label: "Seasons",       icon: CalendarDays },
   { href: "/ladder/play-dates",label: "Play Dates",    icon: Users },
   { href: "/ladder/check-in",  label: "Check-In",      icon: MapPin },
+  { href: "/tournaments",      label: "Tournaments",   icon: Swords },
   { href: "/notifications",    label: "Notifications", icon: Bell },
 ];
 
