@@ -9,7 +9,7 @@ export function SiteFooter() {
           <div className="flex items-center gap-2 text-ember-500">
             <CrestLogo size={24} />
             <span className="heading-display text-[11px] tracking-[0.25em] text-ash-100">
-              PICKLEBALL·LEAGUE
+              LADDER·LEAGUE
             </span>
           </div>
           <p className="mt-3 text-xs text-ash-400 leading-relaxed max-w-sm">
@@ -17,7 +17,10 @@ export function SiteFooter() {
           </p>
         </div>
         <nav className="flex flex-wrap gap-5 text-sm">
-          <Link href="/tournaments" className="text-ash-400 hover:text-spectral-500 transition-colors">Tournaments</Link>
+          <Link href="/ladder/check-in" className="text-ash-400 hover:text-spectral-500 transition-colors">Check-In</Link>
+          <Link href="/ladder/play-dates" className="text-ash-400 hover:text-spectral-500 transition-colors">Play Dates</Link>
+          <Link href="/ladder/seasons" className="text-ash-400 hover:text-spectral-500 transition-colors">Seasons</Link>
+          <Link href="/players" className="text-ash-400 hover:text-spectral-500 transition-colors">Leaderboard</Link>
           <Link href="/dashboard" className="text-ash-400 hover:text-spectral-500 transition-colors">Dashboard</Link>
         </nav>
       </div>
