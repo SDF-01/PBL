@@ -7,6 +7,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -15,11 +16,14 @@ import {
 import { db } from "../firebase";
 import { COLLECTIONS } from "../firestore/collections";
 import { slugify } from "../firestore/write";
+import { applyMatchEloByUserIds } from "../players/write";
 import type {
   LadderSeasonDoc,
   VenueDoc,
   PlayDateDoc,
   CheckInDoc,
+  LadderMatchDoc,
+  LadderSessionDoc,
   MovementPattern,
   CourtDistributionPlacement,
   CheckInStatus,
@@ -201,4 +205,78 @@ export async function writeAudit(
     collection(db(), COLLECTIONS.audits),
     stripUndefined({ ...entry, createdAt: serverTimestamp() }),
   );
+}
+
+// ============================================================
+// LADDER MATCHES — score submission + ELO application
+// ============================================================
+
+export interface SubmitLadderMatchScoreInput {
+  matchId: string;
+  scoreA: number;
+  scoreB: number;
+  submittedBy: string;
+}
+
+/**
+ * Finalize a ladder match by writing its score and applying ELO deltas
+ * to all four players. The match doc must already exist (created during
+ * session generation). ELO application is best-effort — a failure does
+ * not reject the score since the score itself commits first.
+ */
+export async function submitLadderMatchScore(
+  input: SubmitLadderMatchScoreInput,
+): Promise<void> {
+  const { matchId, scoreA, scoreB, submittedBy } = input;
+  if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB)) {
+    throw new Error("Scores must be integers.");
+  }
+  if (scoreA < 0 || scoreB < 0) {
+    throw new Error("Scores cannot be negative.");
+  }
+  if (scoreA === scoreB) {
+    throw new Error("Ladder matches cannot end in a tie.");
+  }
+  const mRef = doc(db(), COLLECTIONS.ladderMatches, matchId);
+  const mSnap = await getDoc(mRef);
+  if (!mSnap.exists()) throw new Error("Ladder match not found.");
+  const match = mSnap.data() as LadderMatchDoc;
+
+  await updateDoc(
+    mRef,
+    stripUndefined({
+      scoreA,
+      scoreB,
+      submittedBy,
+      submittedAt: serverTimestamp(),
+    }),
+  );
+
+  // Resolve target points via the session.
+  let targetPoints = 11;
+  try {
+    const sSnap = await getDoc(
+      doc(db(), COLLECTIONS.ladderSessions, match.sessionId),
+    );
+    if (sSnap.exists()) {
+      targetPoints =
+        (sSnap.data() as LadderSessionDoc).targetPoints ?? targetPoints;
+    }
+  } catch {
+    /* keep default */
+  }
+
+  try {
+    await applyMatchEloByUserIds({
+      sideA: [match.sideA.players[0], match.sideA.players[1]],
+      sideB: [match.sideB.players[0], match.sideB.players[1]],
+      scoreA,
+      scoreB,
+      targetPoints,
+      source: "ladderMatch",
+      sourceId: matchId,
+    });
+  } catch (err) {
+    console.warn("[elo] ladder ELO apply failed", err);
+  }
 }

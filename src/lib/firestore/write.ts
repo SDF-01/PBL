@@ -27,8 +27,7 @@ import type {
   BracketDoc,
   BracketNodeDoc,
   MatchDoc,
-} from "./types";
-import {
+} from "./types";import {
   generateSingleElim,
   generateDoubleElim,
   advanceMatch,
@@ -485,6 +484,38 @@ export async function recordMatchScore(input: {
 
   // Silence TS unused warning; persistedNode is used for structure assertion.
   void persistedNode;
+
+  // Best-effort ELO application for singles matches. Resolves the two
+  // participant registrations; if both are user-backed (singles, not
+  // teams), apply ELO deltas. Failures are logged but do not reject the
+  // score since the score itself is already committed.
+  try {
+    if (match.participantAId && match.participantBId) {
+      const [regA, regB] = await Promise.all([
+        getDoc(doc(db(), COLLECTIONS.registrations, match.participantAId)),
+        getDoc(doc(db(), COLLECTIONS.registrations, match.participantBId)),
+      ]);
+      const aData = regA.exists() ? (regA.data() as RegistrationDoc) : null;
+      const bData = regB.exists() ? (regB.data() as RegistrationDoc) : null;
+      if (aData?.userId && bData?.userId) {
+        const [scoreA, scoreB] = [validation.gamesA, validation.gamesB];
+        // Game-count score (e.g. 2-1 in bestOf=3) is the actual result
+        // signal; use targetPoints=match.bestOf to scale margin weight.
+        const { applyMatchEloByUserIds } = await import("../players/write");
+        await applyMatchEloByUserIds({
+          sideA: [aData.userId],
+          sideB: [bData.userId],
+          scoreA,
+          scoreB,
+          targetPoints: match.bestOf,
+          source: "tournamentMatch",
+          sourceId: matchId,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[elo] tournament ELO apply failed", err);
+  }
 
   return {
     winner: validation.winner,

@@ -188,6 +188,50 @@ export async function applyMatchEloDeltas(args: {
   return deltas;
 }
 
+/**
+ * Convenience wrapper: resolve current ELO/matches for every user id
+ * from their player doc (missing docs treated as STARTING_ELO / 0
+ * matches) and apply deltas. Use this from match-finalization paths
+ * that only know user ids + score.
+ */
+export async function applyMatchEloByUserIds(args: {
+  sideA: string[];
+  sideB: string[];
+  scoreA: number;
+  scoreB: number;
+  targetPoints: number;
+  source: string;
+  sourceId: string;
+}): Promise<EloDelta[]> {
+  const all = [...args.sideA, ...args.sideB];
+  const ratings = await Promise.all(
+    all.map(async (uid) => {
+      const snap = await getDoc(doc(db(), COLLECTIONS.players, uid));
+      if (!snap.exists())
+        return { userId: uid, elo: STARTING_ELO, matches: 0 };
+      const p = snap.data() as PlayerProfileDoc;
+      return {
+        userId: uid,
+        elo: p.elo ?? STARTING_ELO,
+        matches: p.stats?.matches ?? 0,
+      };
+    }),
+  );
+  const byId = new Map(ratings.map((r) => [r.userId, r]));
+  const outcome: MatchOutcome = {
+    sideA: args.sideA.map((u) => byId.get(u)!),
+    sideB: args.sideB.map((u) => byId.get(u)!),
+    scoreA: args.scoreA,
+    scoreB: args.scoreB,
+    targetPoints: args.targetPoints,
+  };
+  return applyMatchEloDeltas({
+    outcome,
+    source: args.source,
+    sourceId: args.sourceId,
+  });
+}
+
 function sideOf(outcome: MatchOutcome, uid: string): "A" | "B" | null {
   if (outcome.sideA.some((p) => p.userId === uid)) return "A";
   if (outcome.sideB.some((p) => p.userId === uid)) return "B";
