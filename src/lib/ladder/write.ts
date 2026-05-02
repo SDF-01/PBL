@@ -280,3 +280,172 @@ export async function submitLadderMatchScore(
     console.warn("[elo] ladder ELO apply failed", err);
   }
 }
+
+// ============================================================
+// SESSION GENERATION & FINALIZATION
+// ============================================================
+
+export interface GenerateSessionInput {
+  sessionDoc: LadderSessionDoc;
+  courts: Array<{ id: string; courtNumber: number; size: 4 | 5; playerIds: string[] }>;
+  matches: Array<{
+    id: string;
+    courtId: string;
+    gameNumber: number;
+    sequenceInCourt: number;
+    sideA: string[];
+    sideB: string[];
+    sitOutPlayer?: string;
+  }>;
+  generatedBy: string;
+}
+
+/**
+ * Persist a generated session, courts, and matches to Firestore
+ * This creates the complete session structure and locks it from further modification
+ */
+export async function persistGeneratedSession(input: GenerateSessionInput): Promise<void> {
+  const { sessionDoc, courts, matches, generatedBy } = input;
+
+  try {
+    // Write session document
+    await setDoc(doc(db(), COLLECTIONS.ladderSessions, sessionDoc.id), {
+      ...stripUndefined(sessionDoc),
+      generatedAt: serverTimestamp(),
+      generatedBy,
+      status: "generated",
+    });
+
+    // Write court documents
+    for (const court of courts) {
+      await setDoc(doc(db(), COLLECTIONS.ladderCourts, court.id), {
+        ...court,
+        status: "active",
+      });
+    }
+
+    // Write match documents
+    for (const match of matches) {
+      await setDoc(doc(db(), COLLECTIONS.ladderMatches, match.id), {
+        ...stripUndefined(match),
+        status: "scheduled",
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    // Write generation audit
+    await writeAudit({
+      action: "SESSION_GENERATED",
+      sessionId: sessionDoc.id,
+      targetId: sessionDoc.id,
+      targetType: "session",
+      actorId: generatedBy,
+      details: {
+        kind: sessionDoc.kind,
+        courtCount: courts.length,
+        playerCount: courts.reduce((sum, c) => sum + c.playerIds.length, 0),
+        matchCount: matches.length,
+      },
+    });
+  } catch (err) {
+    console.error("[ladder] session generation persistence failed", err);
+    throw err;
+  }
+}
+
+/**
+ * Verify score to update match status from submitted → verified
+ */
+export async function verifyLadderMatchScore(
+  matchId: string,
+  verifiedBy: string,
+): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
+    verifiedBy,
+    verifiedAt: serverTimestamp(),
+    status: "verified",
+  });
+
+  // TODO: Apply audit trail
+}
+
+/**
+ * Admin assign result to an incomplete match
+ */
+export async function adminAssignMatchResult(
+  matchId: string,
+  scoreA: number,
+  scoreB: number,
+  adminId: string,
+): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
+    scoreA,
+    scoreB,
+    adminOverride: {
+      assignedBy: adminId,
+      assignedAt: serverTimestamp(),
+      reason: "incomplete_match_admin_assignment",
+    },
+    status: "admin-assigned",
+  });
+
+  await writeAudit({
+    action: "MATCH_ADMIN_ASSIGNED",
+    sessionId: "", // TODO: resolve from match
+    targetId: matchId,
+    targetType: "match",
+    actorId: adminId,
+    details: { scoreA, scoreB },
+  });
+}
+
+/**
+ * Finalize session: locks scores, computes movement, prepares Season B
+ */
+export async function finalizeSession(
+  sessionId: string,
+  standingsSnapshot: any, // StandingsSnapshotDoc
+  updatedPlayerStats: Record<string, any>,
+  adminId: string,
+): Promise<void> {
+  try {
+    // Update session status
+    await updateDoc(doc(db(), COLLECTIONS.ladderSessions, sessionId), {
+      status: "finalized",
+      finalizedAt: serverTimestamp(),
+      finalizedBy: adminId,
+    });
+
+    // Persist standings snapshot
+    await setDoc(
+      doc(db(), COLLECTIONS.standingsSnapshots, standingsSnapshot.id),
+      stripUndefined({
+        ...standingsSnapshot,
+        createdAt: serverTimestamp(),
+      })
+    );
+
+    // Update player cumulative stats
+    for (const [playerId, stats] of Object.entries(updatedPlayerStats)) {
+      await updateDoc(doc(db(), COLLECTIONS.players, playerId), {
+        stats: stripUndefined(stats),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    // Write finalization audit
+    await writeAudit({
+      action: "SESSION_FINALIZED",
+      sessionId,
+      targetId: sessionId,
+      targetType: "session",
+      actorId: adminId,
+      details: {
+        playersAffected: Object.keys(updatedPlayerStats).length,
+      },
+    });
+  } catch (err) {
+    console.error("[ladder] session finalization failed", err);
+    throw err;
+  }
+}
