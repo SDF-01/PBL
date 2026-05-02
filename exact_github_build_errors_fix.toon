@@ -1,0 +1,416 @@
+# exact_github_build_errors_fix.toon
+# Purpose: Patch the exact TypeScript build errors currently failing GitHub Actions for the web application.
+# Target stack: React + TypeScript + Firebase Hosting
+# Execution style: Apply the fixes in order, then run the validation commands at the end.
+
+metadata:
+  name: exact_github_build_errors_fix
+  version: 1.0
+  intent: "Fix the exact GitHub build TypeScript errors and allow the web app to build and publish."
+  rules:
+    - "Do not suppress these errors with `as any`, `// @ts-ignore`, or by disabling strict mode."
+    - "Prefer correcting shared domain types over local one-off casts."
+    - "After each major group, run TypeScript build checks."
+    - "Keep existing UI behavior unless a change is required to compile."
+
+project_context:
+  observed_errors:
+    - "src/components/admin/AdminDashboard.tsx cannot find module './Panel'."
+    - "src/components/admin/AdminDashboard.tsx cannot find module './Button'."
+    - "CheckInStatus comparisons do not include 'confirmed', 'admin-confirmed', or 'geo-rejected'."
+    - "PlayerStats is missing totalWins and sessionsPlayed."
+    - "Button variant 'secondary' is not supported by the Button component."
+    - "Button variant 'default' is not supported by the Button component."
+    - "LadderSeasonDoc is missing targetPointsPerGame."
+    - "PlayerHome treats a pair/team object shaped as { players: [string, string] } like an array."
+    - "LadderMatchStatus comparisons do not include 'scheduled', 'submitted', 'verified', or 'admin-assigned'."
+    - "finalization.ts treats pair/team objects as arrays and also has possibly undefined group access."
+
+steps:
+  - id: 001_fix_admin_dashboard_imports
+    title: "Fix missing AdminDashboard local imports"
+    files:
+      - "src/components/admin/AdminDashboard.tsx"
+      - "src/components/ui/Panel.tsx"
+      - "src/components/ui/Button.tsx"
+      - "src/components/ui/button.tsx"
+    problem: |
+      AdminDashboard imports Panel and Button from local admin-relative paths:
+        import Panel from './Panel'
+        import Button from './Button'
+      but those files do not exist under src/components/admin.
+    instructions:
+      - "Open src/components/admin/AdminDashboard.tsx."
+      - "Find imports for './Panel' and './Button'."
+      - "Replace them with the actual shared UI component paths used elsewhere in the project."
+      - "Likely target paths are '../ui/Panel' and '../ui/Button' from src/components/admin, or '@/components/ui/Panel' and '@/components/ui/Button' if aliases are configured."
+      - "Check the actual casing of the files. If the file is button.tsx, import from '../ui/button'. Do not guess casing on Linux/GitHub Actions because it is case-sensitive."
+    preferred_patch_pattern: |
+      // Example if files are in src/components/ui and aliases are configured:
+      import { Panel } from '@/components/ui/Panel';
+      import { Button } from '@/components/ui/Button';
+
+      // Example if relative imports are preferred from src/components/admin:
+      import { Panel } from '../ui/Panel';
+      import { Button } from '../ui/Button';
+    validation:
+      - "Confirm AdminDashboard.tsx no longer imports ./Panel or ./Button."
+      - "Run: npm run build"
+
+  - id: 002_fix_button_variant_type_mismatches
+    title: "Replace unsupported Button variants"
+    files:
+      - "src/components/admin/AttendanceReview.tsx"
+      - "src/components/admin/SessionGenerationDialog.tsx"
+      - "src/components/player/PlayerHome.tsx"
+      - "src/components/player/ScoreSubmission.tsx"
+      - "src/components/player/ScoreVerification.tsx"
+      - "src/components/ui/ModeToggle.tsx"
+      - "src/components/ui/Button.tsx"
+      - "src/components/ui/button.tsx"
+    problem: |
+      The Button component only accepts these variants:
+        'danger' | 'link' | 'rune' | 'primary' | 'ghost' | 'outline' | null | undefined
+      The app currently passes unsupported values:
+        'secondary'
+        'default'
+    instructions:
+      - "Search the files listed above for variant=\"secondary\"."
+      - "Replace variant=\"secondary\" with variant=\"outline\" for neutral secondary actions."
+      - "Replace variant=\"secondary\" with variant=\"ghost\" only for low-emphasis/icon actions."
+      - "Search ModeToggle.tsx for a conditional value that returns 'default' or 'secondary'."
+      - "Replace 'default' with 'primary'."
+      - "Replace 'secondary' with 'outline' or 'ghost'. Prefer 'outline' for selected/unselected toggle states unless the existing design clearly expects ghost."
+    exact_error_locations:
+      - "src/components/admin/AttendanceReview.tsx line 181: variant='secondary'"
+      - "src/components/admin/SessionGenerationDialog.tsx line 169: variant='secondary'"
+      - "src/components/player/PlayerHome.tsx line 62: variant='secondary'"
+      - "src/components/player/PlayerHome.tsx line 206: variant='secondary'"
+      - "src/components/player/ScoreSubmission.tsx line 124: variant='secondary'"
+      - "src/components/player/ScoreSubmission.tsx line 164: variant='secondary'"
+      - "src/components/player/ScoreSubmission.tsx line 199: variant='secondary'"
+      - "src/components/player/ScoreVerification.tsx line 137: variant='secondary'"
+      - "src/components/ui/ModeToggle.tsx line 18: variant union includes 'default' | 'secondary'"
+    preferred_patch_pattern: |
+      // Before
+      <Button variant="secondary">Cancel</Button>
+
+      // After
+      <Button variant="outline">Cancel</Button>
+
+      // Before in ModeToggle
+      variant={isActive ? 'default' : 'secondary'}
+
+      // After
+      variant={isActive ? 'primary' : 'outline'}
+    validation:
+      - "Run: npm run build"
+
+  - id: 003_fix_checkin_status_union
+    title: "Update CheckInStatus to include the statuses used by AttendanceReview"
+    files:
+      - "src/components/admin/AttendanceReview.tsx"
+      - "src/domain/ladder/types.ts"
+      - "src/domain/types.ts"
+      - "src/types.ts"
+      - "src/lib/types.ts"
+      - "src/firebase/types.ts"
+    problem: |
+      AttendanceReview compares CheckInStatus against these values:
+        'confirmed'
+        'admin-confirmed'
+        'geo-rejected'
+      But the CheckInStatus type does not include those literals, causing TS2367 no-overlap comparison errors.
+    instructions:
+      - "Find the canonical CheckInStatus type definition. Search for `type CheckInStatus` and `interface` fields named `status` related to check-in."
+      - "Add the statuses currently used by AttendanceReview if they are valid application states."
+      - "Use one canonical union type and import it where needed. Do not redefine conflicting local unions."
+      - "If the app already uses different status names, update AttendanceReview comparisons to match the canonical names instead."
+    preferred_patch_pattern: |
+      export type CheckInStatus =
+        | 'pending'
+        | 'checked-in'
+        | 'confirmed'
+        | 'admin-confirmed'
+        | 'geo-rejected'
+        | 'rejected'
+        | 'absent';
+    exact_error_locations:
+      - "src/components/admin/AttendanceReview.tsx line 34: status === 'confirmed'"
+      - "src/components/admin/AttendanceReview.tsx line 34: status === 'admin-confirmed'"
+      - "src/components/admin/AttendanceReview.tsx line 40: status === 'confirmed'"
+      - "src/components/admin/AttendanceReview.tsx line 40: status === 'admin-confirmed'"
+      - "src/components/admin/AttendanceReview.tsx line 42: status === 'geo-rejected'"
+    validation:
+      - "Run: npm run build"
+      - "Confirm no TS2367 CheckInStatus no-overlap errors remain."
+
+  - id: 004_fix_player_stats_shape
+    title: "Add or map PlayerStats fields used by AttendanceReview"
+    files:
+      - "src/components/admin/AttendanceReview.tsx"
+      - "src/domain/ladder/types.ts"
+      - "src/domain/types.ts"
+      - "src/types.ts"
+      - "src/lib/stats.ts"
+      - "src/domain/ladder/stats.ts"
+    problem: |
+      AttendanceReview references:
+        player.stats.totalWins
+        player.stats.sessionsPlayed
+      but PlayerStats does not define those properties.
+    instructions:
+      - "Find the canonical PlayerStats interface/type."
+      - "If totalWins and sessionsPlayed are intended stats, add them as numeric properties."
+      - "If the canonical model uses different names, update AttendanceReview to use those names. Examples: wins -> totalWins, sessions -> sessionsPlayed, matchesPlayed -> sessionsPlayed may not be semantically correct."
+      - "Ensure any default stats initializer includes these properties with 0 values."
+    preferred_patch_pattern: |
+      export interface PlayerStats {
+        totalWins: number;
+        sessionsPlayed: number;
+        // keep existing fields below
+      }
+
+      export const defaultPlayerStats: PlayerStats = {
+        totalWins: 0,
+        sessionsPlayed: 0,
+        // keep existing defaults below
+      };
+    exact_error_locations:
+      - "src/components/admin/AttendanceReview.tsx line 103: totalWins missing on PlayerStats"
+      - "src/components/admin/AttendanceReview.tsx line 103: sessionsPlayed missing on PlayerStats"
+    validation:
+      - "Run: npm run build"
+      - "If object literals now fail because they are missing totalWins or sessionsPlayed, update their defaults to 0."
+
+  - id: 005_fix_ladder_season_target_points
+    title: "Add targetPointsPerGame to LadderSeasonDoc or update reference"
+    files:
+      - "src/components/admin/SessionGenerationDialog.tsx"
+      - "src/domain/ladder/types.ts"
+      - "src/domain/types.ts"
+      - "src/firebase/types.ts"
+    problem: |
+      SessionGenerationDialog references:
+        season.targetPointsPerGame
+      but LadderSeasonDoc does not define targetPointsPerGame.
+    instructions:
+      - "Find the canonical LadderSeasonDoc type/interface."
+      - "If target points per game is a real season setting, add `targetPointsPerGame?: number` to LadderSeasonDoc."
+      - "Use optional if legacy Firebase documents may not have the field."
+      - "In SessionGenerationDialog, provide a fallback such as 11, 15, or the existing app default. Choose the value already used by the scoring rules if present."
+    preferred_patch_pattern: |
+      export interface LadderSeasonDoc {
+        // existing fields
+        targetPointsPerGame?: number;
+      }
+
+      const targetPoints = season.targetPointsPerGame ?? 11;
+    exact_error_locations:
+      - "src/components/admin/SessionGenerationDialog.tsx line 151: targetPointsPerGame missing on LadderSeasonDoc"
+    validation:
+      - "Run: npm run build"
+
+  - id: 006_fix_ladder_match_status_union
+    title: "Update LadderMatchStatus to include statuses used across player and finalization flows"
+    files:
+      - "src/components/player/PlayerHome.tsx"
+      - "src/domain/ladder/finalization.ts"
+      - "src/domain/ladder/types.ts"
+      - "src/domain/types.ts"
+      - "src/firebase/types.ts"
+    problem: |
+      Code compares LadderMatchStatus with:
+        'scheduled'
+        'submitted'
+        'verified'
+        'admin-assigned'
+      but LadderMatchStatus does not include those literals.
+    instructions:
+      - "Find the canonical LadderMatchStatus type."
+      - "Add the status literals used by the active application flows if they are valid."
+      - "If the canonical type has equivalent names, update PlayerHome and finalization.ts to those names instead."
+      - "Avoid creating a separate local LadderMatchStatus union in PlayerHome."
+    preferred_patch_pattern: |
+      export type LadderMatchStatus =
+        | 'scheduled'
+        | 'in-progress'
+        | 'submitted'
+        | 'verified'
+        | 'admin-assigned'
+        | 'disputed'
+        | 'cancelled';
+    exact_error_locations:
+      - "src/components/player/PlayerHome.tsx line 173: status === 'scheduled'"
+      - "src/components/player/PlayerHome.tsx line 179: status === 'submitted'"
+      - "src/components/player/PlayerHome.tsx line 185: status === 'verified'"
+      - "src/components/player/PlayerHome.tsx line 199: status === 'scheduled'"
+      - "src/components/player/PlayerHome.tsx line 208: status === 'submitted'"
+      - "src/domain/ladder/finalization.ts line 57: status === 'verified'"
+      - "src/domain/ladder/finalization.ts line 57: status === 'admin-assigned'"
+    validation:
+      - "Run: npm run build"
+      - "Confirm no TS2367 LadderMatchStatus no-overlap errors remain."
+
+  - id: 007_fix_pair_or_team_object_usage_in_player_home
+    title: "Use pair.players instead of treating pair object as an array in PlayerHome"
+    files:
+      - "src/components/player/PlayerHome.tsx"
+      - "src/domain/ladder/types.ts"
+    problem: |
+      PlayerHome treats a value shaped as:
+        { players: [string, string] }
+      as though it were an array. That causes errors for `.length` and `.includes`.
+    instructions:
+      - "Open src/components/player/PlayerHome.tsx."
+      - "At each failing location, identify the variable that has shape `{ players: [string, string] }`."
+      - "Replace direct array operations with operations against `.players`."
+      - "Do not change the data shape unless the rest of the app expects arrays. The compiler says the shape is already object-with-players."
+    preferred_patch_pattern: |
+      // Before
+      pair.length
+      pair.includes(playerId)
+      pair.map(...)
+
+      // After
+      pair.players.length
+      pair.players.includes(playerId)
+      pair.players.map(...)
+    exact_error_locations:
+      - "src/components/player/PlayerHome.tsx line 142: `.length` on { players: [string, string] }"
+      - "src/components/player/PlayerHome.tsx line 164: `.length` on { players: [string, string] }"
+      - "src/components/player/PlayerHome.tsx line 233: `.includes` on { players: [string, string] }"
+      - "src/components/player/PlayerHome.tsx line 236: `.length` on { players: [string, string] }"
+      - "src/components/player/PlayerHome.tsx line 236: second `.length` on { players: [string, string] }"
+    validation:
+      - "Run: npm run build"
+
+  - id: 008_fix_pair_or_team_object_usage_in_finalization
+    title: "Use pair.players in finalization.ts and fix implicit any"
+    files:
+      - "src/domain/ladder/finalization.ts"
+      - "src/domain/ladder/types.ts"
+    problem: |
+      finalization.ts treats a value shaped as:
+        { players: [string, string] }
+      as though it were an array by calling `.forEach` directly.
+      This also causes implicit any for playerId.
+    instructions:
+      - "Open src/domain/ladder/finalization.ts."
+      - "At each failing `.forEach`, replace `group.forEach` or `pair.forEach` with `group.players.forEach` or `pair.players.forEach` based on the actual variable name."
+      - "Type the callback parameter as string if TypeScript does not infer it."
+    preferred_patch_pattern: |
+      // Before
+      pair.forEach((playerId) => {
+        // ...
+      });
+
+      // After
+      pair.players.forEach((playerId: string) => {
+        // ...
+      });
+    exact_error_locations:
+      - "src/domain/ladder/finalization.ts line 66: `.forEach` on { players: [string, string] }"
+      - "src/domain/ladder/finalization.ts line 66: playerId implicitly any"
+      - "src/domain/ladder/finalization.ts line 78: `.forEach` on { players: [string, string] }"
+      - "src/domain/ladder/finalization.ts line 78: playerId implicitly any"
+    validation:
+      - "Run: npm run build"
+
+  - id: 009_fix_possibly_undefined_group_access_in_finalization
+    title: "Guard undefined array/map lookups in finalization.ts"
+    files:
+      - "src/domain/ladder/finalization.ts"
+    problem: |
+      finalization.ts has multiple strict-null errors where array or map lookups may return undefined.
+      Failing lines:
+        99, 105, 114, 141, 158, 190
+    instructions:
+      - "Open src/domain/ladder/finalization.ts."
+      - "For each possibly undefined value, add a guard before mutation or property access."
+      - "Do not use non-null assertions unless the function already guarantees existence and the guard would be unreachable. Prefer guards."
+      - "If a missing group means corrupt state, throw a descriptive Error."
+      - "If a missing group is valid, skip it with `continue` or return early."
+    preferred_patch_patterns:
+      - |
+        // Pattern for array lookup
+        const group = groups[index];
+        if (!group) {
+          throw new Error(`Expected ladder group at index ${index}, but none was found.`);
+        }
+        group.players.push(playerId);
+      - |
+        // Pattern for map/record lookup
+        const stats = statsByPlayerId[playerId];
+        if (!stats) {
+          statsByPlayerId[playerId] = createDefaultStats(playerId);
+        }
+        statsByPlayerId[playerId].sessionsPlayed += 1;
+      - |
+        // Even better, avoid second lookup
+        let stats = statsByPlayerId[playerId];
+        if (!stats) {
+          stats = createDefaultStats(playerId);
+          statsByPlayerId[playerId] = stats;
+        }
+        stats.sessionsPlayed += 1;
+    exact_error_locations:
+      - "src/domain/ladder/finalization.ts line 99: Object is possibly undefined"
+      - "src/domain/ladder/finalization.ts line 105: group is possibly undefined"
+      - "src/domain/ladder/finalization.ts line 114: group is possibly undefined"
+      - "src/domain/ladder/finalization.ts line 141: Object is possibly undefined"
+      - "src/domain/ladder/finalization.ts line 158: Object is possibly undefined"
+      - "src/domain/ladder/finalization.ts line 190: Object is possibly undefined"
+    validation:
+      - "Run: npm run build"
+      - "Confirm no TS2532 or TS18048 errors remain."
+
+  - id: 010_verify_firebase_publish_workflow
+    title: "Verify GitHub Actions Firebase publish step after TypeScript fixes"
+    files:
+      - ".github/workflows/firebase-hosting-merge.yml"
+      - ".github/workflows/firebase-hosting-pull-request.yml"
+      - ".firebaserc"
+      - "firebase.json"
+      - "package.json"
+    problem: |
+      Earlier deploy failures may also occur if Firebase Hosting GitHub Action inputs are missing.
+      The required input is firebaseServiceAccount.
+    instructions:
+      - "Open Firebase Hosting GitHub workflow files under .github/workflows."
+      - "Ensure the deploy action includes firebaseServiceAccount."
+      - "Ensure the GitHub repository has a matching secret containing the Firebase service account JSON."
+      - "Ensure package.json build script produces the folder referenced by firebase.json hosting.public, usually `dist` for Vite."
+    preferred_patch_pattern: |
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ secrets.FIREBASE_PROJECT_ID }}
+          channelId: live
+    validation:
+      - "Run: npm ci"
+      - "Run: npm run build"
+      - "Check firebase.json hosting.public matches the build output directory."
+      - "Push branch and confirm GitHub Actions reaches deploy step."
+
+final_validation:
+  local_commands:
+    - "npm ci"
+    - "npm run build"
+    - "npm run lint --if-present"
+  expected_result:
+    - "No TS2307 missing module errors."
+    - "No TS2322 Button variant errors."
+    - "No TS2367 status comparison errors."
+    - "No TS2339 missing property errors."
+    - "No TS2532 or TS18048 possibly undefined errors."
+    - "GitHub Actions build completes before Firebase deploy."
+
+notes_for_agent:
+  - "The dominant issue is type drift: UI code expects statuses and fields that the canonical domain types do not define."
+  - "Patch the canonical type definitions first, then update UI code only where it is using a truly wrong shape."
+  - "The pair/team type `{ players: [string, string] }` should be accessed through `.players`."
+  - "Button variant errors should be resolved by using existing supported variants, not by inventing new variants unless the design system intentionally needs one."
+  - "GitHub Actions runs on Linux, so import casing must exactly match filenames."
