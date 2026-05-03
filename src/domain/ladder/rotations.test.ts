@@ -11,20 +11,24 @@ describe("Rotation Generation", () => {
     const rotation = generate4PlayerRotation(players);
 
     expect(rotation).toHaveLength(4);
-    expect(rotation[0].gameNumber).toBe(1);
-    expect(rotation[3].gameNumber).toBe(4);
+    expect(rotation[0]!.gameNumber).toBe(1);
+    expect(rotation[3]!.gameNumber).toBe(4);
 
     // Each player should be in 3 games (sitting out 1 game)
     const gameCounts: Record<string, number> = {};
     players.forEach((p) => (gameCounts[p] = 0));
 
     rotation.forEach((game) => {
-      game.sideA.forEach((p) => gameCounts[p]++);
-      game.sideB.forEach((p) => gameCounts[p]++);
+      game.sideA.forEach((p) => {
+        gameCounts[p] = (gameCounts[p] ?? 0) + 1;
+      });
+      game.sideB.forEach((p) => {
+        gameCounts[p] = (gameCounts[p] ?? 0) + 1;
+      });
     });
 
     players.forEach((p) => {
-      expect(gameCounts[p]).toBe(3);
+      expect(gameCounts[p]!).toBe(3);
     });
   });
 
@@ -40,12 +44,12 @@ describe("Rotation Generation", () => {
 
     rotation.forEach((game) => {
       if (game.sitOutPlayer) {
-        sitOuts[game.sitOutPlayer]++;
+        sitOuts[game.sitOutPlayer] = (sitOuts[game.sitOutPlayer] ?? 0) + 1;
       }
     });
 
     players.forEach((p) => {
-      expect(sitOuts[p]).toBe(1);
+      expect(sitOuts[p]!).toBe(1);
     });
   });
 
@@ -56,12 +60,12 @@ describe("Rotation Generation", () => {
 
     // Each player should partner with 3 others (once each)
     players.forEach((p) => {
-      expect(stats.partnershipsPerPlayer[p].size).toBe(3);
+      expect(stats.partnershipsPerPlayer[p]!.size).toBe(3);
     });
 
     // Each player should oppose all others
     players.forEach((p) => {
-      expect(stats.opponentsPerPlayer[p].size).toBe(3);
+      expect(stats.opponentsPerPlayer[p]!.size).toBe(3);
     });
   });
 
