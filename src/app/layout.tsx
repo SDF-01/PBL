@@ -3,6 +3,7 @@ import "@/styles/globals.css";
 import { Inter, JetBrains_Mono, Press_Start_2P, Cinzel } from "next/font/google";
 import { DeviceProvider } from "@/lib/device";
 import { AuthProvider } from "@/lib/auth-context";
+import { AdminModeProvider } from "@/lib/admin-context";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${mono.variable} ${pixel.variable} ${cinzel.variable}`}>
       <body className="antialiased">
         <DeviceProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <AdminModeProvider>{children}</AdminModeProvider>
+          </AuthProvider>
         </DeviceProvider>
         <AnalyticsLoader />
       </body>

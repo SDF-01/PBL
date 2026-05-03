@@ -2,6 +2,8 @@ import Link from "next/link";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { Button } from "@/components/ui/Button";
 import { SignInButton } from "@/components/ui/SignInButton";
+import { ModeToggle } from "@/components/ui/ModeToggle";
+import { useAdminMode } from "@/lib/admin-context";
 import { Plus } from "lucide-react";
 
 const NAV = [
@@ -14,6 +16,8 @@ const NAV = [
 ] as const;
 
 export function TopNav() {
+  const { isAdminMode } = useAdminMode();
+
   return (
     <header className="sticky top-0 z-40 border-b border-obsidian-400 bg-obsidian-800/80 backdrop-blur supports-[backdrop-filter]:bg-obsidian-800/65">
       <div className="container flex h-14 items-center gap-6">
@@ -37,6 +41,7 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          {isAdminMode && <ModeToggle />}
           <Link href="/ladder/check-in" className="hidden sm:block">
             <Button variant="outline" size="sm">
               <Plus className="h-3.5 w-3.5" /> Check In

@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useDevice } from "@/lib/device";
+import { useAdminMode } from "@/lib/admin-context";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
+import { AdminDashboard } from "@/components/admin/AdminDashboard";
+import { PlayerHome } from "@/components/player/PlayerHome";
 import {
   Plus,
   CalendarDays,
@@ -18,7 +21,7 @@ import { isFirebaseConfigured } from "@/lib/firebase";
 import { listTournaments } from "@/lib/firestore/repo";
 import { listLadderSeasons, listPlayDates } from "@/lib/ladder/repo";
 import { listLeaderboard } from "@/lib/players/repo";
-import type { TournamentDoc } from "@/lib/firestore/types";
+import type { TournamentDoc, LadderSeasonDoc, PlayDateDoc } from "@/lib/firestore/types";
 
 interface Stats {
   seasons: number;
@@ -28,36 +31,54 @@ interface Stats {
   liveTourneys: number;
 }
 
-export default function DashboardHome() {
+export default function DashboardPage() {
+  const { isAdminMode } = useAdminMode();
   const { isMobile } = useDevice();
-  const [stats, setStats] = useState<Stats>({
-    seasons: 0,
-    playDates: 0,
-    players: 0,
-    tournaments: 0,
-    liveTourneys: 0,
-  });
+
+  // For admin mode
+  const [currentSeason, setCurrentSeason] = useState<LadderSeasonDoc>();
+  const [upcomingPlayDates, setUpcomingPlayDates] = useState<PlayDateDoc[]>([]);
+  const [selectedPlayDate, setSelectedPlayDate] = useState<PlayDateDoc>();
+
+  // For player mode - placeholder, needs implementation
+  const [playerData, setPlayerData] = useState<any>({});
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
-    (async () => {
-      const [seasons, playDates, leaderboard, tournaments] = await Promise.all([
-        listLadderSeasons().catch(() => []),
-        listPlayDates().catch(() => []),
-        listLeaderboard(1000).catch(() => []),
-        listTournaments().catch(() => [] as TournamentDoc[]),
-      ]);
-      setStats({
-        seasons: seasons.length,
-        playDates: playDates.length,
-        players: leaderboard.length,
-        tournaments: tournaments.length,
-        liveTourneys: tournaments.filter((t) => t.status === "IN_PROGRESS").length,
-      });
-    })();
-  }, []);
 
-  return isMobile ? <DashboardMobile stats={stats} /> : <DashboardDesktop stats={stats} />;
+    if (isAdminMode) {
+      // Fetch admin data
+      (async () => {
+        const seasons = await listLadderSeasons().catch(() => []);
+        const playDates = await listPlayDates().catch(() => []);
+        setCurrentSeason(seasons[0]); // Placeholder: set first season
+        setUpcomingPlayDates(playDates.filter(pd => pd.status === 'SCHEDULED'));
+      })();
+    } else {
+      // Fetch player data - needs implementation
+      // For now, placeholder
+    }
+  }, [isAdminMode]);
+
+  if (isAdminMode) {
+    return (
+      <AdminDashboard
+        currentSeason={currentSeason}
+        upcomingPlayDates={upcomingPlayDates}
+        selectedPlayDate={selectedPlayDate}
+        onSelectPlayDate={setSelectedPlayDate}
+        onCreateSeason={() => {}}
+        onCreatePlayDate={() => {}}
+        onReviewAttendance={() => {}}
+        onGenerateSession={() => {}}
+        onMonitorSession={() => {}}
+        onFinalizeSession={() => {}}
+      />
+    );
+  }
+
+  // For player mode, show the original dashboard for now
+  return isMobile ? <DashboardMobile stats={{ seasons: 0, playDates: 0, players: 0, tournaments: 0, liveTourneys: 0 }} /> : <DashboardDesktop stats={{ seasons: 0, playDates: 0, players: 0, tournaments: 0, liveTourneys: 0 }} />;
 }
 
 function DashboardDesktop({ stats }: { stats: Stats }) {
