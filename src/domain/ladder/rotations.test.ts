@@ -14,7 +14,7 @@ describe("Rotation Generation", () => {
     expect(rotation[0]!.gameNumber).toBe(1);
     expect(rotation[3]!.gameNumber).toBe(4);
 
-    // Each player should be in 3 games (sitting out 1 game)
+    // Each player should participate in every game on a 4-player court.
     const gameCounts: Record<string, number> = {};
     players.forEach((p) => (gameCounts[p] = 0));
 
@@ -28,7 +28,7 @@ describe("Rotation Generation", () => {
     });
 
     players.forEach((p) => {
-      expect(gameCounts[p]!).toBe(3);
+      expect(gameCounts[p]!).toBe(4);
     });
   });
 
@@ -38,7 +38,7 @@ describe("Rotation Generation", () => {
 
     expect(rotation).toHaveLength(6);
 
-    // Each player should have exactly 1 sit-out
+    // Each player should sit out at least once, with exactly one player sitting out twice.
     const sitOuts: Record<string, number> = {};
     players.forEach((p) => (sitOuts[p] = 0));
 
@@ -48,9 +48,11 @@ describe("Rotation Generation", () => {
       }
     });
 
-    players.forEach((p) => {
-      expect(sitOuts[p]!).toBe(1);
-    });
+    const counts = players.map((p) => sitOuts[p]!);
+    expect(counts.reduce((sum, value) => sum + value, 0)).toBe(6);
+    expect(counts.filter((value) => value === 2)).toHaveLength(1);
+    expect(counts.filter((value) => value === 1)).toHaveLength(4);
+    counts.forEach((value) => expect(value).toBeGreaterThanOrEqual(1));
   });
 
   it("should compute partnership statistics correctly", () => {
