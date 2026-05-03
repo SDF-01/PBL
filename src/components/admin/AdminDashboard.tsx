@@ -15,6 +15,12 @@ import {
 } from "@/lib/firestore/types";
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
+import { AttendanceReview } from "./AttendanceReview";
+import { SessionGenerationDialog } from "./SessionGenerationDialog";
+import { SessionMonitor } from "./SessionMonitor";
+import { SessionFinalizationDialog } from "./SessionFinalizationDialog";
+import { generateSessionB } from "@/lib/ladder/write";
+import { useAuth } from "@/lib/auth-context";
 import {
   Calendar,
   Users,
@@ -39,6 +45,7 @@ export interface AdminDashboardProps {
 }
 
 export function AdminDashboard(props: AdminDashboardProps) {
+  const { user } = useAuth();
   const {
     currentSeason,
     upcomingPlayDates,
@@ -55,6 +62,14 @@ export function AdminDashboard(props: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<
     "overview" | "season" | "playdate" | "checkin" | "generation" | "monitoring"
   >("overview");
+
+  // Modal states
+  const [attendanceReviewOpen, setAttendanceReviewOpen] = useState(false);
+  const [sessionGenerationOpen, setSessionGenerationOpen] = useState(false);
+  const [sessionMonitorOpen, setSessionMonitorOpen] = useState(false);
+  const [sessionFinalizationOpen, setSessionFinalizationOpen] = useState(false);
+  const [currentSession, setCurrentSession] = useState<LadderSessionDoc | null>(null);
+  const [checkIns, setCheckIns] = useState<CheckInDoc[]>([]);
 
   return (
     <div className="space-y-6">
@@ -156,14 +171,24 @@ export function AdminDashboard(props: AdminDashboardProps) {
               icon={<Users className="w-5 h-5" />}
               title="1. Review Attendance"
               description="Review check-ins and adjust fairness placements"
-              onClick={() => onReviewAttendance(selectedPlayDate)}
+              onClick={() => {
+                if (selectedPlayDate) {
+                  // TODO: Fetch check-ins for selected play date
+                  setCheckIns([]); // Placeholder
+                  setAttendanceReviewOpen(true);
+                }
+              }}
               buttonLabel="Review"
             />
             <OperationalStep
               icon={<Play className="w-5 h-5" />}
               title="2. Generate Session A"
               description="Create court distribution and match rotations"
-              onClick={() => onGenerateSession(selectedPlayDate)}
+              onClick={() => {
+                if (selectedPlayDate) {
+                  setSessionGenerationOpen(true);
+                }
+              }}
               buttonLabel="Generate"
             />
             <OperationalStep
@@ -171,30 +196,42 @@ export function AdminDashboard(props: AdminDashboardProps) {
               title="3. Monitor Session A"
               description="Track pending, submitted, and verified scores"
               onClick={() => {
-                // TODO: Implement monitoringflow
+                if (selectedPlayDate?.sessionAId) {
+                  // TODO: Fetch session data
+                  setCurrentSession(null); // Placeholder
+                  setSessionMonitorOpen(true);
+                }
               }}
               buttonLabel="Monitor"
-              disabled
             />
             <OperationalStep
               icon={<CheckCircle className="w-5 h-5" />}
               title="4. Finalize Session A"
               description="Assign incomplete matches and compute movement"
               onClick={() => {
-                // TODO: Implement finalization flow
+                if (selectedPlayDate?.sessionAId) {
+                  // TODO: Fetch session data
+                  setCurrentSession(null); // Placeholder
+                  setSessionFinalizationOpen(true);
+                }
               }}
               buttonLabel="Finalize"
-              disabled
             />
             <OperationalStep
               icon={<Play className="w-5 h-5" />}
               title="5. Generate Session B"
               description="Create Session B from Session A participants"
-              onClick={() => {
-                // TODO: Implement Session B generation
+              onClick={async () => {
+                if (selectedPlayDate?.sessionAId && user) {
+                  try {
+                    await generateSessionB(selectedPlayDate.sessionAId, user.uid);
+                    alert("Session B generated successfully!");
+                  } catch (err) {
+                    alert(`Failed to generate Session B: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                  }
+                }
               }}
               buttonLabel="Generate"
-              disabled
             />
           </div>
         </Panel>
@@ -218,6 +255,57 @@ export function AdminDashboard(props: AdminDashboardProps) {
           </Button>
         </div>
       </Panel>
+
+      {/* Modals */}
+      {attendanceReviewOpen && selectedPlayDate && (
+        <AttendanceReview
+          playDate={selectedPlayDate}
+          checkIns={checkIns}
+          onConfirmAttendance={(confirmedPlayerIds) => {
+            console.log("Confirmed players:", confirmedPlayerIds);
+            setAttendanceReviewOpen(false);
+          }}
+          onExcludePlayer={(playerId) => {
+            console.log("Excluded player:", playerId);
+          }}
+          onClose={() => setAttendanceReviewOpen(false)}
+        />
+      )}
+
+      {sessionGenerationOpen && selectedPlayDate && currentSeason && (
+        <SessionGenerationDialog
+          playDateId={selectedPlayDate.id}
+          season={currentSeason}
+          playerCount={4} // TODO: Get from confirmed check-ins
+          onGenerate={async (options) => {
+            console.log("Generate session with options:", options);
+            // TODO: Implement session generation
+          }}
+          onClose={() => setSessionGenerationOpen(false)}
+        />
+      )}
+
+      {sessionMonitorOpen && currentSession && (
+        <SessionMonitor
+          session={currentSession}
+          onClose={() => setSessionMonitorOpen(false)}
+          onFinalize={() => {
+            setSessionMonitorOpen(false);
+            setSessionFinalizationOpen(true);
+          }}
+        />
+      )}
+
+      {sessionFinalizationOpen && currentSession && (
+        <SessionFinalizationDialog
+          session={currentSession}
+          onClose={() => setSessionFinalizationOpen(false)}
+          onSuccess={() => {
+            setSessionFinalizationOpen(false);
+            // TODO: Refresh data
+          }}
+        />
+      )}
     </div>
   );
 }

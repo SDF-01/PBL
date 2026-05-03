@@ -17,6 +17,7 @@ import { db } from "../firebase";
 import { COLLECTIONS } from "../firestore/collections";
 import { slugify } from "../firestore/write";
 import { applyMatchEloByUserIds } from "../players/write";
+import { listLadderCourts, listLadderMatches } from "./repo";
 import type {
   LadderSeasonDoc,
   VenueDoc,
@@ -397,6 +398,56 @@ export async function adminAssignMatchResult(
 }
 
 /**
+ * Generate Session B from finalized Session A
+ */
+export async function generateSessionB(
+  sessionAId: string,
+  generatedBy: string,
+): Promise<string> {
+  // Get Session A data
+  const sessionASnap = await getDoc(doc(db(), COLLECTIONS.ladderSessions, sessionAId));
+  if (!sessionASnap.exists()) throw new Error("Session A not found");
+
+  const sessionA = sessionASnap.data() as LadderSessionDoc;
+  if (sessionA.status !== "FINALIZED") {
+    throw new Error("Session A must be finalized before generating Session B");
+  }
+
+  // Get play date and season
+  const playDateSnap = await getDoc(doc(db(), COLLECTIONS.playDates, sessionA.playDateId));
+  if (!playDateSnap.exists()) throw new Error("Play date not found");
+
+  const seasonSnap = await getDoc(doc(db(), COLLECTIONS.seasons, sessionA.seasonId));
+  if (!seasonSnap.exists()) throw new Error("Season not found");
+
+  const playDate = { id: playDateSnap.id, ...playDateSnap.data() } as PlayDateDoc;
+  const season = { id: seasonSnap.id, ...seasonSnap.data() } as LadderSeasonDoc;
+
+  // Get Session A courts and matches
+  const courtsA = await listLadderCourts(sessionAId);
+  const matchesA = await listLadderMatches(sessionAId);
+
+  // Generate Session B
+  const { generateSessionBFromSessionA } = await import("../../domain/ladder/generation");
+  const sessionBData = generateSessionBFromSessionA(sessionA, courtsA, matchesA, playDate, season);
+
+  // Persist Session B
+  await persistGeneratedSession({
+    sessionDoc: sessionBData.session,
+    courts: sessionBData.courts,
+    matches: sessionBData.matches,
+    generatedBy,
+  });
+
+  // Update play date with Session B ID
+  await updateDoc(doc(db(), COLLECTIONS.playDates, playDate.id), {
+    sessionBId: sessionBData.session.id,
+  });
+
+  return sessionBData.session.id;
+}
+
+/**
  * Finalize session: locks scores, computes movement, prepares Season B
  */
 export async function finalizeSession(
@@ -408,7 +459,7 @@ export async function finalizeSession(
   try {
     // Update session status
     await updateDoc(doc(db(), COLLECTIONS.ladderSessions, sessionId), {
-      status: "finalized",
+      status: "FINALIZED",
       finalizedAt: serverTimestamp(),
       finalizedBy: adminId,
     });

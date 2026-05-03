@@ -67,6 +67,14 @@ export interface LeagueDoc {
   slug: string;
   name: string;
   description?: string;
+  city?: string;
+  state?: string;
+  latitude?: number;
+  longitude?: number;
+  active?: boolean;
+  next_play_date?: string;
+  check_in_status?: string;
+  league_format?: string;
 }
 
 export interface SeasonDoc {

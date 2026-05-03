@@ -17,11 +17,10 @@ import {
   Users,
   Swords,
 } from "lucide-react";
-import { isFirebaseConfigured } from "@/lib/firebase";
-import { listTournaments } from "@/lib/firestore/repo";
-import { listLadderSeasons, listPlayDates } from "@/lib/ladder/repo";
-import { listLeaderboard } from "@/lib/players/repo";
-import type { TournamentDoc, LadderSeasonDoc, PlayDateDoc } from "@/lib/firestore/types";
+import { useAuth } from "@/lib/auth-context";
+import { getPlayerSessionData } from "@/lib/ladder/repo";
+import { ScoreModal } from "@/components/player/ScoreModal";
+import type { PlayerSessionData } from "@/lib/ladder/repo";
 
 interface Stats {
   seasons: number;
@@ -34,14 +33,19 @@ interface Stats {
 export default function DashboardPage() {
   const { isAdminMode } = useAdminMode();
   const { isMobile } = useDevice();
+  const { user } = useAuth();
 
   // For admin mode
   const [currentSeason, setCurrentSeason] = useState<LadderSeasonDoc>();
   const [upcomingPlayDates, setUpcomingPlayDates] = useState<PlayDateDoc[]>([]);
   const [selectedPlayDate, setSelectedPlayDate] = useState<PlayDateDoc>();
 
-  // For player mode - placeholder, needs implementation
-  const [playerData, setPlayerData] = useState<any>({});
+  // For player mode
+  const [playerSessionData, setPlayerSessionData] = useState<PlayerSessionData | null>(null);
+  const [scoreModal, setScoreModal] = useState<{
+    match: any;
+    action: "submit" | "verify";
+  } | null>(null);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -54,11 +58,24 @@ export default function DashboardPage() {
         setCurrentSeason(seasons[0]); // Placeholder: set first season
         setUpcomingPlayDates(playDates.filter(pd => pd.status === 'SCHEDULED'));
       })();
-    } else {
-      // Fetch player data - needs implementation
-      // For now, placeholder
+    } else if (user) {
+      // Fetch player session data
+      (async () => {
+        // For now, get the most recent play date. In production, this should
+        // be more sophisticated to find the active play date for the user
+        const playDates = await listPlayDates().catch(() => []);
+        const today = new Date().toISOString().split('T')[0];
+        const activePlayDate = playDates.find(pd =>
+          pd.date >= today && (pd.status === 'CHECK_IN_OPEN' || pd.status === 'IN_PROGRESS')
+        ) || playDates[0]; // Fallback to first play date
+
+        if (activePlayDate) {
+          const data = await getPlayerSessionData(user.uid, activePlayDate.id);
+          setPlayerSessionData(data);
+        }
+      })();
     }
-  }, [isAdminMode]);
+  }, [isAdminMode, user]);
 
   if (isAdminMode) {
     return (
@@ -77,7 +94,60 @@ export default function DashboardPage() {
     );
   }
 
-  // For player mode, show the original dashboard for now
+  // Player mode
+  if (playerSessionData?.currentSession) {
+    return (
+      <>
+        <PlayerHome
+          currentSession={playerSessionData.currentSession}
+          assignedCourt={playerSessionData.assignedCourt}
+          currentMatch={playerSessionData.currentMatch}
+          nextMatch={playerSessionData.nextMatch}
+          sitOutMatch={playerSessionData.sitOutMatch}
+          playerId={user?.uid || ""}
+          onEnterScore={() => {
+            if (playerSessionData.currentMatch) {
+              setScoreModal({
+                match: playerSessionData.currentMatch,
+                action: "submit",
+              });
+            }
+          }}
+          onVerifyScore={() => {
+            if (playerSessionData.currentMatch) {
+              setScoreModal({
+                match: playerSessionData.currentMatch,
+                action: "verify",
+              });
+            }
+          }}
+          onViewStandings={() => {
+            // TODO: Navigate to standings view
+          }}
+          onViewCourts={() => {
+            // TODO: Navigate to courts view
+          }}
+        />
+        {scoreModal && (
+          <ScoreModal
+            match={scoreModal.match}
+            action={scoreModal.action}
+            onClose={() => setScoreModal(null)}
+            onSuccess={() => {
+              setScoreModal(null);
+              // Refresh player data
+              if (user) {
+                const activePlayDateId = playerSessionData.currentSession.playDateId;
+                getPlayerSessionData(user.uid, activePlayDateId).then(setPlayerSessionData);
+              }
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Fallback: generic dashboard for players not in active session
   return isMobile ? <DashboardMobile stats={{ seasons: 0, playDates: 0, players: 0, tournaments: 0, liveTourneys: 0 }} /> : <DashboardDesktop stats={{ seasons: 0, playDates: 0, players: 0, tournaments: 0, liveTourneys: 0 }} />;
 }
 
