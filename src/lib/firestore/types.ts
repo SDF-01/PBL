@@ -282,6 +282,8 @@ export interface PlayDateDoc {
   checkInClosesAt?: string;
   sessionAId?: string;
   sessionBId?: string;
+  venueLatitude?: number;
+  venueLongitude?: number;
   createdAt: string;
   createdBy: string;
 }
@@ -294,7 +296,9 @@ export interface LadderSessionDoc {
   status: LadderSessionStatus;
   targetPoints: number;
   movementPattern: MovementPattern;
+  courtDistributionPlacement: CourtDistributionPlacement;
   generatedAt?: string;
+  startedAt?: string;
   finalizedAt?: string;
 }
 
@@ -308,6 +312,7 @@ export interface LadderCourtDoc {
   size: 4 | 5;
   /** User ids of players assigned to this court. */
   playerIds: string[];
+  status?: string;
 }
 
 export interface LadderMatchDoc {
@@ -316,8 +321,8 @@ export interface LadderMatchDoc {
   courtId: string;
   /** Rotation slot index (1-based): 1..4 for 4-player courts, 1..6 for 5. */
   gameNumber: number;
-  sideA: { players: [string, string] };
-  sideB: { players: [string, string] };
+  sideA: [string, string];
+  sideB: [string, string];
   /** User id sitting out this game (only for 5-player courts). */
   sittingOut?: string | null;
   scoreA?: number;
@@ -326,6 +331,7 @@ export interface LadderMatchDoc {
   submittedAt?: string;
   verifiedBy?: string;
   verifiedAt?: string;
+  sequenceInCourt?: number;
   /** If set, admin assigned the result manually (incomplete-match rule). */
   adminAssignedBy?: string;
   adminAssignedAt?: string;
@@ -336,14 +342,19 @@ export interface CheckInDoc {
   id: string;
   playDateId: string;
   sessionId?: string; // defaults to Session A per spec
+  sessionKind?: LadderSessionKind;
   userId: string;
   displayName: string;
   status: CheckInStatus;
+  checkedInAt?: string;
   /** Reported geolocation at check-in time. */
   lat?: number;
   lng?: number;
+  latitude?: number;
+  longitude?: number;
   /** Distance from venue center in meters, if computed. */
   distanceMeters?: number;
+  geofenceResult?: string;
   adminOverrideBy?: string;
   createdAt: string;
 }
@@ -351,25 +362,35 @@ export interface CheckInDoc {
 export interface StandingsSnapshotDoc {
   id: string;
   sessionId: string;
-  playDateId: string;
-  seasonId: string;
-  /** Per-player row (individual ranking even though play is doubles). */
-  rows: Array<{
-    userId: string;
-    displayName: string;
-    courtNumber: number;
+  playDateId?: string;
+  seasonId?: string;
+  snapshotAt: string;
+  resultsByPlayer: Array<{
+    playerId: string;
     wins: number;
     losses: number;
     pointsFor: number;
     pointsAgainst: number;
-    pointDifferential: number;
+    courtNumber: number;
+    rank: number;
   }>;
-  computedAt: string;
+  resultsByCourtAndRank: Record<number, Array<{
+    playerId: string;
+    wins: number;
+    losses: number;
+    pointsFor: number;
+    pointsAgainst: number;
+    courtNumber: number;
+    rank: number;
+  }>>;
+  totalPlayers: number;
+  totalCourts: number;
 }
 
 /** Append-only audit log per spec directive 04. */
 export interface AuditDoc {
   id: string;
+  action?: string;
   /** e.g. "session.generate", "match.scoreEdit", "match.adminAssign". */
   kind: string;
   actorId: string;
@@ -403,6 +424,11 @@ export interface PlayerStats {
   losses: number;
   pointsFor: number;
   pointsAgainst: number;
+  sessionsPlayed?: number;
+  totalWins?: number;
+  totalLosses?: number;
+  cumulativePointsFor?: number;
+  cumulativePointsAgainst?: number;
   /** Set to now whenever stats last changed. */
   updatedAt?: string;
 }

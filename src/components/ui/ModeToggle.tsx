@@ -15,7 +15,7 @@ export function ModeToggle() {
   return (
     <Button
       onClick={toggleAdminMode}
-      variant={isAdminMode ? "default" : "secondary"}
+      variant={isAdminMode ? "ghost" : "outline"}
       size="sm"
       className="gap-2"
       title={isAdminMode ? "Switch to Player Mode" : "Switch to Admin Mode"}

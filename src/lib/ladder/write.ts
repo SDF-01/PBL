@@ -268,8 +268,8 @@ export async function submitLadderMatchScore(
 
   try {
     await applyMatchEloByUserIds({
-      sideA: [match.sideA.players[0], match.sideA.players[1]],
-      sideB: [match.sideB.players[0], match.sideB.players[1]],
+      sideA: [match.sideA[0], match.sideA[1]],
+      sideB: [match.sideB[0], match.sideB[1]],
       scoreA,
       scoreB,
       targetPoints,
@@ -310,10 +310,9 @@ export async function persistGeneratedSession(input: GenerateSessionInput): Prom
   try {
     // Write session document
     await setDoc(doc(db(), COLLECTIONS.ladderSessions, sessionDoc.id), {
-      ...stripUndefined(sessionDoc),
-      generatedAt: serverTimestamp(),
+      ...(stripUndefined(sessionDoc as unknown as Record<string, unknown>)),
       generatedBy,
-      status: "generated",
+      status: "GENERATED",
     });
 
     // Write court documents
@@ -328,19 +327,18 @@ export async function persistGeneratedSession(input: GenerateSessionInput): Prom
     for (const match of matches) {
       await setDoc(doc(db(), COLLECTIONS.ladderMatches, match.id), {
         ...stripUndefined(match),
-        status: "scheduled",
+        status: "SCHEDULED",
         createdAt: serverTimestamp(),
       });
     }
 
     // Write generation audit
     await writeAudit({
-      action: "SESSION_GENERATED",
-      sessionId: sessionDoc.id,
+      kind: "SESSION_GENERATED",
       targetId: sessionDoc.id,
-      targetType: "session",
+      targetKind: "session",
       actorId: generatedBy,
-      details: {
+      payload: {
         kind: sessionDoc.kind,
         courtCount: courts.length,
         playerCount: courts.reduce((sum, c) => sum + c.playerIds.length, 0),
@@ -363,7 +361,7 @@ export async function verifyLadderMatchScore(
   await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
     verifiedBy,
     verifiedAt: serverTimestamp(),
-    status: "verified",
+    status: "VERIFIED",
   });
 
   // TODO: Apply audit trail
@@ -386,16 +384,15 @@ export async function adminAssignMatchResult(
       assignedAt: serverTimestamp(),
       reason: "incomplete_match_admin_assignment",
     },
-    status: "admin-assigned",
+    status: "ADMIN_ASSIGNED",
   });
 
   await writeAudit({
-    action: "MATCH_ADMIN_ASSIGNED",
-    sessionId: "", // TODO: resolve from match
+    kind: "MATCH_ADMIN_ASSIGNED",
     targetId: matchId,
-    targetType: "match",
+    targetKind: "match",
     actorId: adminId,
-    details: { scoreA, scoreB },
+    payload: { scoreA, scoreB },
   });
 }
 
@@ -435,12 +432,11 @@ export async function finalizeSession(
 
     // Write finalization audit
     await writeAudit({
-      action: "SESSION_FINALIZED",
-      sessionId,
+      kind: "SESSION_FINALIZED",
       targetId: sessionId,
-      targetType: "session",
+      targetKind: "session",
       actorId: adminId,
-      details: {
+      payload: {
         playersAffected: Object.keys(updatedPlayerStats).length,
       },
     });

@@ -121,7 +121,7 @@ export function ScoreSubmission({
                 </div>
                 <Button
                   onClick={() => handleDecrement("A")}
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   className="w-full"
                   disabled={isSubmitting}
@@ -161,7 +161,7 @@ export function ScoreSubmission({
                 </div>
                 <Button
                   onClick={() => handleDecrement("B")}
-                  variant="secondary"
+                  variant="outline"
                   size="sm"
                   className="w-full"
                   disabled={isSubmitting}
@@ -196,7 +196,7 @@ export function ScoreSubmission({
           <div className="flex gap-3">
             <Button
               onClick={onCancel}
-              variant="secondary"
+              variant="ghost"
               className="flex-1"
               disabled={isSubmitting}
             >

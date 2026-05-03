@@ -12,6 +12,7 @@ import {
   CheckInDoc,
   PlayDateDoc,
   LadderSeasonDoc,
+  LadderSessionKind,
   CourtDistributionPlacement,
 } from "@/lib/firestore/types";
 import { generate4PlayerRotation, generate5PlayerRotation, RotationMatch } from "./rotations";
@@ -49,7 +50,7 @@ export function generateLadderSession(input: SessionGenerationInput): GeneratedS
 
   // Filter confirmed check-ins (include geofence-validated and admin-confirmed)
   const confirmedCheckIns = checkIns.filter(
-    (ci) => ci.status === "confirmed" || ci.status === "admin-confirmed"
+    (ci) => ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED"
   );
 
   const activePlayerIds = confirmedCheckIns.map((ci) => ci.userId);
@@ -69,10 +70,10 @@ export function generateLadderSession(input: SessionGenerationInput): GeneratedS
     playDateId: playDate.id,
     seasonId: season.id,
     kind: sessionKind,
-    status: "generated" as LadderSessionStatus,
-    targetPointsPerGame: season.targetPointsPerGame ?? 11,
+    status: "GENERATED" as LadderSessionStatus,
+    targetPoints: season.targetPoints ?? 11,
     movementPattern: season.movementPattern ?? "ONE_UP_ONE_DOWN",
-    distributionPlacement: distribution,
+    courtDistributionPlacement: distribution,
     generatedAt: now,
     startedAt: undefined,
     finalizedAt: undefined,
@@ -100,6 +101,7 @@ export function generateLadderSession(input: SessionGenerationInput): GeneratedS
     const court: LadderCourtDoc = {
       id: courtId,
       sessionId: sessionId,
+      playDateId: playDate.id,
       courtNumber: courtIndex + 1,
       size: playerIds.length as 4 | 5,
       playerIds: playerIds,
@@ -114,20 +116,22 @@ export function generateLadderSession(input: SessionGenerationInput): GeneratedS
 
       const match: LadderMatchDoc = {
         id: matchId,
+        sessionId: sessionId,
         courtId: courtId,
         gameNumber: matchIndex,
         sequenceInCourt: rotation.gameNumber,
         sideA: rotation.sideA,
         sideB: rotation.sideB,
-        sitOutPlayer: rotation.sitOutPlayer,
-        status: "scheduled" as LadderMatchStatus,
+        sittingOut: rotation.sitOutPlayer,
+        status: "SCHEDULED" as LadderMatchStatus,
         scoreA: undefined,
         scoreB: undefined,
         submittedAt: undefined,
         submittedBy: undefined,
         verifiedAt: undefined,
         verifiedBy: undefined,
-        adminOverride: undefined,
+        adminAssignedBy: undefined,
+        adminAssignedAt: undefined,
       };
 
       matches.push(match);
@@ -151,8 +155,8 @@ export function validateGeneratedSession(generated: GeneratedSession): string[] 
   const { session, courts, matches } = generated;
 
   // Check session status
-  if (session.status !== "generated") {
-    errors.push("Session status must be 'generated'");
+  if (session.status !== "GENERATED") {
+    errors.push("Session status must be 'GENERATED'");
   }
 
   // Check courts
@@ -235,22 +239,23 @@ export function generateSessionBFromSessionA(
   const sessionBCheckIns: CheckInDoc[] = Array.from(sessionAParticipants).map((userId) => ({
     id: `${playDate.id}_sessionB_checkin_${userId}`,
     playDateId: playDate.id,
-    userId: userId,
     sessionKind: "B",
+    userId,
+    displayName: userId,
     checkedInAt: new Date().toISOString(),
     latitude: playDate.venueLatitude,
     longitude: playDate.venueLongitude,
     geofenceResult: "within",
-    status: "confirmed" as any,
+    status: "CONFIRMED",
+    createdAt: new Date().toISOString(),
   }));
 
-  // Generate Session B
   return generateLadderSession({
     playDate,
     season,
     checkIns: sessionBCheckIns,
     sessionKind: "B",
     priorSessionCourts: courtsA,
-    distribution: sessionA.distributionPlacement,
+    distribution: sessionA.courtDistributionPlacement,
   });
 }

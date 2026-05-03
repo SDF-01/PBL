@@ -31,15 +31,15 @@ export function AttendanceReview({
   const [selectedPlayers, setSelectedPlayers] = useState(
     new Set(
       checkIns
-        .filter((ci) => ci.status === "confirmed" || ci.status === "admin-confirmed")
+        .filter((ci) => ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED")
         .map((ci) => ci.userId)
     )
   );
 
   const confirmed = checkIns.filter(
-    (ci) => ci.status === "confirmed" || ci.status === "admin-confirmed"
+    (ci) => ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED"
   );
-  const rejected = checkIns.filter((ci) => ci.status === "geo-rejected");
+  const rejected = checkIns.filter((ci) => ci.status === "GEO_REJECTED");
 
   const togglePlayer = (playerId: string) => {
     const next = new Set(selectedPlayers);
@@ -178,7 +178,7 @@ export function AttendanceReview({
 
         {/* Action Buttons */}
         <div className="flex gap-3 justify-end">
-          <Button onClick={onClose} variant="secondary">
+          <Button onClick={onClose} variant="ghost">
             Cancel
           </Button>
           <Button

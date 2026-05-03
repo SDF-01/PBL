@@ -134,7 +134,7 @@ export function ScoreVerification({
           <div className="flex gap-3 flex-col sm:flex-row">
             <Button
               onClick={onDispute}
-              variant="secondary"
+              variant="outline"
               className="flex-1"
               disabled={isVerifying}
             >

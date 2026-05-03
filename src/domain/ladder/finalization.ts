@@ -54,7 +54,7 @@ export function calculateSessionResults(
 
   // Process only verified matches
   matches
-    .filter((m) => m.status === "verified" || m.status === "admin-assigned")
+    .filter((m) => m.status === "VERIFIED" || m.status === "ADMIN_ASSIGNED")
     .forEach((match) => {
       const scoreA = match.scoreA || 0;
       const scoreB = match.scoreB || 0;
@@ -93,15 +93,15 @@ export function calculateSessionResults(
 
   const courtGroups: Record<number, PlayerSessionResult[]> = {};
   results.forEach((r) => {
-    if (!courtGroups[r.courtNumber]) {
-      courtGroups[r.courtNumber] = [];
-    }
-    courtGroups[r.courtNumber].push(r);
+    const bucket = courtGroups[r.courtNumber] || (courtGroups[r.courtNumber] = []);
+    bucket.push(r);
   });
 
   // Sort within each court and assign ranks
   Object.keys(courtGroups).forEach((courtNum) => {
     const group = courtGroups[parseInt(courtNum)];
+    if (!group) return;
+
     group.sort((a, b) => {
       // Primary: wins (descending)
       if (a.wins !== b.wins) return b.wins - a.wins;
@@ -135,10 +135,8 @@ export function calculateCourtMovement(
   // Group results by court
   const resultsByCourtNum: Record<number, PlayerSessionResult[]> = {};
   results.forEach((r) => {
-    if (!resultsByCourtNum[r.courtNumber]) {
-      resultsByCourtNum[r.courtNumber] = [];
-    }
-    resultsByCourtNum[r.courtNumber].push(r);
+    const bucket = resultsByCourtNum[r.courtNumber] || (resultsByCourtNum[r.courtNumber] = []);
+    bucket.push(r);
   });
 
   const sortedCourtNumbers = Object.keys(resultsByCourtNum)
@@ -155,8 +153,9 @@ export function calculateCourtMovement(
     // Bottom-ranked player from each court (except bottom) moves down
 
     sortedCourtNumbers.forEach((courtNum, index) => {
-      const courtResults = resultsByCourtNum[courtNum]
-        .sort((a, b) => a.rank - b.rank);
+      const courtResults = (resultsByCourtNum[courtNum] || []).sort(
+        (a, b) => a.rank - b.rank
+      );
 
       const isTopCourt = index === 0;
       const isBottomCourt = index === sortedCourtNumbers.length - 1;
@@ -187,17 +186,20 @@ export function calculateCourtMovement(
     // Bottom 2 ranked players from each court (except bottom) move down
 
     sortedCourtNumbers.forEach((courtNum, index) => {
-      const courtResults = resultsByCourtNum[courtNum]
-        .sort((a, b) => a.rank - b.rank);
+      const courtResults = (resultsByCourtNum[courtNum] || []).sort(
+        (a, b) => a.rank - b.rank
+      );
 
       const isTopCourt = index === 0;
       const isBottomCourt = index === sortedCourtNumbers.length - 1;
 
       // Top 2 move up
       if (!isTopCourt && courtResults.length >= 2) {
-        moversUp.push(courtResults[0], courtResults[1]);
+        const first = courtResults[0]!;
+        const second = courtResults[1]!;
+        moversUp.push(first, second);
       } else if (!isTopCourt && courtResults.length === 1) {
-        moversUp.push(courtResults[0]);
+        moversUp.push(courtResults[0]!);
       } else {
         courtResults.slice(0, Math.min(2, courtResults.length)).forEach((r) => {
           stayers.push(r);
@@ -252,10 +254,8 @@ export function createStandingsSnapshot(
 
   const byCourtNum: Record<number, PlayerSessionResult[]> = {};
   results.forEach((r) => {
-    if (!byCourtNum[r.courtNumber]) {
-      byCourtNum[r.courtNumber] = [];
-    }
-    byCourtNum[r.courtNumber].push(r);
+    const bucket = byCourtNum[r.courtNumber] || (byCourtNum[r.courtNumber] = []);
+    bucket.push(r);
   });
 
   return {
@@ -280,6 +280,11 @@ export function updateCumulativeStats(
 
   sessionResults.forEach((result) => {
     const existing = currentStats?.[result.playerId] || {
+      matches: 0,
+      wins: 0,
+      losses: 0,
+      pointsFor: 0,
+      pointsAgainst: 0,
       sessionsPlayed: 0,
       totalWins: 0,
       totalLosses: 0,
@@ -288,6 +293,11 @@ export function updateCumulativeStats(
     };
 
     updated[result.playerId] = {
+      matches: existing.matches || 0,
+      wins: existing.wins || 0,
+      losses: existing.losses || 0,
+      pointsFor: existing.pointsFor || 0,
+      pointsAgainst: existing.pointsAgainst || 0,
       sessionsPlayed: (existing.sessionsPlayed || 0) + 1,
       totalWins: (existing.totalWins || 0) + result.wins,
       totalLosses: (existing.totalLosses || 0) + result.losses,
@@ -309,7 +319,7 @@ export function isSessionReadyForFinalization(matches: LadderMatchDoc[]): {
   incompleteMatches: LadderMatchDoc[];
 } {
   const incomplete = matches.filter(
-    (m) => m.status !== "verified" && m.status !== "admin-assigned"
+    (m) => m.status !== "VERIFIED" && m.status !== "ADMIN_ASSIGNED"
   );
 
   return {

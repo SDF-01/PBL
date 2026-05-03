@@ -148,7 +148,7 @@ export function SessionGenerationDialog({
           <Panel className="bg-slate-50 p-3 text-sm space-y-1">
             <div>
               <span className="text-slate-600">Points per game:</span>
-              <span className="font-semibold ml-2">{season.targetPointsPerGame || 11}</span>
+              <span className="font-semibold ml-2">{season.targetPoints || 11}</span>
             </div>
             <div>
               <span className="text-slate-600">Movement pattern:</span>
@@ -166,7 +166,7 @@ export function SessionGenerationDialog({
 
         {/* Action Buttons */}
         <div className="flex gap-3 justify-end">
-          <Button onClick={onClose} variant="secondary" disabled={isGenerating}>
+          <Button onClick={onClose} variant="ghost" disabled={isGenerating}>
             Cancel
           </Button>
           <Button

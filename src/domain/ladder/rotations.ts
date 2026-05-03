@@ -6,8 +6,8 @@
 
 export interface RotationMatch {
   gameNumber: number;
-  sideA: string[]; // Two player IDs
-  sideB: string[]; // Two player IDs
+  sideA: [string, string]; // Two player IDs
+  sideB: [string, string]; // Two player IDs
   sitOutPlayer?: string; // 5-player courts only
 }
 
@@ -23,7 +23,7 @@ export function generate4PlayerRotation(playerIds: string[]): RotationMatch[] {
     throw new Error(`Expected 4 players, got ${playerIds.length}`);
   }
 
-  const [p0, p1, p2, p3] = playerIds;
+  const [p0, p1, p2, p3] = playerIds as [string, string, string, string];
 
   return [
     {
@@ -62,7 +62,7 @@ export function generate5PlayerRotation(playerIds: string[]): RotationMatch[] {
     throw new Error(`Expected 5 players, got ${playerIds.length}`);
   }
 
-  const [p0, p1, p2, p3, p4] = playerIds;
+  const [p0, p1, p2, p3, p4] = playerIds as [string, string, string, string, string];
 
   // Optimized 5-player rotation: 6 games with balanced distributions
   // Each player sits out 1.2 times on average (~1-2 times)
@@ -139,24 +139,34 @@ export function computeRotationStats(
     const [b1, b2] = rotation.sideB;
 
     // Record partnerships
-    partnershipsPerPlayer[a1].add(a2);
-    partnershipsPerPlayer[a2].add(a1);
-    partnershipsPerPlayer[b1].add(b2);
-    partnershipsPerPlayer[b2].add(b1);
+    const a1Partnerships = partnershipsPerPlayer[a1]!;
+    const a2Partnerships = partnershipsPerPlayer[a2]!;
+    const b1Partnerships = partnershipsPerPlayer[b1]!;
+    const b2Partnerships = partnershipsPerPlayer[b2]!;
+
+    a1Partnerships.add(a2);
+    a2Partnerships.add(a1);
+    b1Partnerships.add(b2);
+    b2Partnerships.add(b1);
 
     // Record opponents
-    opponentsPerPlayer[a1].add(b1);
-    opponentsPerPlayer[a1].add(b2);
-    opponentsPerPlayer[a2].add(b1);
-    opponentsPerPlayer[a2].add(b2);
-    opponentsPerPlayer[b1].add(a1);
-    opponentsPerPlayer[b1].add(a2);
-    opponentsPerPlayer[b2].add(a1);
-    opponentsPerPlayer[b2].add(a2);
+    const a1Opponents = opponentsPerPlayer[a1]!;
+    const a2Opponents = opponentsPerPlayer[a2]!;
+    const b1Opponents = opponentsPerPlayer[b1]!;
+    const b2Opponents = opponentsPerPlayer[b2]!;
+
+    a1Opponents.add(b1);
+    a1Opponents.add(b2);
+    a2Opponents.add(b1);
+    a2Opponents.add(b2);
+    b1Opponents.add(a1);
+    b1Opponents.add(a2);
+    b2Opponents.add(a1);
+    b2Opponents.add(a2);
 
     // Record sit-outs
     if (rotation.sitOutPlayer) {
-      sitOutsPerPlayer[rotation.sitOutPlayer]++;
+      sitOutsPerPlayer[rotation.sitOutPlayer]!++;
     }
   });
 

@@ -13,8 +13,8 @@ import {
   CheckInDoc,
   LadderSessionDoc,
 } from "@/lib/firestore/types";
-import { Panel } from "./Panel";
-import { Button } from "./Button";
+import { Panel } from "../ui/Panel";
+import { Button } from "../ui/Button";
 import {
   Calendar,
   Users,
@@ -108,7 +108,7 @@ export function AdminDashboard(props: AdminDashboardProps) {
             <p>No play dates scheduled</p>
             <Button
               onClick={onCreatePlayDate}
-              variant="secondary"
+              variant="outline"
               size="sm"
               className="mt-4"
             >
@@ -137,7 +137,7 @@ export function AdminDashboard(props: AdminDashboardProps) {
             </div>
             <Button
               onClick={onCreatePlayDate}
-              variant="secondary"
+              variant="outline"
               size="sm"
               className="w-full"
             >
@@ -252,7 +252,7 @@ function OperationalStep({
         onClick={onClick}
         disabled={disabled}
         size="sm"
-        variant="secondary"
+        variant="outline"
       >
         {buttonLabel}
       </Button>

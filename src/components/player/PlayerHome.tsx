@@ -59,7 +59,7 @@ export function PlayerHome({
           <p className="text-amber-800 mb-4">
             The admin will generate the session shortly. Check back soon!
           </p>
-          <Button onClick={onViewCourts} variant="secondary">
+          <Button onClick={onViewCourts} variant="outline">
             View Play Dates
           </Button>
         </Panel>
@@ -170,19 +170,19 @@ export function PlayerHome({
 
             {/* Match Status */}
             <div className="flex items-center gap-2 p-3 bg-slate-50 rounded mb-4">
-              {currentMatch.status === "scheduled" && (
+              {currentMatch.status === "SCHEDULED" && (
                 <>
                   <Clock className="w-4 h-4 text-amber-600" />
                   <span className="text-sm">Ready to play</span>
                 </>
               )}
-              {currentMatch.status === "submitted" && (
+              {currentMatch.status === "SUBMITTED" && (
                 <>
                   <Clock className="w-4 h-4 text-blue-600" />
                   <span className="text-sm">Awaiting verification</span>
                 </>
               )}
-              {currentMatch.status === "verified" && (
+              {currentMatch.status === "VERIFIED" && (
                 <>
                   <CheckCircle className="w-4 h-4 text-green-600" />
                   <span className="text-sm">Score verified ✓</span>
@@ -196,16 +196,16 @@ export function PlayerHome({
             <Button
               onClick={onEnterScore}
               className="gap-2"
-              disabled={currentMatch.status !== "scheduled"}
+              disabled={currentMatch.status !== "SCHEDULED"}
             >
               <Activity className="w-4 h-4" />
               Enter Score
             </Button>
             <Button
               onClick={onVerifyScore}
-              variant="secondary"
+              variant="outline"
               className="gap-2"
-              disabled={currentMatch.status !== "submitted"}
+              disabled={currentMatch.status !== "SUBMITTED"}
             >
               <CheckCircle className="w-4 h-4" />
               Verify
