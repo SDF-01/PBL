@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
   Car,
   CheckCircle,
   Layers,
-  Loader2,
   Lightbulb,
+  Loader2,
   MapPin,
   Plus,
   Save,
@@ -33,11 +33,13 @@ import {
 } from "@/lib/clubs/repo";
 import { upsertClubFacility } from "@/lib/clubs/write";
 import { createLeague } from "@/lib/leagues/write";
+import { createVenue } from "@/lib/ladder/write";
 import { assignRole, deactivateUserRole } from "@/lib/permissions/write";
+import { listVenues } from "@/lib/ladder/repo";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
-import type { LeagueDoc } from "@/lib/firestore/types";
+import type { LeagueDoc, VenueDoc } from "@/lib/firestore/types";
 import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
 type Section = "overview" | "leagues" | "facilities" | "coordinators";
@@ -55,28 +57,28 @@ const AMENITY_OPTIONS = [
   "First Aid",
 ];
 
-function resolveClubId(param: string): string {
-  if (typeof window === "undefined") return param;
-  const segments = window.location.pathname.replace(/\/$/, "").split("/");
-  const idx = segments.findIndex((s) => s === "manage");
-  return idx >= 0 && segments[idx + 1] ? segments[idx + 1]! : param;
-}
-
-export function ClubManageClient({ clubId: rawId }: { clubId: string }) {
+export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
+  const routeParams = useParams<{ clubId: string }>();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const { clubDirectorFor, isSiteAdmin, loading: permLoading } = usePermissions();
   const { toast } = useToast();
 
-  const clubId = resolveClubId(rawId);
-  const initialSection = (searchParams.get("section") as Section) ?? "overview";
+  // useParams() returns the real URL param on the client, even when Firebase Hosting
+  // serves the __fallback shell. Fall back to the prop (which may be "__fallback")
+  // only during SSR/build when window isn't available.
+  const clubId =
+    routeParams?.clubId && routeParams.clubId !== "__fallback"
+      ? routeParams.clubId
+      : fallbackId;
 
+  const initialSection = (searchParams.get("section") as Section) ?? "overview";
   const [club, setClub] = useState<ClubDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState<Section>(initialSection);
 
   useEffect(() => {
-    if (clubId === "__fallback" || !clubId) return;
+    if (!clubId || clubId === "__fallback") return;
     getClubById(clubId).then((c) => {
       setClub(c);
       setLoading(false);
@@ -102,9 +104,7 @@ export function ClubManageClient({ clubId: rawId }: { clubId: string }) {
         <main className="container py-10 max-w-2xl">
           <Panel variant="base" padding="lg">
             <p className="text-rose-400">Club not found.</p>
-            <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">
-              ← Back to My Clubs
-            </Link>
+            <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">← Back to My Clubs</Link>
           </Panel>
         </main>
       </ResponsiveShell>
@@ -117,9 +117,7 @@ export function ClubManageClient({ clubId: rawId }: { clubId: string }) {
         <main className="container py-10 max-w-2xl">
           <Panel variant="base" padding="lg">
             <p className="text-rose-400">You don&apos;t have director access to this club.</p>
-            <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">
-              ← Back to My Clubs
-            </Link>
+            <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">← Back to My Clubs</Link>
           </Panel>
         </main>
       </ResponsiveShell>
@@ -210,20 +208,11 @@ function OverviewSection({ club }: { club: ClubDoc }) {
 
 type ToastFn = (message: string, variant?: "success" | "error" | "info") => void;
 
-function LeaguesSection({
-  clubId,
-  userId,
-  toast,
-}: {
-  clubId: string;
-  userId: string;
-  toast: ToastFn;
-}) {
+function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [format, setFormat] = useState("Doubles Ladder");
@@ -231,10 +220,9 @@ function LeaguesSection({
   const [state, setState] = useState("");
 
   useEffect(() => {
-    listClubLeagues(clubId).then((l) => {
-      setLeagues(l);
-      setLoading(false);
-    });
+    listClubLeagues(clubId)
+      .then((l) => { setLeagues(l); setLoading(false); })
+      .catch(() => setLoading(false));
   }, [clubId]);
 
   async function handleCreate() {
@@ -249,19 +237,15 @@ function LeaguesSection({
         state: state.trim() || undefined,
         leagueFormat: format,
       });
-      const newLeague: LeagueDoc = {
-        id, orgId: clubId, clubId,
-        name: name.trim(),
+      setLeagues((prev) => [{
+        id, orgId: clubId, clubId, name: name.trim(),
         description: description.trim() || undefined,
-        city: city.trim() || undefined,
-        state: state.trim() || undefined,
-        league_format: format,
-        active: true, createdBy: userId,
-      };
-      setLeagues((prev) => [newLeague, ...prev]);
+        city: city.trim() || undefined, state: state.trim() || undefined,
+        league_format: format, active: true, createdBy: userId,
+      }, ...prev]);
       setName(""); setDescription(""); setCity(""); setState(""); setFormat("Doubles Ladder");
       setShowForm(false);
-      toast(`"${newLeague.name}" league created.`, "success");
+      toast(`"${name.trim()}" league created.`, "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to create league.", "error");
     } finally {
@@ -282,48 +266,22 @@ function LeaguesSection({
         <Panel variant="quest" padding="lg" className="space-y-3">
           <h3 className="heading-fantasy text-ash-100 text-sm">Create League</h3>
           <div className="space-y-2">
-            <input
-              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-              placeholder="League name *"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <textarea
-              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
-              placeholder="Description (optional)"
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <input className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" placeholder="League name *" value={name} onChange={(e) => setName(e.target.value)} />
+            <textarea className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none" placeholder="Description (optional)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
             <div className="grid grid-cols-2 gap-2">
-              <input
-                className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                placeholder="City"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-              />
-              <input
-                className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                placeholder="State"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-              />
+              <input className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+              <input className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
             </div>
-            <select
-              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-              value={format}
-              onChange={(e) => setFormat(e.target.value)}
-            >
+            <select className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" value={format} onChange={(e) => setFormat(e.target.value)}>
               <option>Doubles Ladder</option>
               <option>Singles Ladder</option>
               <option>Mixed Doubles Ladder</option>
               <option>Round Robin</option>
             </select>
           </div>
-          <div className="flex gap-2 pt-1">
+          <div className="flex gap-2">
             <Button size="sm" onClick={handleCreate} disabled={saving}>
-              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Create League
+              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Create League
             </Button>
             <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
           </div>
@@ -331,9 +289,7 @@ function LeaguesSection({
       )}
 
       {loading ? (
-        <Panel variant="base" padding="lg" className="flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
-        </Panel>
+        <Panel variant="base" padding="lg" className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></Panel>
       ) : leagues.length === 0 ? (
         <Panel variant="base" padding="lg" className="text-center">
           <Layers className="h-8 w-8 text-ash-600 mx-auto mb-2" />
@@ -348,14 +304,9 @@ function LeaguesSection({
                   <span className="heading-fantasy text-ash-100 text-sm">{league.name}</span>
                   {league.active !== false && <RuneChip tone="success" className="text-[10px]">Active</RuneChip>}
                 </div>
-                <p className="text-ash-500 text-xs">
-                  {[league.city, league.state].filter(Boolean).join(", ")}
-                  {league.league_format ? ` · ${league.league_format}` : ""}
-                </p>
+                <p className="text-ash-500 text-xs">{[league.city, league.state].filter(Boolean).join(", ")}{league.league_format ? ` · ${league.league_format}` : ""}</p>
               </div>
-              <Link href={`/leagues/${league.id}`}>
-                <Button size="sm" variant="ghost">View</Button>
-              </Link>
+              <Link href={`/leagues/${league.id}`}><Button size="sm" variant="ghost">View</Button></Link>
             </Panel>
           ))}
         </div>
@@ -365,21 +316,17 @@ function LeaguesSection({
 }
 
 // ============================================================
-// FACILITIES
+// FACILITIES + VENUE
 // ============================================================
 
-function FacilitiesSection({
-  clubId,
-  userId,
-  toast,
-}: {
-  clubId: string;
-  userId: string;
-  toast: ToastFn;
-}) {
+function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingVenue, setSavingVenue] = useState(false);
+  const [venues, setVenues] = useState<VenueDoc[]>([]);
+  const [showVenueForm, setShowVenueForm] = useState(false);
 
+  // Facility fields
   const [address, setAddress] = useState("");
   const [pickleballCourts, setPickleballCourts] = useState<number | "">("");
   const [tennisConversionCourts, setTennisConversionCourts] = useState<number | "">("");
@@ -388,8 +335,13 @@ function FacilitiesSection({
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
+  // Venue form fields
+  const [venueName, setVenueName] = useState("");
+  const [venueAddress, setVenueAddress] = useState("");
+  const [venueRadius, setVenueRadius] = useState<number>(200);
+
   useEffect(() => {
-    getClubFacility(clubId).then((f) => {
+    Promise.all([getClubFacility(clubId), listVenues(clubId)]).then(([f, v]) => {
       if (f) {
         setAddress(f.address ?? "");
         setPickleballCourts(f.pickleballCourts ?? "");
@@ -399,8 +351,9 @@ function FacilitiesSection({
         setSelectedAmenities(f.amenities ?? []);
         setNotes(f.notes ?? "");
       }
+      setVenues(v);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, [clubId]);
 
   function toggleAmenity(amenity: string) {
@@ -412,19 +365,14 @@ function FacilitiesSection({
   async function handleSave() {
     setSaving(true);
     try {
-      await upsertClubFacility(
-        clubId,
-        {
-          address: address.trim() || undefined,
-          pickleballCourts: pickleballCourts !== "" ? Number(pickleballCourts) : undefined,
-          tennisConversionCourts: tennisConversionCourts !== "" ? Number(tennisConversionCourts) : undefined,
-          hasParking,
-          hasLights,
-          amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
-          notes: notes.trim() || undefined,
-        },
-        userId,
-      );
+      await upsertClubFacility(clubId, {
+        address: address.trim() || undefined,
+        pickleballCourts: pickleballCourts !== "" ? Number(pickleballCourts) : undefined,
+        tennisConversionCourts: tennisConversionCourts !== "" ? Number(tennisConversionCourts) : undefined,
+        hasParking, hasLights,
+        amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+        notes: notes.trim() || undefined,
+      }, userId);
       toast("Facility information saved.", "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save.", "error");
@@ -433,175 +381,199 @@ function FacilitiesSection({
     }
   }
 
+  async function handleCreateVenue() {
+    if (!venueName.trim()) { toast("Venue name is required.", "error"); return; }
+    setSavingVenue(true);
+    try {
+      const id = await createVenue({
+        name: venueName.trim(),
+        address: venueAddress.trim() || undefined,
+        lat: 0,
+        lng: 0,
+        radiusMeters: venueRadius,
+        createdBy: userId,
+        clubId,
+      });
+      const newVenue: VenueDoc = { id, name: venueName.trim(), address: venueAddress.trim() || undefined, lat: 0, lng: 0, radiusMeters: venueRadius, createdBy: userId, createdAt: new Date().toISOString() };
+      setVenues((prev) => [newVenue, ...prev]);
+      setVenueName(""); setVenueAddress(""); setVenueRadius(200);
+      setShowVenueForm(false);
+      toast(`Venue "${venueName.trim()}" created.`, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to create venue.", "error");
+    } finally {
+      setSavingVenue(false);
+    }
+  }
+
   if (loading) {
-    return (
-      <Panel variant="base" padding="lg" className="flex justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
-      </Panel>
-    );
+    return <Panel variant="base" padding="lg" className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></Panel>;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Court Facilities</h2>
-        <Button size="sm" onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-          Save
-        </Button>
+    <div className="space-y-6">
+
+      {/* Court Facilities */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Court Facilities</h2>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save
+          </Button>
+        </div>
+
+        <Panel variant="quest" padding="lg" className="space-y-4">
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
+            </label>
+            <input
+              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+              placeholder="123 Court Ave, City, State 55555"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-1.5 block">Court Count</label>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-ash-500 text-xs mb-1 block">Dedicated Pickleball</label>
+                <input type="number" min={0} max={99}
+                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+                  placeholder="0" value={pickleballCourts}
+                  onChange={(e) => setPickleballCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                />
+              </div>
+              <div>
+                <label className="text-ash-500 text-xs mb-1 block">Tennis Conversion</label>
+                <input type="number" min={0} max={99}
+                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+                  placeholder="0" value={tennisConversionCourts}
+                  onChange={(e) => setTennisConversionCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-2 block">Infrastructure</label>
+            <div className="grid grid-cols-2 gap-2">
+              <ToggleRow icon={<Car className="h-4 w-4" />} label="On-Site Parking" value={hasParking} onChange={setHasParking} />
+              <ToggleRow icon={<Lightbulb className="h-4 w-4" />} label="Court Lights" value={hasLights} onChange={setHasLights} />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-2 block">Amenities</label>
+            <div className="flex flex-wrap gap-2">
+              {AMENITY_OPTIONS.map((amenity) => {
+                const active = selectedAmenities.includes(amenity);
+                return (
+                  <button key={amenity} type="button" onClick={() => toggleAmenity(amenity)}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                      active
+                        ? "bg-ember-500/20 border-ember-500/60 text-ember-300"
+                        : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500 hover:text-ash-200"
+                    }`}
+                  >
+                    {active && "✓ "}{amenity}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-1.5 block">Additional Notes</label>
+            <textarea
+              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
+              placeholder="Any other details players should know…"
+              rows={3} value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </Panel>
       </div>
 
-      <Panel variant="quest" padding="lg" className="space-y-4">
-        {/* Address */}
-        <div>
-          <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
-          </label>
-          <input
-            className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-            placeholder="123 Court Ave, City, State 55555"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-          />
+      {/* Venues */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Venues</h2>
+          <Button size="sm" variant="outline" onClick={() => setShowVenueForm((v) => !v)}>
+            <Plus className="h-3.5 w-3.5" /> Add Venue
+          </Button>
         </div>
+        <p className="text-ash-500 text-xs">Venues are used for GPS check-in during play dates. Add your court location here.</p>
 
-        {/* Court counts */}
-        <div>
-          <label className="text-ash-300 text-xs font-medium mb-1.5 block">Court Count</label>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-ash-500 text-xs mb-1 block">Dedicated Pickleball Courts</label>
+        {showVenueForm && (
+          <Panel variant="quest" padding="lg" className="space-y-3">
+            <h3 className="heading-fantasy text-ash-100 text-sm">Create Venue</h3>
+            <div className="space-y-2">
               <input
-                type="number"
-                min={0}
-                max={99}
                 className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                placeholder="0"
-                value={pickleballCourts}
-                onChange={(e) => setPickleballCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                placeholder="Venue name *"
+                value={venueName} onChange={(e) => setVenueName(e.target.value)}
               />
-            </div>
-            <div>
-              <label className="text-ash-500 text-xs mb-1 block">Tennis Conversion Courts</label>
               <input
-                type="number"
-                min={0}
-                max={99}
                 className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                placeholder="0"
-                value={tennisConversionCourts}
-                onChange={(e) => setTennisConversionCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                placeholder="Address (optional)"
+                value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)}
               />
+              <div>
+                <label className="text-ash-500 text-xs mb-1 block">Check-in radius (meters)</label>
+                <input
+                  type="number" min={50} max={2000}
+                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+                  value={venueRadius} onChange={(e) => setVenueRadius(Number(e.target.value))}
+                />
+              </div>
             </div>
-          </div>
-        </div>
-
-        {/* Toggles */}
-        <div>
-          <label className="text-ash-300 text-xs font-medium mb-2 block">Infrastructure</label>
-          <div className="grid grid-cols-2 gap-2">
-            <ToggleRow
-              icon={<Car className="h-4 w-4" />}
-              label="On-Site Parking"
-              value={hasParking}
-              onChange={setHasParking}
-            />
-            <ToggleRow
-              icon={<Lightbulb className="h-4 w-4" />}
-              label="Court Lights"
-              value={hasLights}
-              onChange={setHasLights}
-            />
-          </div>
-        </div>
-
-        {/* Amenities */}
-        <div>
-          <label className="text-ash-300 text-xs font-medium mb-2 block">Amenities</label>
-          <div className="flex flex-wrap gap-2">
-            {AMENITY_OPTIONS.map((amenity) => {
-              const active = selectedAmenities.includes(amenity);
-              return (
-                <button
-                  key={amenity}
-                  type="button"
-                  onClick={() => toggleAmenity(amenity)}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                    active
-                      ? "bg-ember-500/20 border-ember-500/60 text-ember-300"
-                      : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500 hover:text-ash-200"
-                  }`}
-                >
-                  {active && "✓ "}{amenity}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div>
-          <label className="text-ash-300 text-xs font-medium mb-1.5 block">Additional Notes</label>
-          <textarea
-            className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
-            placeholder="Any other details players should know about the facility…"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </div>
-      </Panel>
-
-      {/* Summary card */}
-      {(pickleballCourts !== "" || tennisConversionCourts !== "" || address) && (
-        <Panel variant="inventory" padding="md" className="space-y-2">
-          <h3 className="text-ash-400 text-xs uppercase tracking-widest">Current Info</h3>
-          {address && <p className="text-ash-300 text-sm flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-ember-400 shrink-0" />{address}</p>}
-          <div className="flex flex-wrap gap-3 text-xs text-ash-400">
-            {pickleballCourts !== "" && <span className="flex items-center gap-1"><span className="text-ember-400 font-bold">{pickleballCourts}</span> pickleball courts</span>}
-            {tennisConversionCourts !== "" && <span className="flex items-center gap-1"><span className="text-ember-400 font-bold">{tennisConversionCourts}</span> tennis conversion</span>}
-            {hasParking && <span className="text-emerald-400">✓ Parking</span>}
-            {hasLights && <span className="text-emerald-400">✓ Lights</span>}
-          </div>
-          {selectedAmenities.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
-              {selectedAmenities.map((a) => (
-                <span key={a} className="px-2 py-0.5 rounded-full bg-obsidian-600 text-ash-300 text-[10px]">{a}</span>
-              ))}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleCreateVenue} disabled={savingVenue}>
+                {savingVenue && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Create Venue
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowVenueForm(false)}>Cancel</Button>
             </div>
-          )}
-        </Panel>
-      )}
+          </Panel>
+        )}
+
+        {venues.length === 0 ? (
+          <Panel variant="base" padding="md" className="text-center">
+            <p className="text-ash-500 text-sm">No venues yet. Add one above.</p>
+          </Panel>
+        ) : (
+          <div className="space-y-2">
+            {venues.map((venue) => (
+              <Panel key={venue.id} variant="inventory" padding="md">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-ash-100 text-sm font-medium">{venue.name}</p>
+                    {venue.address && <p className="text-ash-500 text-xs flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3 shrink-0" />{venue.address}</p>}
+                    <p className="text-ash-600 text-[10px] mt-0.5">Check-in radius: {venue.radiusMeters}m</p>
+                  </div>
+                </div>
+              </Panel>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function ToggleRow({
-  icon,
-  label,
-  value,
-  onChange,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function ToggleRow({ icon, label, value, onChange }: { icon: React.ReactNode; label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!value)}
+    <button type="button" onClick={() => onChange(!value)}
       className={`flex items-center gap-2 px-3 py-2.5 rounded-pixel border text-sm transition-colors text-left ${
-        value
-          ? "bg-ember-500/15 border-ember-500/50 text-ember-300"
-          : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500"
+        value ? "bg-ember-500/15 border-ember-500/50 text-ember-300" : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500"
       }`}
     >
       <span className={value ? "text-ember-400" : "text-ash-600"}>{icon}</span>
       <span className="text-xs font-medium">{label}</span>
-      <span className={`ml-auto text-[10px] font-bold ${value ? "text-ember-400" : "text-ash-600"}`}>
-        {value ? "YES" : "NO"}
-      </span>
+      <span className={`ml-auto text-[10px] font-bold ${value ? "text-ember-400" : "text-ash-600"}`}>{value ? "YES" : "NO"}</span>
     </button>
   );
 }
@@ -610,15 +582,7 @@ function ToggleRow({
 // COORDINATORS
 // ============================================================
 
-function CoordinatorsSection({
-  clubId,
-  userId,
-  toast,
-}: {
-  clubId: string;
-  userId: string;
-  toast: ToastFn;
-}) {
+function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -626,10 +590,9 @@ function CoordinatorsSection({
   const [removing, setRemoving] = useState<string | null>(null);
 
   useEffect(() => {
-    listClubCoordinators(clubId).then((c) => {
-      setCoordinators(c);
-      setLoading(false);
-    });
+    listClubCoordinators(clubId)
+      .then((c) => { setCoordinators(c); setLoading(false); })
+      .catch(() => setLoading(false));
   }, [clubId]);
 
   async function handleAssign() {
@@ -640,10 +603,7 @@ function CoordinatorsSection({
       if (!found) { toast(`No account found for ${email.trim()}.`, "error"); return; }
       if (coordinators.some((c) => c.userId === found.uid)) { toast(`${found.displayName} is already a coordinator.`, "error"); return; }
       await assignRole(found.uid, "LeagueCoordinator", clubId, null, userId);
-      setCoordinators((prev) => [
-        ...prev,
-        { userRoleId: `pending-${Date.now()}`, userId: found.uid, displayName: found.displayName, assignedAt: new Date().toISOString() },
-      ]);
+      setCoordinators((prev) => [...prev, { userRoleId: `pending-${Date.now()}`, userId: found.uid, displayName: found.displayName, assignedAt: new Date().toISOString() }]);
       setEmail("");
       toast(`${found.displayName} assigned as day coordinator.`, "success");
     } catch (err) {
@@ -672,29 +632,22 @@ function CoordinatorsSection({
 
       <Panel variant="quest" padding="lg" className="space-y-3">
         <h3 className="heading-fantasy text-ash-100 text-sm">Assign Coordinator</h3>
-        <p className="text-ash-400 text-xs">
-          Enter a player&apos;s email to grant them League Coordinator access for this club.
-        </p>
+        <p className="text-ash-400 text-xs">Enter a player&apos;s email address to grant them League Coordinator access for this club.</p>
         <div className="flex gap-2">
           <input
             className="flex-1 rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-            placeholder="player@email.com"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            placeholder="player@email.com" type="email"
+            value={email} onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAssign()}
           />
           <Button size="sm" onClick={handleAssign} disabled={assigning || !email.trim()}>
-            {assigning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-            Assign
+            {assigning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />} Assign
           </Button>
         </div>
       </Panel>
 
       {loading ? (
-        <Panel variant="base" padding="lg" className="flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
-        </Panel>
+        <Panel variant="base" padding="lg" className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></Panel>
       ) : coordinators.length === 0 ? (
         <Panel variant="base" padding="lg" className="text-center">
           <Users className="h-8 w-8 text-ash-600 mx-auto mb-2" />
@@ -708,14 +661,9 @@ function CoordinatorsSection({
                 <p className="text-ash-100 text-sm font-medium">{entry.displayName ?? "Player"}</p>
                 <p className="text-ash-500 text-xs font-mono">{entry.userId}</p>
               </div>
-              <button
-                onClick={() => handleRemove(entry)}
-                disabled={removing === entry.userRoleId}
-                className="text-ash-500 hover:text-rose-400 transition-colors disabled:opacity-50"
-              >
-                {removing === entry.userRoleId
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Trash2 className="h-4 w-4" />}
+              <button onClick={() => handleRemove(entry)} disabled={removing === entry.userRoleId}
+                className="text-ash-500 hover:text-rose-400 transition-colors disabled:opacity-50">
+                {removing === entry.userRoleId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </button>
             </Panel>
           ))}

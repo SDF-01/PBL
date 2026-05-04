@@ -10,27 +10,41 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
-import { listUserClubs } from "@/lib/clubs/repo";
+import { getClubById, listUserClubs } from "@/lib/clubs/repo";
 import { updateClubSubmission } from "@/lib/permissions/write";
 import { useAuth } from "@/lib/auth-context";
+import { usePermissions } from "@/lib/permissions/usePermissions";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type { ClubDoc, CreateClubInput } from "@/lib/permissions/types";
 
 export default function MyClubsPage() {
   const { user } = useAuth();
+  const { clubDirectorFor, loading: permLoading } = usePermissions();
   const [clubs, setClubs] = useState<ClubDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClub, setEditingClub] = useState<ClubDoc | null>(null);
 
   useEffect(() => {
+    if (permLoading) return;
     if (!user || !isFirebaseConfigured()) {
       setLoading(false);
       return;
     }
-    listUserClubs(user.uid)
-      .then(setClubs)
+    // Load clubs the user created plus clubs where they were assigned as director.
+    Promise.all([
+      listUserClubs(user.uid),
+      Promise.all(clubDirectorFor.map((id) => getClubById(id))),
+    ])
+      .then(([created, directed]) => {
+        const seen = new Set<string>();
+        const merged: ClubDoc[] = [];
+        for (const club of [...created, ...directed.filter((c): c is ClubDoc => c !== null)]) {
+          if (!seen.has(club.id)) { seen.add(club.id); merged.push(club); }
+        }
+        setClubs(merged);
+      })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, permLoading, clubDirectorFor]);
 
   async function handleEdit(data: CreateClubInput) {
     if (!editingClub) return;

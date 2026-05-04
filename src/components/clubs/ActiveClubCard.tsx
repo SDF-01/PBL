@@ -37,10 +37,10 @@ export function ActiveClubCard({ club }: ActiveClubCardProps) {
             <span className="text-[10px] font-medium tracking-wide uppercase">Leagues</span>
           </button>
         </Link>
-        <Link href={`${manageBase}?section=playdates`}>
+        <Link href={`${manageBase}?section=facilities`}>
           <button className="w-full flex flex-col items-center gap-1.5 p-2.5 rounded bg-obsidian-700 hover:bg-obsidian-600 text-ash-300 hover:text-ash-100 transition-colors text-center">
             <CalendarDays className="h-4 w-4 text-ember-400" />
-            <span className="text-[10px] font-medium tracking-wide uppercase">Play Dates</span>
+            <span className="text-[10px] font-medium tracking-wide uppercase">Facilities</span>
           </button>
         </Link>
         <Link href={`${manageBase}?section=coordinators`}>

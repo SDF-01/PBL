@@ -18,6 +18,13 @@ import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { CreateClubInput, RoleKey } from "./types";
 
+// Maps roleId → the legacy users/{uid}.role string recognised by Firestore rules.
+const ROLE_KEY_TO_LEGACY: Partial<Record<RoleKey, string>> = {
+  SiteAdmin:          "SITE_ADMIN",
+  ClubDirector:       "CLUB_ADMIN",
+  LeagueCoordinator:  "LEAGUE_COORDINATOR",
+};
+
 export async function submitClubCreation(
   userId: string,
   input: CreateClubInput,
@@ -198,7 +205,11 @@ export async function assignRole(
   leagueId: string | null,
   assignedBy: string,
 ): Promise<void> {
-  await addDoc(collection(db(), COLLECTIONS.userRoles), {
+  const database = db();
+  const batch = writeBatch(database);
+
+  const roleRef = doc(collection(database, COLLECTIONS.userRoles));
+  batch.set(roleRef, {
     userId,
     roleId,
     clubId,
@@ -207,6 +218,18 @@ export async function assignRole(
     assignedBy,
     active: true,
   });
+
+  // Keep users/{uid}.role in sync so Firestore security rules recognise the
+  // new privilege level (rules check userRole() which reads this field).
+  const legacyRole = ROLE_KEY_TO_LEGACY[roleId];
+  if (legacyRole) {
+    batch.update(doc(database, COLLECTIONS.users, userId), {
+      role: legacyRole,
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  await batch.commit();
 }
 
 export async function deactivateUserRole(userRoleId: string): Promise<void> {

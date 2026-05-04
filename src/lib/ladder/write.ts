@@ -90,6 +90,7 @@ export interface NewVenue {
   lng: number;
   radiusMeters: number;
   createdBy: string;
+  clubId?: string;
 }
 
 export async function createVenue(input: NewVenue): Promise<string> {
@@ -109,6 +110,7 @@ export async function createVenue(input: NewVenue): Promise<string> {
       lng: input.lng,
       radiusMeters: input.radiusMeters,
       createdBy: input.createdBy,
+      clubId: input.clubId,
       createdAt: serverTimestamp(),
     }),
   );

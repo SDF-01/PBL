@@ -47,10 +47,11 @@ export async function getLadderSeason(
     : null;
 }
 
-export async function listVenues(): Promise<VenueDoc[]> {
-  const snap = await getDocs(
-    query(collection(db(), COLLECTIONS.venues), limit(100)),
-  );
+export async function listVenues(clubId?: string): Promise<VenueDoc[]> {
+  const q = clubId
+    ? query(collection(db(), COLLECTIONS.venues), where("clubId", "==", clubId), limit(100))
+    : query(collection(db(), COLLECTIONS.venues), limit(100));
+  const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as VenueDoc);
 }
 

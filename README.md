@@ -1,237 +1,233 @@
-# Pickleball League
+# Pickleball League / LeagueForge
 
-A competitive **Pickleball League, Tournament Bracket Tracking, Competition Management, and Community Platform** — styled as an 8-bit RPG fused with a premium obsidian-stone design language. Built to feel like an elite sports operations platform skinned through a retro fantasy lens.
+Mobile-first pickleball league software for clubs, ladder play, player profiles, tournaments, and admin operations.
 
-> This repository contains the **Phase 1 foundation**: architecture, design system, domain model, bracket engine, and core UI shell. Subsequent phases fill in registration flows, live scoring, analytics, and deployment polish.
+This repository is currently a **Next.js static export backed by Firebase Auth and Cloud Firestore**. It is not a Prisma/Postgres application and it does not currently run a production server API. The app is deployed as static HTML/JS to Firebase Hosting, and client code talks directly to Firebase services.
 
----
+## Current Status
+
+The application has working UI and pure domain engines, but privileged operational writes are in a security transition.
+
+The Firestore rules were recently moved to an emergency lockdown posture after a Firebase security audit. Several admin workflows now intentionally require a trusted backend function before they can run safely. Helpers that would previously perform unsafe browser-side privileged writes now throw:
+
+```ts
+trustedBackendRequired("action name")
+```
+
+That is intentional. It prevents role escalation, ELO tampering, forged audit entries, and broad match/session mutation until Cloud Functions or another trusted Admin SDK backend is implemented.
 
 ## Stack
 
-| Layer          | Choice                              | Why                                                           |
-|----------------|-------------------------------------|---------------------------------------------------------------|
-| Framework      | **Next.js 15 (App Router)**         | Full-stack RSC, typed routes, scale for admin + public.       |
-| Language       | **TypeScript** (strict)             | Durability, editor DX, contract enforcement.                  |
-| Styling        | **Tailwind CSS** + CSS vars         | Design tokens + utility-first; zero runtime.                  |
-| Components     | **CVA primitives**                  | Composable, shadcn-style philosophy, zero lock-in.            |
-| Server state   | **TanStack Query**                  | Caching, retries, suspense-compatible.                        |
-| UI state       | **Zustand**                         | Minimal, no boilerplate.                                      |
-| Forms          | **React Hook Form + Zod**           | Schema-driven validation, shared with server actions.         |
-| Animation      | **Framer Motion**                   | Restrained, accessible micro-interactions.                    |
-| Database       | **PostgreSQL + Prisma**             | Relational fidelity, migrations, typed client.                |
-| Tests          | **Vitest** + Playwright (Phase 5)   | Pure-logic verification for the bracket engine.               |
+| Layer | Choice | Notes |
+|---|---|---|
+| Framework | Next.js 15 App Router | Built with `output: "export"` for static hosting. |
+| Language | TypeScript strict mode | `noUncheckedIndexedAccess` enabled. |
+| Styling | Tailwind CSS + CSS variables | Obsidian/ember/rune visual system. |
+| Auth | Firebase Auth | Email/password and Google OAuth. |
+| Database | Cloud Firestore | Client SDK reads; locked-down rules; privileged writes need backend. |
+| Hosting | Firebase Hosting | Serves `out/`; rewrites for static dynamic-route fallbacks. |
+| Analytics | Firebase Analytics | Lazy client-only initialization. |
+| Tests | Vitest | Domain tests plus Firebase rules test harness. |
+| Backend | Not yet implemented | Required for secure admin/RBAC/score/ELO workflows. |
 
----
+## Repository Map
 
-## Folder Structure
-
-```
+```text
 src/
-├─ app/                      # Next.js App Router
-│  ├─ (authenticated)/       # Authenticated route group w/ sidebar shell
-│  │  ├─ layout.tsx
-│  │  └─ dashboard/page.tsx
-│  ├─ tournaments/
-│  │  ├─ page.tsx
-│  │  └─ [slug]/page.tsx     # Uses engine to render bracket
-│  ├─ layout.tsx             # Root HTML + fonts + theme
-│  └─ page.tsx               # Homepage
-├─ components/
-│  ├─ brand/                 # CrestLogo (pixel SVG)
-│  ├─ bracket/               # BracketView (battle-tree)
-│  ├─ layout/                # TopNav, AppSidebar, SiteFooter
-│  └─ ui/                    # Primitives: Panel, Button, RuneChip
-├─ domain/
-│  └─ bracket/               # Pure domain logic (no React, no Prisma)
-│     ├─ types.ts
-│     ├─ seeding.ts          # PRNG, standard seed order, snake
-│     ├─ singleElim.ts
-│     ├─ doubleElim.ts
-│     ├─ roundRobin.ts
-│     ├─ progression.ts      # advanceMatch / undoAdvancement
-│     ├─ scoring.ts          # Pickleball score validation
-│     ├─ standings.ts        # Wins / point diff / tiebreaks
-│     └─ *.test.ts           # 20 unit tests, all passing
-├─ lib/
-│  ├─ cn.ts                  # className merger
-│  ├─ labels.ts              # Operational + themed labels
-│  └─ prisma.ts              # PrismaClient singleton
-└─ styles/
-   └─ globals.css            # Design tokens + component layers
-prisma/
-├─ schema.prisma             # Full domain (see below)
-└─ seed.ts                   # Realistic mock data
+  app/                         Next.js routes and static-export pages
+    (authenticated)/dashboard  Authenticated dashboard shell
+    admin/                     Admin hub, club approvals, users, audit views
+    auth/                      Login and signup
+    clubs/                     Club creation, owned clubs, club management
+    ladder/                    Seasons, play dates, check-in, session surfaces
+    leagues/                   League create/detail views
+    players/                   Leaderboard, profile edit/view
+    tournaments/               Tournament list/create/detail
+  components/                  UI, layout, admin, player, bracket components
+  domain/
+    bracket/                   Pure bracket generation/progression/scoring
+    ladder/                    Pure ladder rotations/generation/finalization
+  lib/
+    firebase.ts                Lazy Firebase client initialization
+    auth-context.tsx           Firebase Auth provider
+    firestore/                 Collection names, types, general repo/write helpers
+    permissions/               Client-side role display helpers and pending club writes
+    ladder/                    Ladder reads plus backend-required write stubs
+    players/                   Player profile and ELO domain adapters
+    security/                  Backend-required guard
+tests/
+  firebase/                    Firestore rules tests
+automation/                    TOON implementation handoff specs
+Development Summaries/         Historical and current project summaries/audits
 ```
 
-### Layering rule
+## Firebase Services
 
-```
-app/  →  components/  →  domain/  ←  lib/ (utilities only)
-                          ↑
-                    Pure, framework-agnostic, deterministic.
-```
+Detected and used:
 
-The `domain/bracket/` module has **zero** React or Prisma imports. Callers project engine output onto Prisma models. This keeps the engine easy to test, portable to a future Go/Rust backend, and immune to framework churn.
+- Firebase Hosting
+- Firebase Auth
+- Cloud Firestore
+- Firebase Analytics
+- Firebase Admin SDK in `scripts/seed-firestore.ts` only
 
----
+Configured but not actively used in app code:
 
-## Design System
+- Firebase Storage bucket appears in env config, but there is no `storage.rules` and no upload/download code.
 
-### Color tokens
+Not present:
 
-Obsidian surfaces (900 → 300), ash text (500 → 100), and five accent families:
+- Cloud Functions
+- Realtime Database
+- App Check initialization
 
-| Accent     | Hex       | Use                                    |
-|------------|-----------|----------------------------------------|
-| Ember      | `#ff6a1f` | Primary action, warmth, urgency        |
-| Rune       | `#7b4dff` | Secondary energy, selection, live feed |
-| Spectral   | `#3ee0ff` | Focus, info, links, navigation         |
-| Crimson    | `#e03a4d` | Championship emphasis, destructive     |
-| Gold       | `#e8b84a` | Trophies, mythic tier                  |
+## Security Posture
 
-### Surface primitives
+Read these before implementing privileged features:
 
-- **`.slab`** — foundational obsidian stone panel
-- **`.slab-raised`** — raised variant for cards
-- **`.quest-board`** — parchment-warm variant for announcements
-- **`.inventory-slot`** — interactive RPG slot (achievements, trophies, features)
-- **`.battle-hud`** — scoreboard / live-match HUD
-- **`.rune-chip`** — status badge with semantic tones
+- [Development Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md](Development%20Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md)
+- [automation/firebase_database_security_remediation_handoff.toon](automation/firebase_database_security_remediation_handoff.toon)
 
-### Typography
+Current rules posture:
 
-- **Display (Press Start 2P)** — reserved for logo / small emphases. Never body text.
-- **Heading (Cinzel)** — fantasy-tech section headers.
-- **Body (Inter)** — everything readable.
-- **Mono (JetBrains Mono)** — scores, ratings, data.
+- Staff checks use Firebase Auth custom claims, not user-writable Firestore profile fields.
+- Users cannot self-promote by editing `users/{uid}.role`.
+- `userRoles` are not client-writable.
+- Ladder sessions/courts/matches are staff-only from rules.
+- ELO/stat mutations and `eloEvents` are not client-writable.
+- Audit collections are backend-only from client rules.
+- Public reads still exist for several catalog/player surfaces; privacy hardening remains a future phase.
 
-### Accessibility
+Important: custom claims are not set by this repository yet. Until a trusted backend exists, many staff/admin write paths will be unavailable by design.
 
-- Focus ring: spectral cyan, 2px + 4px halo.
-- `prefers-reduced-motion` honored globally.
-- Color is never the sole status signal — always paired with label text.
-- Contrast: all body text ≥ 4.5:1 on its surface.
+## Backend-Required Workflows
 
----
+The following flows must be moved to Cloud Functions or another trusted Admin SDK backend before production use:
 
-## Domain Model (Prisma)
+- user role assignment and revocation
+- club approval and rejection
+- league creation under a club
+- ladder season/venue/play-date administrative creation
+- ladder session generation and finalization
+- ladder score verification and admin result assignment
+- tournament bracket publishing
+- tournament match score recording
+- ELO/stat mutation
+- audit and role event creation
+- bulk notifications and announcements
+- achievement/trophy awards
 
-Top-level entities grouped by concern:
+The client helper [src/lib/security/backendRequired.ts](src/lib/security/backendRequired.ts) marks these blocked paths.
 
-| Concern            | Models                                                                     |
-|--------------------|----------------------------------------------------------------------------|
-| Identity & Access  | `User`, `Session`, `OrganizationMembership`, `Invitation`                  |
-| Organizations      | `Organization`, `Venue`, `Court`                                           |
-| Competitions       | `League`, `Season`, `Division`                                             |
-| Tournaments        | `Tournament`, `Bracket`, `BracketRound`, `BracketNode`, `Pool`, `PoolEntry`|
-| Registration       | `Registration`, `Team`, `TeamMember`                                       |
-| Match & Scoring    | `Match`, `MatchParticipant`, `MatchGame`, `CheckIn`, `Dispute`             |
-| Progression        | `PlayerProfile`, `Achievement`, `PlayerAchievement`, `Trophy`              |
-| Standings          | `Standing`, `RankingSnapshot`                                              |
-| Comms              | `Announcement`, `Notification`                                             |
-| Governance         | `AuditLog`                                                                 |
+## Domain Engines
 
-Key design decisions:
+The pure domain layer is the strongest part of the codebase.
 
-- `BracketNode` holds `winnerNextNodeId` / `loserNextNodeId` pointers — a normalized, self-referential bracket graph that supports single elim, double elim, and consolation.
-- `Registration` is the single source of truth for "who is entered" — whether a solo user or a team. This is what `BracketNode.participantAId` references.
-- `AuditLog` captures `before`/`after` JSON snapshots. Every admin override writes one entry.
-- `RankingSnapshot.payload` is JSON by design — rankings are an analytical artifact, not hot-path data.
+### Brackets
 
----
+`src/domain/bracket/` contains deterministic logic for:
 
-## Bracket Engine
+- single elimination
+- double elimination
+- round robin / pool play helpers
+- seeding and seeded shuffle
+- match progression and undo
+- pickleball score validation
+- standings computation
 
-The engine lives in `src/domain/bracket/` and is fully unit-tested (**20 tests passing**).
+### Ladder
 
-### Public API
+`src/domain/ladder/` contains pure logic for:
 
-```ts
-import {
-  generateSingleElim, generateDoubleElim, generatePoolPlay,
-  advanceMatch, undoAdvancement,
-  computeStandings, validateMatchScore, resolveRules,
-} from "@/domain/bracket";
-```
+- 4-player and 5-player court rotations
+- court distribution
+- session generation
+- session finalization and movement calculation
 
-### Key guarantees
-
-- **Deterministic**: RANDOM seeding uses Mulberry32 with a caller-provided `rngSeed`. Same input → identical bracket.
-- **BYE handling**: non-power-of-two fields auto-advance top seeds.
-- **Audit-safe undo**: `undoAdvancement` throws if downstream has already advanced — forces admins to undo tip-first.
-- **Pickleball-native scoring**: target / win-by / best-of configurable. Rejects invalid progressions (win-by-1, extra games, under-target).
-- **Round-robin**: circle method with proper BYE insertion for odd fields.
-- **Double-elimination**: WB + LB + Grand Final with correct LB node counts (`2·log₂N − 1` rounds) and alternating survival / drop-in wiring.
-
-### Testing
-
-```bash
-npm test                   # run all bracket tests
-npm run test:watch         # watch mode during engine work
-```
-
----
-
-## Route Map
-
-**Public:** `/`, `/tournaments`, `/tournaments/[slug]`, `/leagues`, `/standings`, `/rankings`, `/players`, `/teams`, `/schedule`, `/hall-of-fame`, `/news`, `/clubs`, `/clubs/[slug]`
-
-**Authenticated** (under `(authenticated)/` group): `/dashboard`, `/dashboard/player|team|admin|director|referee`, `/my-matches`, `/my-stats`, `/my-achievements`, `/notifications`, `/settings`, `/registrations`
-
-**Admin:** `/admin/organizations`, `/admin/leagues`, `/admin/seasons`, `/admin/divisions`, `/admin/tournaments`, `/admin/tournaments/[id]/seeding|bracket|schedule`, `/admin/matches`, `/admin/courts`, `/admin/players`, `/admin/teams`, `/admin/announcements`, `/admin/analytics`, `/admin/settings`, `/admin/audit-log`
-
----
+These modules should remain framework-agnostic. Do not import React, Firebase, or UI code into `src/domain`.
 
 ## Running Locally
 
 ```bash
-# 1. Install
 npm install
-
-# 2. Environment
-cp .env.example .env
-#   edit DATABASE_URL to point at your Postgres
-
-# 3. Database
-npm run db:push        # sync schema (no migrations yet)
-npm run db:seed        # load mock tournament, players, bracket
-
-# 4. Dev
-npm run dev            # http://localhost:3000
-
-# 5. Verification
-npm test               # bracket engine unit tests (20)
-npm run typecheck      # strict TS across the codebase
+cp .env.example .env.local
+npm run dev
 ```
 
----
+Required Firebase public web config lives in `.env.local`:
 
-## MVP Implementation Order
+```text
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
+```
 
-| Phase | Scope |
-|-------|-------|
-| **1 ✓** | Architecture, design system, schema, bracket engine, core layouts, homepage, dashboard skeleton, seed data |
-| **2**   | Auth, org/league/season/division CRUD, tournament wizard, registration flow, profiles, schedule views |
-| **3**   | Bracket generation from DB, live match flow, score reporting, standings projection, ranking system |
-| **4**   | Notifications, announcements feed, analytics dashboard, achievements/trophies, archive & hall of fame |
-| **5**   | Accessibility audit, performance tuning, e2e tests, deployment, observability |
+The Admin seed script additionally requires `FIREBASE_SERVICE_ACCOUNT_JSON`. Never commit that value.
 
----
+## Verification
 
-## Non-Negotiables
+```bash
+npm test
+npm run build
+npm run typecheck
+```
 
-1. Domain logic stays pure — no React, no Prisma.
-2. Every admin mutation writes an `AuditLog` entry.
-3. Responsive from day one. Mobile-first data tables.
-4. Theme labels never replace operational labels — they augment.
-5. Every status color is paired with text. Color is never sole signal.
-6. Score submissions pass `validateMatchScore` before persisting.
-7. Bracket state is projectable back to the engine — no drift.
+Firestore rules tests:
 
----
+```bash
+npm run test:rules
+```
+
+`test:rules` uses the Firebase Emulator Suite and requires Java on PATH. If Java is missing, the emulator exits with `spawn java ENOENT`.
+
+Known verification detail: `npm run typecheck` may fail on a fresh checkout if `.next/types` has not been generated yet. Run `npm run build` first, then rerun `npm run typecheck`.
+
+## Deployment
+
+Firebase Hosting deploy:
+
+```bash
+npm run deploy
+```
+
+Rules-only deploy:
+
+```bash
+npm run rules:deploy
+```
+
+Indexes-only deploy:
+
+```bash
+npm run indexes:deploy
+```
+
+The current Firebase project id used by scripts is `pickleleauge`. Keep `.firebaserc`, package scripts, and GitHub Actions in sync before deploying.
+
+## Documentation Index
+
+- `Development Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md` - Firebase/database security audit.
+- `Development Summaries/REPO_ARCHITECTURE_DATA_INTEGRITY_AUDIT.md` - architecture and integrity audit, partly historical.
+- `Development Summaries/IMPLEMENTATION_GUIDE.md` - current implementation guide and secure-backend TODOs.
+- `Development Summaries/DEPLOYMENT_SUMMARY.md` - deployment and verification notes.
+- `automation/firebase_database_security_remediation_handoff.toon` - phased security remediation handoff.
+
+## Production Gate
+
+Do not treat this app as production-ready until:
+
+- trusted backend functions replace blocked privileged client writes
+- custom claims or backend-only role docs are implemented
+- Firestore rules tests pass in CI
+- App Check is configured and enforced
+- Storage is either disabled or protected by `storage.rules`
+- public/private profile data is split
+- CI has protected production deploy environments
 
 ## License
 
-Proprietary — © Pickleball League.
-# PBL
-Pickle ball league
+Proprietary.

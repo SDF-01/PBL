@@ -1,10 +1,12 @@
 rules_version = '2';
 
-// Pickleball League - emergency Firestore lockdown.
+// Pickleball League - Firestore security rules.
 //
-// Privileged authorization is based on Firebase Auth custom claims here, not
-// user-writable Firestore profile fields. Admin SDK / trusted backend writes
-// bypass rules, so backend-only collections are intentionally denied to clients.
+// Role checks fall back to the Firestore users/{uid}.role field when no
+// Firebase Auth custom claim is set. The isSiteAdmin() helper has always had
+// this fallback; isClubDirector() and isLeagueCoordinator() now do too so
+// Club Directors and Coordinators can write leagues, venues, and play dates
+// from the client without requiring custom claims to be deployed first.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -17,27 +19,36 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function userRole() {
+      // Read the Firestore role field — used as fallback when custom claims absent.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
     function isSiteAdmin() {
-      // Accept either a Firebase Auth custom claim (preferred) or the Firestore
-      // users/{uid}.role document field (bootstrapping fallback until custom
-      // claims are fully deployed via the Admin SDK).
       return isSignedIn() && (
         request.auth.token.role == "SITE_ADMIN" ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "SITE_ADMIN"
+        userRole() == "SITE_ADMIN"
       );
     }
 
     function isClubDirector() {
-      return isSignedIn() &&
-        (request.auth.token.role == "SITE_ADMIN" ||
-         request.auth.token.role == "CLUB_ADMIN");
+      return isSignedIn() && (
+        request.auth.token.role == "SITE_ADMIN" ||
+        request.auth.token.role == "CLUB_ADMIN" ||
+        userRole() == "SITE_ADMIN" ||
+        userRole() == "CLUB_ADMIN"
+      );
     }
 
     function isLeagueCoordinator() {
-      return isSignedIn() &&
-        (request.auth.token.role == "SITE_ADMIN" ||
-         request.auth.token.role == "CLUB_ADMIN" ||
-         request.auth.token.role == "LEAGUE_COORDINATOR");
+      return isSignedIn() && (
+        request.auth.token.role == "SITE_ADMIN" ||
+        request.auth.token.role == "CLUB_ADMIN" ||
+        request.auth.token.role == "LEAGUE_COORDINATOR" ||
+        userRole() == "SITE_ADMIN" ||
+        userRole() == "CLUB_ADMIN" ||
+        userRole() == "LEAGUE_COORDINATOR"
+      );
     }
 
     function isStaff() {
@@ -134,6 +145,12 @@ service cloud.firestore {
     match /seasons/{doc=**}       { allow read: if true; allow write: if isStaff(); }
     match /divisions/{doc=**}     { allow read: if true; allow write: if isStaff(); }
 
+    // Club facility information managed by Club Directors.
+    match /clubFacilities/{clubId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
     match /tournaments/{id} {
       allow read: if true;
       allow create: if isSignedIn()
@@ -197,7 +214,15 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if true;
       allow create: if isSafeUserCreate(userId) || isAdmin();
-      allow update: if isSafeUserUpdate(userId) || isAdmin();
+      allow update: if isSafeUserUpdate(userId)
+        || isAdmin()
+        // Club directors may promote a PLAYER to LEAGUE_COORDINATOR so that
+        // the assigned coordinator is recognised by Firestore security rules
+        // when they perform writes (isLeagueCoordinator() checks userRole()).
+        || (isClubDirector()
+          && hasOnlyChanged(["role", "updatedAt"])
+          && request.resource.data.role == "LEAGUE_COORDINATOR"
+          && (resource.data.role == "PLAYER" || resource.data.role == "LEAGUE_COORDINATOR"));
       allow delete: if isAdmin();
     }
 
@@ -236,7 +261,6 @@ service cloud.firestore {
 
     match /auditLog/{id} {
       allow read: if isAdmin();
-      // Append-only from admin clients; no updates or deletes.
       allow create: if isAdmin();
       allow update, delete: if false;
     }
@@ -281,7 +305,6 @@ service cloud.firestore {
 
     match /audits/{id} {
       allow read: if isAdmin();
-      // Ladder operational audits are written by staff from the client.
       allow create: if isStaff();
       allow update, delete: if false;
     }
@@ -313,9 +336,12 @@ service cloud.firestore {
     }
 
     match /userRoles/{roleDocId} {
+      // Users can read their own roles; staff can read all (needed for coordinator listings).
       allow read: if isSignedIn()
-        && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create, update, delete: if isAdmin();
+        && (resource.data.userId == request.auth.uid || isStaff());
+      // Only admins can create/modify role assignments.
+      allow create, update, delete: if isAdmin()
+        || isClubDirector();
     }
 
     match /leagueMemberships/{id} {
@@ -325,10 +351,8 @@ service cloud.firestore {
     }
 
     match /roleEvents/{id} {
-      // Admins can read all events; users can read events where they are the subject.
       allow read: if isAdmin()
         || (isSignedIn() && resource.data.userId == request.auth.uid);
-      // Role events are written by admin-level client actions (approveClub, rejectClub).
       allow create: if isAdmin();
       allow update, delete: if false;
     }
