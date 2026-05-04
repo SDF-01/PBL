@@ -6,32 +6,54 @@ import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
-  CalendarDays,
+  Car,
   CheckCircle,
   Layers,
   Loader2,
+  Lightbulb,
+  MapPin,
   Plus,
+  Save,
   Trash2,
   UserPlus,
   Users,
+  Wrench,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useToast } from "@/lib/toast-context";
-import { getClubById, listClubLeagues, listClubCoordinators, getUserByEmail } from "@/lib/clubs/repo";
+import {
+  getClubById,
+  getClubFacility,
+  listClubLeagues,
+  listClubCoordinators,
+  getUserByEmail,
+} from "@/lib/clubs/repo";
+import { upsertClubFacility } from "@/lib/clubs/write";
 import { createLeague } from "@/lib/leagues/write";
-import { createVenue, createPlayDate } from "@/lib/ladder/write";
 import { assignRole, deactivateUserRole } from "@/lib/permissions/write";
-import { listLadderSeasons, listVenues } from "@/lib/ladder/repo";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import type { ClubDoc } from "@/lib/permissions/types";
-import type { LeagueDoc, LadderSeasonDoc, VenueDoc } from "@/lib/firestore/types";
+import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
+import type { LeagueDoc } from "@/lib/firestore/types";
 import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
-type Section = "overview" | "leagues" | "playdates" | "coordinators";
+type Section = "overview" | "leagues" | "facilities" | "coordinators";
+
+const AMENITY_OPTIONS = [
+  "Restrooms",
+  "Water Fountain",
+  "Pro Shop",
+  "Locker Rooms",
+  "Seating / Bleachers",
+  "Concessions",
+  "Wheelchair Accessible",
+  "Covered / Shade",
+  "Ball Machine",
+  "First Aid",
+];
 
 function resolveClubId(param: string): string {
   if (typeof window === "undefined") return param;
@@ -107,7 +129,7 @@ export function ClubManageClient({ clubId: rawId }: { clubId: string }) {
   const tabs: { id: Section; label: string; Icon: typeof Layers }[] = [
     { id: "overview",     label: "Overview",     Icon: Building2 },
     { id: "leagues",      label: "Leagues",      Icon: Layers },
-    { id: "playdates",    label: "Play Dates",   Icon: CalendarDays },
+    { id: "facilities",   label: "Facilities",   Icon: Wrench },
     { id: "coordinators", label: "Coordinators", Icon: Users },
   ];
 
@@ -144,7 +166,7 @@ export function ClubManageClient({ clubId: rawId }: { clubId: string }) {
 
         {section === "overview"     && <OverviewSection club={club} />}
         {section === "leagues"      && <LeaguesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
-        {section === "playdates"    && <PlayDatesSection userId={user?.uid ?? ""} toast={toast} />}
+        {section === "facilities"   && <FacilitiesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "coordinators" && <CoordinatorsSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
       </main>
     </ResponsiveShell>
@@ -216,10 +238,7 @@ function LeaguesSection({
   }, [clubId]);
 
   async function handleCreate() {
-    if (!name.trim()) {
-      toast("League name is required.", "error");
-      return;
-    }
+    if (!name.trim()) { toast("League name is required.", "error"); return; }
     setSaving(true);
     try {
       const id = await createLeague(userId, {
@@ -231,16 +250,13 @@ function LeaguesSection({
         leagueFormat: format,
       });
       const newLeague: LeagueDoc = {
-        id,
-        orgId: clubId,
-        clubId,
+        id, orgId: clubId, clubId,
         name: name.trim(),
         description: description.trim() || undefined,
         city: city.trim() || undefined,
         state: state.trim() || undefined,
         league_format: format,
-        active: true,
-        createdBy: userId,
+        active: true, createdBy: userId,
       };
       setLeagues((prev) => [newLeague, ...prev]);
       setName(""); setDescription(""); setCity(""); setState(""); setFormat("Doubles Ladder");
@@ -258,8 +274,7 @@ function LeaguesSection({
       <div className="flex items-center justify-between">
         <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Leagues</h2>
         <Button size="sm" onClick={() => setShowForm((v) => !v)}>
-          <Plus className="h-3.5 w-3.5" />
-          New League
+          <Plus className="h-3.5 w-3.5" /> New League
         </Button>
       </div>
 
@@ -350,192 +365,244 @@ function LeaguesSection({
 }
 
 // ============================================================
-// PLAY DATES
+// FACILITIES
 // ============================================================
 
-function PlayDatesSection({
+function FacilitiesSection({
+  clubId,
   userId,
   toast,
 }: {
+  clubId: string;
   userId: string;
   toast: ToastFn;
 }) {
-  const [seasons, setSeasons] = useState<LadderSeasonDoc[]>([]);
-  const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [useNewVenue, setUseNewVenue] = useState(false);
 
-  const [seasonId, setSeasonId] = useState("");
-  const [venueId, setVenueId] = useState("");
-  const [newVenueName, setNewVenueName] = useState("");
-  const [newVenueAddress, setNewVenueAddress] = useState("");
-  const [date, setDate] = useState("");
-  const [checkInOpens, setCheckInOpens] = useState("");
-  const [checkInCloses, setCheckInCloses] = useState("");
+  const [address, setAddress] = useState("");
+  const [pickleballCourts, setPickleballCourts] = useState<number | "">("");
+  const [tennisConversionCourts, setTennisConversionCourts] = useState<number | "">("");
+  const [hasParking, setHasParking] = useState(false);
+  const [hasLights, setHasLights] = useState(false);
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    Promise.all([listLadderSeasons(), listVenues()]).then(([s, v]) => {
-      setSeasons(s);
-      setVenues(v);
-      if (s.length > 0) setSeasonId(s[0]!.id);
+    getClubFacility(clubId).then((f) => {
+      if (f) {
+        setAddress(f.address ?? "");
+        setPickleballCourts(f.pickleballCourts ?? "");
+        setTennisConversionCourts(f.tennisConversionCourts ?? "");
+        setHasParking(f.hasParking ?? false);
+        setHasLights(f.hasLights ?? false);
+        setSelectedAmenities(f.amenities ?? []);
+        setNotes(f.notes ?? "");
+      }
       setLoading(false);
     });
-  }, []);
+  }, [clubId]);
 
-  async function handleSchedule() {
-    if (!seasonId) { toast("Select a season.", "error"); return; }
-    if (!date)     { toast("Date is required.", "error"); return; }
+  function toggleAmenity(amenity: string) {
+    setSelectedAmenities((prev) =>
+      prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity],
+    );
+  }
+
+  async function handleSave() {
     setSaving(true);
     try {
-      let resolvedVenueId = venueId;
-      if (useNewVenue || !venueId) {
-        if (!newVenueName.trim()) { toast("Venue name is required.", "error"); setSaving(false); return; }
-        resolvedVenueId = await createVenue({
-          name: newVenueName.trim(),
-          address: newVenueAddress.trim() || undefined,
-          lat: 0, lng: 0, radiusMeters: 200,
-          createdBy: userId,
-        });
-      }
-      await createPlayDate({
-        seasonId,
-        venueId: resolvedVenueId,
-        date,
-        checkInOpensAt: checkInOpens || undefined,
-        checkInClosesAt: checkInCloses || undefined,
-        createdBy: userId,
-      });
-      toast(`Play date scheduled for ${date}.`, "success");
-      setShowForm(false);
-      setDate(""); setCheckInOpens(""); setCheckInCloses("");
-      setNewVenueName(""); setNewVenueAddress(""); setUseNewVenue(false);
+      await upsertClubFacility(
+        clubId,
+        {
+          address: address.trim() || undefined,
+          pickleballCourts: pickleballCourts !== "" ? Number(pickleballCourts) : undefined,
+          tennisConversionCourts: tennisConversionCourts !== "" ? Number(tennisConversionCourts) : undefined,
+          hasParking,
+          hasLights,
+          amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+          notes: notes.trim() || undefined,
+        },
+        userId,
+      );
+      toast("Facility information saved.", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to schedule play date.", "error");
+      toast(err instanceof Error ? err.message : "Failed to save.", "error");
     } finally {
       setSaving(false);
     }
   }
 
+  if (loading) {
+    return (
+      <Panel variant="base" padding="lg" className="flex justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
+      </Panel>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Play Dates</h2>
-        <Button size="sm" onClick={() => setShowForm((v) => !v)}>
-          <Plus className="h-3.5 w-3.5" />
-          Schedule
+        <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Court Facilities</h2>
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          Save
         </Button>
       </div>
 
-      {showForm && (
-        <Panel variant="quest" padding="lg" className="space-y-3">
-          <h3 className="heading-fantasy text-ash-100 text-sm">Schedule Play Date</h3>
-          {loading ? (
-            <div className="flex justify-center py-2"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></div>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <label className="text-ash-400 text-xs mb-1 block">Season *</label>
-                {seasons.length === 0 ? (
-                  <p className="text-ash-500 text-xs bg-obsidian-700 rounded-pixel px-3 py-2">
-                    No ladder seasons exist. Ask your Site Admin to create one first.
-                  </p>
-                ) : (
-                  <select
-                    className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                    value={seasonId}
-                    onChange={(e) => setSeasonId(e.target.value)}
-                  >
-                    {seasons.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.startDate} – {s.endDate})</option>
-                    ))}
-                  </select>
-                )}
-              </div>
+      <Panel variant="quest" padding="lg" className="space-y-4">
+        {/* Address */}
+        <div>
+          <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
+          </label>
+          <input
+            className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+            placeholder="123 Court Ave, City, State 55555"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
+        </div>
 
-              <div>
-                <label className="text-ash-400 text-xs mb-1 block">Venue</label>
-                {venues.length > 0 && !useNewVenue ? (
-                  <div className="space-y-1">
-                    <select
-                      className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                      value={venueId}
-                      onChange={(e) => setVenueId(e.target.value)}
-                    >
-                      <option value="">-- Select venue --</option>
-                      {venues.map((v) => (
-                        <option key={v.id} value={v.id}>{v.name}</option>
-                      ))}
-                    </select>
-                    <button type="button" className="text-ember-400 text-xs hover:text-ember-300" onClick={() => setUseNewVenue(true)}>
-                      + Add new venue
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <input
-                      className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                      placeholder="Venue name *"
-                      value={newVenueName}
-                      onChange={(e) => setNewVenueName(e.target.value)}
-                    />
-                    <input
-                      className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                      placeholder="Address (optional)"
-                      value={newVenueAddress}
-                      onChange={(e) => setNewVenueAddress(e.target.value)}
-                    />
-                    {venues.length > 0 && (
-                      <button type="button" className="text-ash-400 text-xs hover:text-ash-100" onClick={() => setUseNewVenue(false)}>
-                        ← Pick existing venue
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+        {/* Court counts */}
+        <div>
+          <label className="text-ash-300 text-xs font-medium mb-1.5 block">Court Count</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-ash-500 text-xs mb-1 block">Dedicated Pickleball Courts</label>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+                placeholder="0"
+                value={pickleballCourts}
+                onChange={(e) => setPickleballCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+              />
+            </div>
+            <div>
+              <label className="text-ash-500 text-xs mb-1 block">Tennis Conversion Courts</label>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+                placeholder="0"
+                value={tennisConversionCourts}
+                onChange={(e) => setTennisConversionCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+              />
+            </div>
+          </div>
+        </div>
 
-              <div>
-                <label className="text-ash-400 text-xs mb-1 block">Date *</label>
-                <input
-                  type="date"
-                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-              </div>
+        {/* Toggles */}
+        <div>
+          <label className="text-ash-300 text-xs font-medium mb-2 block">Infrastructure</label>
+          <div className="grid grid-cols-2 gap-2">
+            <ToggleRow
+              icon={<Car className="h-4 w-4" />}
+              label="On-Site Parking"
+              value={hasParking}
+              onChange={setHasParking}
+            />
+            <ToggleRow
+              icon={<Lightbulb className="h-4 w-4" />}
+              label="Court Lights"
+              value={hasLights}
+              onChange={setHasLights}
+            />
+          </div>
+        </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-ash-400 text-xs mb-1 block">Check-in opens</label>
-                  <input type="time" className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" value={checkInOpens} onChange={(e) => setCheckInOpens(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-ash-400 text-xs mb-1 block">Check-in closes</label>
-                  <input type="time" className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" value={checkInCloses} onChange={(e) => setCheckInCloses(e.target.value)} />
-                </div>
-              </div>
+        {/* Amenities */}
+        <div>
+          <label className="text-ash-300 text-xs font-medium mb-2 block">Amenities</label>
+          <div className="flex flex-wrap gap-2">
+            {AMENITY_OPTIONS.map((amenity) => {
+              const active = selectedAmenities.includes(amenity);
+              return (
+                <button
+                  key={amenity}
+                  type="button"
+                  onClick={() => toggleAmenity(amenity)}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    active
+                      ? "bg-ember-500/20 border-ember-500/60 text-ember-300"
+                      : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500 hover:text-ash-200"
+                  }`}
+                >
+                  {active && "✓ "}{amenity}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="text-ash-300 text-xs font-medium mb-1.5 block">Additional Notes</label>
+          <textarea
+            className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
+            placeholder="Any other details players should know about the facility…"
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+      </Panel>
+
+      {/* Summary card */}
+      {(pickleballCourts !== "" || tennisConversionCourts !== "" || address) && (
+        <Panel variant="inventory" padding="md" className="space-y-2">
+          <h3 className="text-ash-400 text-xs uppercase tracking-widest">Current Info</h3>
+          {address && <p className="text-ash-300 text-sm flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-ember-400 shrink-0" />{address}</p>}
+          <div className="flex flex-wrap gap-3 text-xs text-ash-400">
+            {pickleballCourts !== "" && <span className="flex items-center gap-1"><span className="text-ember-400 font-bold">{pickleballCourts}</span> pickleball courts</span>}
+            {tennisConversionCourts !== "" && <span className="flex items-center gap-1"><span className="text-ember-400 font-bold">{tennisConversionCourts}</span> tennis conversion</span>}
+            {hasParking && <span className="text-emerald-400">✓ Parking</span>}
+            {hasLights && <span className="text-emerald-400">✓ Lights</span>}
+          </div>
+          {selectedAmenities.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-1">
+              {selectedAmenities.map((a) => (
+                <span key={a} className="px-2 py-0.5 rounded-full bg-obsidian-600 text-ash-300 text-[10px]">{a}</span>
+              ))}
             </div>
           )}
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" onClick={handleSchedule} disabled={saving || loading}>
-              {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Schedule
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-          </div>
         </Panel>
       )}
-
-      <Panel variant="base" padding="lg" className="text-center space-y-2">
-        <CalendarDays className="h-8 w-8 text-ash-600 mx-auto" />
-        <p className="text-ash-400 text-sm">
-          View all sessions on the{" "}
-          <Link href="/ladder/play-dates" className="text-ember-400 hover:text-ember-300 underline">Play Dates</Link>{" "}
-          page.
-        </p>
-      </Panel>
     </div>
+  );
+}
+
+function ToggleRow({
+  icon,
+  label,
+  value,
+  onChange,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className={`flex items-center gap-2 px-3 py-2.5 rounded-pixel border text-sm transition-colors text-left ${
+        value
+          ? "bg-ember-500/15 border-ember-500/50 text-ember-300"
+          : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500"
+      }`}
+    >
+      <span className={value ? "text-ember-400" : "text-ash-600"}>{icon}</span>
+      <span className="text-xs font-medium">{label}</span>
+      <span className={`ml-auto text-[10px] font-bold ${value ? "text-ember-400" : "text-ash-600"}`}>
+        {value ? "YES" : "NO"}
+      </span>
+    </button>
   );
 }
 

@@ -1,7 +1,7 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
-import type { ClubDoc } from "@/lib/permissions/types";
+import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
 import type { LeagueDoc } from "@/lib/firestore/types";
 
 export async function getClubById(clubId: string): Promise<ClubDoc | null> {
@@ -44,6 +44,12 @@ export async function listClubCoordinators(clubId: string): Promise<CoordinatorE
     userId: d.data().userId as string,
     assignedAt: d.data().assignedAt as string,
   }));
+}
+
+export async function getClubFacility(clubId: string): Promise<ClubFacility | null> {
+  if (!isFirebaseConfigured()) return null;
+  const snap = await getDoc(doc(db(), COLLECTIONS.clubFacilities, clubId));
+  return snap.exists() ? (snap.data() as ClubFacility) : null;
 }
 
 export async function getUserByEmail(

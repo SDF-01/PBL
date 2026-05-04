@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   RefreshCw,
   CheckCircle,
+  Settings,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
@@ -155,6 +156,11 @@ export default function AdminApprovedClubsPage() {
 
                     <p className="text-ash-700 text-[10px] font-mono mt-2">ID: {club.id}</p>
                   </div>
+                  <Link href={`/clubs/manage/${club.id}`} className="shrink-0 self-start">
+                    <Button size="sm" variant="outline" className="border-ember-500/40 text-ember-400 hover:bg-ember-500/10">
+                      <Settings className="h-3.5 w-3.5" /> Manage
+                    </Button>
+                  </Link>
                 </div>
               </Panel>
             ))}

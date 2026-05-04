@@ -64,3 +64,16 @@ export interface CreateClubInput {
   description: string;
   logoUrl?: string;
 }
+
+export interface ClubFacility {
+  clubId: string;
+  address?: string;
+  pickleballCourts?: number;
+  tennisConversionCourts?: number;
+  hasParking?: boolean;
+  hasLights?: boolean;
+  amenities?: string[];
+  notes?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}

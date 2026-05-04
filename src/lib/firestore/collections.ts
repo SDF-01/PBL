@@ -34,6 +34,7 @@ export const COLLECTIONS = {
   eloEvents: "eloEvents",
   // ==== Permissions / Roles (schema v1) ====
   clubs: "clubs",
+  clubFacilities: "clubFacilities",
   userRoles: "userRoles",
   leagueMemberships: "leagueMemberships",
   roleEvents: "roleEvents",

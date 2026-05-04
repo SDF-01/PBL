@@ -6,7 +6,6 @@ import {
   ShieldCheck,
   Building2,
   UserCog,
-  ListChecks,
   ShieldAlert,
   ClipboardList,
   Clock,
@@ -140,7 +139,7 @@ export default function AdminHubPage() {
             <ShieldCheck className="h-3 w-3" />
             {isSiteAdmin ? "Site Admin" : "Staff"}
           </RuneChip>
-          <h1 className="heading-fantasy text-display-md text-ash-100">Admin Control Panel</h1>
+          <h1 className="heading-fantasy text-display-md text-ash-100">Admin Hub</h1>
           <p className="text-ash-400 text-sm mt-1">
             Platform governance, club approvals, and role management.
           </p>
@@ -300,24 +299,6 @@ export default function AdminHubPage() {
             )}
 
             {/* Staff-accessible actions */}
-            <Link href="/leagues/create">
-              <Panel
-                variant="quest"
-                padding="lg"
-                className="h-full flex items-start gap-4 hover:border-ember-500/40 transition-colors cursor-pointer"
-              >
-                <div className="shrink-0 p-2 rounded-pixel bg-ash-700 text-ash-300">
-                  <ListChecks className="h-6 w-6" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="heading-fantasy text-ash-100 text-base mb-1">Create League</h3>
-                  <p className="text-ash-400 text-sm leading-relaxed">
-                    Set up a new league under one of your approved clubs.
-                  </p>
-                </div>
-              </Panel>
-            </Link>
-
             <Link href="/clubs/my">
               <Panel
                 variant="quest"
@@ -328,9 +309,9 @@ export default function AdminHubPage() {
                   <Building2 className="h-6 w-6" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="heading-fantasy text-ash-100 text-base mb-1">My Clubs</h3>
+                  <h3 className="heading-fantasy text-ash-100 text-base mb-1">Manage My Clubs</h3>
                   <p className="text-ash-400 text-sm leading-relaxed">
-                    View and manage your club submissions and directorships.
+                    Create leagues, manage facilities, and assign coordinators for your clubs.
                   </p>
                 </div>
               </Panel>
