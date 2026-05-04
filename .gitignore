@@ -16,3 +16,4 @@ tsconfig.tsbuildinfo
 pickleballleague-firebase-adminsdk-*.json
 .firebase/
 automation/
+.claude/
