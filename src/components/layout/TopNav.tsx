@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/Button";
 import { SignInButton } from "@/components/ui/SignInButton";
 import { ModeToggle } from "@/components/ui/ModeToggle";
 import { useAdminMode } from "@/lib/admin-context";
-import { Plus } from "lucide-react";
+import { usePermissions } from "@/lib/permissions/usePermissions";
+import { ShieldCheck } from "lucide-react";
 
 const NAV = [
   { href: "/games",             label: "Games" },
@@ -17,6 +18,7 @@ const NAV = [
 
 export function TopNav() {
   const { isAdminMode } = useAdminMode();
+  const { isSiteAdmin } = usePermissions();
 
   return (
     <header className="sticky top-0 z-40 border-b border-obsidian-400 bg-obsidian-800/80 backdrop-blur supports-[backdrop-filter]:bg-obsidian-800/65">
@@ -42,11 +44,13 @@ export function TopNav() {
 
         <div className="ml-auto flex items-center gap-2">
           {isAdminMode && <ModeToggle />}
-          <Link href="/ladder/check-in" className="hidden sm:block">
-            <Button variant="outline" size="sm">
-              <Plus className="h-3.5 w-3.5" /> Check In
-            </Button>
-          </Link>
+          {isSiteAdmin && (
+            <Link href="/admin" className="hidden sm:block">
+              <Button variant="outline" size="sm" className="border-ember-500/50 text-ember-400 hover:bg-ember-500/10 hover:text-ember-300">
+                <ShieldCheck className="h-3.5 w-3.5" /> Admin Console
+              </Button>
+            </Link>
+          )}
           <SignInButton />
         </div>
       </div>
