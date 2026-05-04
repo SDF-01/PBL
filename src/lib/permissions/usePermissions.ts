@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import { useAuth } from "@/lib/auth-context";
+import type { UserProfile } from "@/lib/firestore/types";
 import type { RoleKey, UserRoleDoc } from "./types";
 
 export interface PermissionState {
@@ -20,26 +21,43 @@ export interface PermissionState {
 export function usePermissions(): PermissionState {
   const { user, ready } = useAuth();
   const [roles, setRoles] = useState<UserRoleDoc[]>([]);
+  const [primaryRole, setPrimaryRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!ready) return;
     if (!user || !isFirebaseConfigured()) {
       setRoles([]);
+      setPrimaryRole(null);
       setLoading(false);
       return;
     }
-    const q = query(
-      collection(db(), COLLECTIONS.userRoles),
-      where("userId", "==", user.uid),
-      where("active", "==", true),
-    );
-    getDocs(q)
-      .then((snap) => setRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as UserRoleDoc)))
+
+    // Run both reads in parallel: userRoles collection + users/{uid}.role fallback.
+    Promise.all([
+      getDocs(
+        query(
+          collection(db(), COLLECTIONS.userRoles),
+          where("userId", "==", user.uid),
+          where("active", "==", true),
+        ),
+      ),
+      getDoc(doc(db(), COLLECTIONS.users, user.uid)),
+    ])
+      .then(([rolesSnap, userSnap]) => {
+        setRoles(rolesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as UserRoleDoc));
+        if (userSnap.exists()) {
+          setPrimaryRole((userSnap.data() as UserProfile).role ?? null);
+        }
+      })
       .finally(() => setLoading(false));
   }, [user, ready]);
 
-  const isSiteAdminUser = roles.some((r) => r.roleId === "SiteAdmin" && r.clubId === null);
+  // isSiteAdmin: either a SiteAdmin userRoles doc exists OR the primary role
+  // field on the user document is SITE_ADMIN (fallback until userRoles doc is added).
+  const isSiteAdminUser =
+    roles.some((r) => r.roleId === "SiteAdmin" && r.clubId === null) ||
+    primaryRole === "SITE_ADMIN";
 
   const clubDirectorFor = roles
     .filter((r) => r.roleId === "ClubDirector" && r.clubId)
