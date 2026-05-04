@@ -12,6 +12,10 @@
       {
         "source": "/leagues/**",
         "destination": "/leagues/__fallback"
+      },
+      {
+        "source": "/clubs/manage/**",
+        "destination": "/clubs/manage/__fallback"
       }
     ],
     "headers": [

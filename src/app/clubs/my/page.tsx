@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Plus } from "lucide-react";
+import { Building2, Plus, ShieldCheck } from "lucide-react";
+import { ActiveClubCard } from "@/components/clubs/ActiveClubCard";
 import { ClubCreateForm } from "@/components/clubs/ClubCreateForm";
 import { PendingClubCard } from "@/components/clubs/PendingClubCard";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
@@ -40,9 +41,12 @@ export default function MyClubsPage() {
     setEditingClub(null);
   }
 
+  const activeClubs = clubs.filter((c) => c.status === "approved");
+  const submissionClubs = clubs.filter((c) => c.status !== "approved");
+
   return (
     <ResponsiveShell desktopChromeless>
-      <main className="container py-6 md:py-10 space-y-6 max-w-xl">
+      <main className="container py-6 md:py-10 space-y-8 max-w-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <RuneChip tone="rune" className="mb-2">My Clubs</RuneChip>
@@ -75,28 +79,49 @@ export default function MyClubsPage() {
           </Panel>
         )}
 
-        {editingClub ? (
-          <Panel variant="quest" padding="lg">
-            <h2 className="heading-fantasy text-ash-100 text-base mb-4">
-              Edit Club Submission
-            </h2>
-            <ClubCreateForm
-              initialData={{ ...editingClub, logoUrl: editingClub.logoUrl ?? undefined }}
-              isEditing
-              onSubmit={handleEdit}
-              onCancel={() => setEditingClub(null)}
-            />
-          </Panel>
-        ) : (
-          <div className="space-y-3">
-            {clubs.map((club) => (
-              <PendingClubCard
-                key={club.id}
-                club={club}
-                onEdit={club.status === "pending" ? () => setEditingClub(club) : undefined}
-              />
+        {!loading && activeClubs.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-ember-400" />
+              <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Active Clubs</h2>
+              <RuneChip tone="gold" className="text-[10px]">{activeClubs.length}</RuneChip>
+            </div>
+            <p className="text-ash-500 text-xs -mt-1">
+              You are Club Director for these clubs. Create leagues, schedule play dates, and assign coordinators.
+            </p>
+            {activeClubs.map((club) => (
+              <ActiveClubCard key={club.id} club={club} />
             ))}
-          </div>
+          </section>
+        )}
+
+        {!loading && submissionClubs.length > 0 && (
+          <section className="space-y-3">
+            {activeClubs.length > 0 && (
+              <h2 className="heading-fantasy text-ash-400 text-sm uppercase tracking-widest">Submissions</h2>
+            )}
+            {editingClub ? (
+              <Panel variant="quest" padding="lg">
+                <h2 className="heading-fantasy text-ash-100 text-base mb-4">
+                  Edit Club Submission
+                </h2>
+                <ClubCreateForm
+                  initialData={{ ...editingClub, logoUrl: editingClub.logoUrl ?? undefined }}
+                  isEditing
+                  onSubmit={handleEdit}
+                  onCancel={() => setEditingClub(null)}
+                />
+              </Panel>
+            ) : (
+              submissionClubs.map((club) => (
+                <PendingClubCard
+                  key={club.id}
+                  club={club}
+                  onEdit={club.status === "pending" ? () => setEditingClub(club) : undefined}
+                />
+              ))
+            )}
+          </section>
         )}
       </main>
     </ResponsiveShell>

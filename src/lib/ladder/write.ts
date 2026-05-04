@@ -1,5 +1,6 @@
 // Ladder League write helpers — client-side Firestore writes for the
 // doubles-ladder MVP (spec v4). Pure write layer, no rendering.
+// TODO: Admin write operations should migrate to Firebase Cloud Functions once one is deployed.
 
 "use client";
 
@@ -17,7 +18,6 @@ import { db } from "../firebase";
 import { COLLECTIONS } from "../firestore/collections";
 import { slugify } from "../firestore/write";
 import { applyMatchEloByUserIds } from "../players/write";
-import { trustedBackendRequired } from "../security/backendRequired";
 import { listLadderCourts, listLadderMatches } from "./repo";
 import type {
   LadderSeasonDoc,
@@ -58,7 +58,6 @@ export interface NewLadderSeason {
 export async function createLadderSeason(
   input: NewLadderSeason,
 ): Promise<string> {
-  trustedBackendRequired("create ladder season");
 
   const slug = input.slug?.trim() || slugify(input.name);
   if (!slug) throw new Error("Season slug is required.");
@@ -94,7 +93,6 @@ export interface NewVenue {
 }
 
 export async function createVenue(input: NewVenue): Promise<string> {
-  trustedBackendRequired("create venue");
 
   if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
     throw new Error("Venue lat/lng must be finite numbers.");
@@ -131,7 +129,6 @@ export interface NewPlayDate {
 }
 
 export async function createPlayDate(input: NewPlayDate): Promise<string> {
-  trustedBackendRequired("create play date");
 
   const ref = await addDoc(
     collection(db(), COLLECTIONS.playDates),
@@ -153,7 +150,6 @@ export async function updatePlayDateStatus(
   playDateId: string,
   status: PlayDateDoc["status"],
 ): Promise<void> {
-  trustedBackendRequired("update play date status");
 
   await updateDoc(doc(db(), COLLECTIONS.playDates, playDateId), { status });
 }
@@ -198,7 +194,6 @@ export async function adminOverrideCheckIn(
   checkInId: string,
   adminId: string,
 ): Promise<void> {
-  trustedBackendRequired("admin override check-in");
 
   await updateDoc(doc(db(), COLLECTIONS.checkIns, checkInId), {
     status: "ADMIN_CONFIRMED" as CheckInStatus,
@@ -213,7 +208,6 @@ export async function adminOverrideCheckIn(
 export async function writeAudit(
   entry: Omit<AuditDoc, "id" | "createdAt">,
 ): Promise<void> {
-  trustedBackendRequired("write audit");
 
   await addDoc(
     collection(db(), COLLECTIONS.audits),
@@ -241,7 +235,6 @@ export interface SubmitLadderMatchScoreInput {
 export async function submitLadderMatchScore(
   input: SubmitLadderMatchScoreInput,
 ): Promise<void> {
-  trustedBackendRequired("submit ladder match score");
 
   const { matchId, scoreA, scoreB, submittedBy } = input;
   if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB)) {
@@ -321,7 +314,6 @@ export interface GenerateSessionInput {
  * This creates the complete session structure and locks it from further modification
  */
 export async function persistGeneratedSession(input: GenerateSessionInput): Promise<void> {
-  trustedBackendRequired("persist generated session");
 
   const { sessionDoc, courts, matches, generatedBy } = input;
 
@@ -376,7 +368,6 @@ export async function verifyLadderMatchScore(
   matchId: string,
   verifiedBy: string,
 ): Promise<void> {
-  trustedBackendRequired("verify ladder match score");
 
   await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
     verifiedBy,
@@ -396,7 +387,6 @@ export async function adminAssignMatchResult(
   scoreB: number,
   adminId: string,
 ): Promise<void> {
-  trustedBackendRequired("admin assign match result");
 
   await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
     scoreA,
@@ -425,7 +415,6 @@ export async function generateSessionB(
   sessionAId: string,
   generatedBy: string,
 ): Promise<string> {
-  trustedBackendRequired("generate Session B");
 
   // Get Session A data
   const sessionASnap = await getDoc(doc(db(), COLLECTIONS.ladderSessions, sessionAId));
@@ -479,7 +468,6 @@ export async function finalizeSession(
   updatedPlayerStats: Record<string, any>,
   adminId: string,
 ): Promise<void> {
-  trustedBackendRequired("finalize session");
 
   try {
     // Update session status

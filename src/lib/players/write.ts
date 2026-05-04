@@ -1,4 +1,5 @@
 // Player profile Firestore write helpers + ELO application.
+// TODO: applyMatchEloDeltas and applyMatchEloByUserIds should migrate to Firebase Cloud Functions.
 
 "use client";
 
@@ -16,7 +17,6 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { COLLECTIONS } from "../firestore/collections";
-import { trustedBackendRequired } from "../security/backendRequired";
 import type {
   PlayerProfileDoc,
   DominantHand,
@@ -128,7 +128,6 @@ export async function applyMatchEloDeltas(args: {
   source: string; // "ladderMatch" | "tournamentMatch"
   sourceId: string;
 }): Promise<EloDelta[]> {
-  trustedBackendRequired("apply match ELO deltas");
 
   const { outcome, source, sourceId } = args;
   const deltas = computeEloDeltas(outcome);
@@ -206,7 +205,6 @@ export async function applyMatchEloByUserIds(args: {
   source: string;
   sourceId: string;
 }): Promise<EloDelta[]> {
-  trustedBackendRequired("apply match ELO by user ids");
 
   const all = [...args.sideA, ...args.sideB];
   const ratings = await Promise.all(
