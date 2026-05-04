@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "./Button";
-import { LogIn, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 
-export function SignInButton({ size = "sm" }: { size?: "sm" | "md" | "lg" }) {
-  const { user, ready, signIn, signOut } = useAuth();
+interface SignInButtonProps {
+  size?: "sm" | "md" | "lg";
+  /** When true, only shows "Sign In" without the "Sign Up" button. Use in space-constrained layouts. */
+  compact?: boolean;
+}
+
+export function SignInButton({ size = "sm", compact = false }: SignInButtonProps) {
+  const { user, ready, signOut } = useAuth();
   if (!ready) return null;
 
   if (user) {
@@ -41,9 +47,22 @@ export function SignInButton({ size = "sm" }: { size?: "sm" | "md" | "lg" }) {
     );
   }
 
+  if (compact) {
+    return (
+      <Link href="/auth/login">
+        <Button size={size}>Sign In</Button>
+      </Link>
+    );
+  }
+
   return (
-    <Button size={size} onClick={() => signIn().catch(() => {})}>
-      <LogIn className="h-3.5 w-3.5" /> Sign in
-    </Button>
+    <div className="flex items-center gap-2">
+      <Link href="/auth/login">
+        <Button variant="outline" size={size}>Sign In</Button>
+      </Link>
+      <Link href="/auth/signup">
+        <Button size={size}>Sign Up</Button>
+      </Link>
+    </div>
   );
 }

@@ -4,9 +4,11 @@ import Link from "next/link";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { useAuth } from "@/lib/auth-context";
 import { Flame, Swords, Trophy } from "lucide-react";
 
 export function HomeMobile() {
+  const { user, ready } = useAuth();
   return (
     <div className="px-4 py-5 space-y-5">
       <section>
@@ -24,8 +26,17 @@ export function HomeMobile() {
           climb.
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Link href="/ladder/check-in"><Button size="md" className="w-full">Check In</Button></Link>
-          <Link href="/dashboard"><Button variant="rune" size="md" className="w-full">Dashboard</Button></Link>
+          {ready && !user ? (
+            <>
+              <Link href="/auth/signup"><Button size="md" className="w-full">Sign Up</Button></Link>
+              <Link href="/auth/login"><Button variant="rune" size="md" className="w-full">Sign In</Button></Link>
+            </>
+          ) : (
+            <>
+              <Link href="/ladder/check-in"><Button size="md" className="w-full">Check In</Button></Link>
+              <Link href="/dashboard"><Button variant="rune" size="md" className="w-full">Dashboard</Button></Link>
+            </>
+          )}
         </div>
       </section>
 

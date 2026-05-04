@@ -45,7 +45,7 @@ export function MobileTopBar() {
               </span>
             )}
           </Link>
-          <SignInButton />
+          <SignInButton compact />
         </div>
       </div>
     </header>

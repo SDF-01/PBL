@@ -1,13 +1,17 @@
+"use client";
+
 import Link from "next/link";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { useAuth } from "@/lib/auth-context";
 import { Flame, Swords, Trophy } from "lucide-react";
 
 // Desktop homepage — hero + empty-state CTAs. No demo content: real data
 // populates Tournaments + Dashboard once leagues and events are created.
 
 export function HomeDesktop() {
+  const { user, ready } = useAuth();
   return (
     <main>
   <section className="relative overflow-hidden border-b border-obsidian-400">
@@ -28,8 +32,17 @@ export function HomeDesktop() {
           generation, live monitoring, and finalization.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/ladder/check-in"><Button size="lg">Player Check-in</Button></Link>
-          <Link href="/dashboard"><Button variant="rune" size="lg">Admin Dashboard</Button></Link>
+          {ready && !user ? (
+            <>
+              <Link href="/auth/signup"><Button size="lg">Create Account</Button></Link>
+              <Link href="/auth/login"><Button variant="rune" size="lg">Sign In</Button></Link>
+            </>
+          ) : (
+            <>
+              <Link href="/ladder/check-in"><Button size="lg">Player Check-in</Button></Link>
+              <Link href="/dashboard"><Button variant="rune" size="lg">Dashboard</Button></Link>
+            </>
+          )}
         </div>
 
         {/* Build/version badge */}
