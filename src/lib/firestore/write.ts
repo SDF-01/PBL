@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { COLLECTIONS } from "./collections";
+import { trustedBackendRequired } from "../security/backendRequired";
 import type {
   TournamentDoc,
   AnnouncementDoc,
@@ -85,6 +86,8 @@ export async function createAnnouncement(input: {
   kind?: AnnouncementDoc["kind"];
   createdBy: string;
 }): Promise<string> {
+  trustedBackendRequired("create announcement");
+
   const ref = await addDoc(collection(db(), COLLECTIONS.announcements), {
     orgId: input.orgId,
     title: input.title,
@@ -106,6 +109,8 @@ interface NewNotification {
 }
 
 export async function notifyUser(input: NewNotification): Promise<string> {
+  trustedBackendRequired("create notification");
+
   const ref = await addDoc(collection(db(), COLLECTIONS.notifications), {
     userId: input.userId,
     title: input.title,
@@ -210,6 +215,8 @@ export async function publishBracket(input: {
   bestOf: number;
   createdBy: string;
 }): Promise<string> {
+  trustedBackendRequired("publish bracket");
+
   const { tournamentId, format, entrants, targetPoints, winBy, bestOf } = input;
 
   // 1. Generate the bracket(s) in-memory.
@@ -335,6 +342,8 @@ export async function recordMatchScore(input: {
   games: Array<{ a: number; b: number }>;
   createdBy: string;
 }): Promise<{ winner: "A" | "B"; gamesA: number; gamesB: number }> {
+  trustedBackendRequired("record match score");
+
   const { matchId, games } = input;
 
   // 1. Load the match + node.
@@ -537,6 +546,8 @@ export async function scheduleMatch(
 }
 
 export async function startTournament(id: string): Promise<void> {
+  trustedBackendRequired("start tournament");
+
   await updateDoc(doc(db(), COLLECTIONS.tournaments, id), {
     status: "IN_PROGRESS",
     updatedAt: serverTimestamp(),

@@ -3,6 +3,7 @@
 import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
+import { trustedBackendRequired } from "@/lib/security/backendRequired";
 import type { RoleKey } from "@/lib/permissions/types";
 
 export interface CreateLeagueInput {
@@ -18,6 +19,8 @@ export async function createLeague(
   createdBy: string,
   input: CreateLeagueInput,
 ): Promise<string> {
+  trustedBackendRequired("create league");
+
   const database = db();
   const batch = writeBatch(database);
 
