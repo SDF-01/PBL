@@ -9,6 +9,8 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { PlayerHome } from "@/components/player/PlayerHome";
+import { isFirebaseConfigured } from '@/lib/firebase'; 
+import { listLadderSeasons, listPlayDates } from "@/lib/ladder/repo";
 import {
   Plus,
   CalendarDays,
@@ -21,7 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 import { getPlayerSessionData } from "@/lib/ladder/repo";
 import { ScoreModal } from "@/components/player/ScoreModal";
 import type { PlayerSessionData } from "@/lib/ladder/repo";
-
+import { LadderSeasonDoc, PlayDateDoc } from '@/lib/firestore/types';
 interface Stats {
   seasons: number;
   playDates: number;
@@ -64,16 +66,22 @@ export default function DashboardPage() {
         // For now, get the most recent play date. In production, this should
         // be more sophisticated to find the active play date for the user
         const playDates = await listPlayDates().catch(() => []);
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0] as string;
+       // Make sure playDates is not empty
+      if (playDates.length === 0) {
+        console.warn('No play dates available');
+      } else {
+        // Find the active play date
         const activePlayDate = playDates.find(pd =>
           pd.date >= today && (pd.status === 'CHECK_IN_OPEN' || pd.status === 'IN_PROGRESS')
-        ) || playDates[0]; // Fallback to first play date
+        ) ?? playDates[0]; // fallback to first play date date
 
         if (activePlayDate) {
           const data = await getPlayerSessionData(user.uid, activePlayDate.id);
           setPlayerSessionData(data);
         }
-      })();
+      }
+})();
     }
   }, [isAdminMode, user]);
 
@@ -136,8 +144,8 @@ export default function DashboardPage() {
             onSuccess={() => {
               setScoreModal(null);
               // Refresh player data
-              if (user) {
-                const activePlayDateId = playerSessionData.currentSession.playDateId;
+              if (user && playerSessionData?.currentSession) {
+                const activePlayDateId = playerSessionData.currentSession!.playDateId;
                 getPlayerSessionData(user.uid, activePlayDateId).then(setPlayerSessionData);
               }
             }}
