@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\pando\\\\pbl\\\\PBL\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(node_modules\\\\.bin\\\\tsc --noEmit)",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(npm install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git config *)"
+    ]
+  }
+}
