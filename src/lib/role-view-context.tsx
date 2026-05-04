@@ -46,15 +46,18 @@ export function RoleViewProvider({ children }: { children: ReactNode }) {
     { id: "Player", label: "Player", tone: "neutral" },
   ];
 
-  // Once permissions resolve, restore saved role or default to highest privilege
+  // Once permissions resolve, restore saved role or auto-select the highest privilege.
+  // Never restore "Player" if the user now has elevated roles — that would hide
+  // the Admin section for users who previously visited without a role assigned.
   useEffect(() => {
     if (loading) return;
     const stored =
       typeof window !== "undefined"
         ? (localStorage.getItem("roleView") as RoleViewId | null)
         : null;
-    const valid = stored && options.some((o) => o.id === stored);
-    setActiveId(valid ? (stored as RoleViewId) : (options[0]?.id ?? "Player"));
+    const restorable = stored && stored !== "Player" && options.some((o) => o.id === stored);
+    const highestRole = options.find((o) => o.id !== "Player") ?? options[0];
+    setActiveId(restorable ? (stored as RoleViewId) : (highestRole?.id ?? "Player"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, isSiteAdmin, clubDirectorFor.length, leagueCoordinatorFor.length]);
 
