@@ -24,13 +24,13 @@ export function BackToHome({
 }) {
   const pathname = usePathname() ?? "/";
   const router = useRouter();
-  if (pathname === "/" || pathname === "") return null;
+  if (pathname === "/" || pathname === "" || pathname === "/dashboard") return null;
 
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
     } else {
-      router.push("/");
+      router.push("/dashboard");
     }
   }
 
@@ -47,7 +47,7 @@ export function BackToHome({
       </button>
       <span className="text-obsidian-400" aria-hidden="true">·</span>
       <Link
-        href="/"
+        href="/dashboard"
         className="inline-flex items-center gap-1.5 text-ash-500 hover:text-ember-400 transition-colors"
       >
         <Home className="h-3.5 w-3.5" />
