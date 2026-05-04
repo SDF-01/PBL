@@ -18,7 +18,7 @@ const NAV = [
 
 export function TopNav() {
   const { isAdminMode } = useAdminMode();
-  const { isSiteAdmin, roles, loading: permLoading } = usePermissions();
+  const { isSiteAdmin } = usePermissions();
 
   return (
     <header className="sticky top-0 z-40 border-b border-obsidian-400 bg-obsidian-800/80 backdrop-blur supports-[backdrop-filter]:bg-obsidian-800/65">
@@ -51,25 +51,6 @@ export function TopNav() {
               </Button>
             </Link>
           )}
-          {/* DEBUG — remove once role issue is resolved */}
-          <span className="hidden sm:flex items-center gap-1.5 rounded-pixel border border-obsidian-500 bg-obsidian-900 px-2 py-0.5 font-mono text-[9px]">
-            <span className="text-ash-600">roles:</span>
-            {permLoading ? (
-              <span className="text-ash-600">…</span>
-            ) : roles.length === 0 ? (
-              <span className="text-crimson-400">none</span>
-            ) : (
-              roles.map((r) => (
-                <span key={r.id} className={r.roleId === "SiteAdmin" ? "text-ember-400" : "text-spectral-400"}>
-                  {r.roleId}{r.clubId ? `@${r.clubId.slice(0, 6)}` : ""}
-                </span>
-              ))
-            )}
-            <span className="text-ash-700">|</span>
-            <span className={isSiteAdmin ? "text-ember-400" : "text-ash-600"}>
-              admin:{isSiteAdmin ? "✓" : "✗"}
-            </span>
-          </span>
           <SignInButton />
         </div>
       </div>

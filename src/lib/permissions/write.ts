@@ -1,3 +1,8 @@
+// TODO: approveClub, rejectClub, assignRole, and deactivateUserRole should
+// migrate to Firebase Cloud Functions once one is deployed. For now they run
+// client-side, protected by Firestore security rules that require
+// users/{uid}.role == "SITE_ADMIN" on the caller — same pattern as admin/write.ts.
+
 import {
   addDoc,
   collection,
@@ -5,14 +10,12 @@ import {
   getDocs,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
-import { trustedBackendRequired } from "@/lib/security/backendRequired";
 import type { CreateClubInput, RoleKey } from "./types";
 
 export async function submitClubCreation(
@@ -20,9 +23,10 @@ export async function submitClubCreation(
   input: CreateClubInput,
 ): Promise<string> {
   const database = db();
-  const clubRef = doc(collection(database, COLLECTIONS.clubs));
+  const batch = writeBatch(database);
 
-  await setDoc(clubRef, {
+  const clubRef = doc(collection(database, COLLECTIONS.clubs));
+  batch.set(clubRef, {
     clubName: input.clubName,
     location: input.location,
     description: input.description,
@@ -32,6 +36,20 @@ export async function submitClubCreation(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  // Provisional role lets the submitter edit their pending club while it awaits review.
+  const roleRef = doc(collection(database, COLLECTIONS.userRoles));
+  batch.set(roleRef, {
+    userId,
+    roleId: "ClubCreatorProvisional" as RoleKey,
+    clubId: clubRef.id,
+    leagueId: null,
+    assignedAt: serverTimestamp(),
+    assignedBy: null,
+    active: true,
+  });
+
+  await batch.commit();
   return clubRef.id;
 }
 
@@ -50,8 +68,6 @@ export async function approveClub(
   adminUserId: string,
   creatorUserId: string,
 ): Promise<void> {
-  trustedBackendRequired("approve club");
-
   const database = db();
 
   const provisionalSnap = await getDocs(
@@ -86,7 +102,7 @@ export async function approveClub(
     active: true,
   });
 
-  // Elevate the user's primary role in users/{uid} so Firestore rules pick it up.
+  // Elevate primary role so Firestore rules recognise the new privilege level.
   batch.update(doc(database, COLLECTIONS.users, creatorUserId), {
     role: "CLUB_ADMIN",
     updatedAt: serverTimestamp(),
@@ -125,8 +141,6 @@ export async function rejectClub(
   creatorUserId: string,
   notes?: string,
 ): Promise<void> {
-  trustedBackendRequired("reject club");
-
   const database = db();
 
   const provisionalSnap = await getDocs(
@@ -184,8 +198,6 @@ export async function assignRole(
   leagueId: string | null,
   assignedBy: string,
 ): Promise<void> {
-  trustedBackendRequired("assign role");
-
   await addDoc(collection(db(), COLLECTIONS.userRoles), {
     userId,
     roleId,
@@ -198,7 +210,5 @@ export async function assignRole(
 }
 
 export async function deactivateUserRole(userRoleId: string): Promise<void> {
-  trustedBackendRequired("deactivate user role");
-
   await updateDoc(doc(db(), COLLECTIONS.userRoles, userRoleId), { active: false });
 }

@@ -10,6 +10,8 @@ import type { RoleKey, UserRoleDoc } from "./types";
 
 export interface PermissionState {
   roles: UserRoleDoc[];
+  /** Raw role field from users/{uid} — exposed for debugging only. */
+  primaryRole: string | null;
   loading: boolean;
   isSiteAdmin: boolean;
   clubDirectorFor: string[];
@@ -82,6 +84,7 @@ export function usePermissions(): PermissionState {
 
   return {
     roles,
+    primaryRole,
     loading,
     isSiteAdmin: isSiteAdminUser,
     clubDirectorFor,
