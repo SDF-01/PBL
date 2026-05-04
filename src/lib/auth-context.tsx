@@ -55,14 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Capture the credential from a completed signInWithRedirect flow.
-    // If result.user is non-null, this was a fresh Google sign-in; navigate
-    // to the player profile page. Using window.location.replace so the login
-    // page is not left in the browser history.
+    // result.user is non-null only on the first page-load after the OAuth
+    // redirect completes. Use uid from the result directly — sessionStorage
+    // does not survive the cross-origin redirect chain reliably.
     getRedirectResult(auth()).then((result) => {
       if (result?.user && typeof window !== "undefined") {
-        const dest = sessionStorage.getItem("post_login_redirect") ?? "/players/edit";
-        sessionStorage.removeItem("post_login_redirect");
-        window.location.replace(dest);
+        window.location.replace(`/players/view?uid=${result.user.uid}`);
       }
     }).catch(() => {
       // Errors bubble through onAuthStateChanged; swallow to avoid noise.

@@ -4,21 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Swords, Trophy, CalendarDays, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-
-const BASE_TABS = [
-  { href: "/",                  label: "Home",  icon: Home },
-  { href: "/games",             label: "Games", icon: Swords },
-  { href: "/ladder/play-dates", label: "Dates", icon: CalendarDays },
-  { href: "/players",           label: "Ranks", icon: Trophy },
-] as const;
 
 const ADMIN_TAB = { href: "/admin", label: "Admin", icon: ShieldCheck } as const;
 
 export function MobileTabBar() {
   const pathname = usePathname() ?? "/";
+  const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, loading } = usePermissions();
   const isStaff = !loading && (isSiteAdmin || clubDirectorFor.length > 0);
+
+  const homeHref = user ? `/players/view?uid=${user.uid}` : "/";
+
+  const BASE_TABS = [
+    { href: homeHref,              label: "Home",  icon: Home },
+    { href: "/games",              label: "Games", icon: Swords },
+    { href: "/ladder/play-dates",  label: "Dates", icon: CalendarDays },
+    { href: "/players",            label: "Ranks", icon: Trophy },
+  ] as const;
+
   const tabs = isStaff ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
 
   return (
@@ -29,7 +34,10 @@ export function MobileTabBar() {
     >
       <ul className={cn("grid", isStaff ? "grid-cols-5" : "grid-cols-4")}>
         {tabs.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const hrefPath = href.split("?")[0] ?? href;
+          const active = label === "Home"
+            ? pathname === "/" || pathname.startsWith("/players/view")
+            : pathname.startsWith(hrefPath);
           return (
             <li key={href}>
               <Link

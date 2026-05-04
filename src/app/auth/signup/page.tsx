@@ -58,7 +58,9 @@ function SignupPageContent() {
   useEffect(() => {
     if (user) {
       router.push(
-        selectedLeagueId ? `/players/edit?leagueId=${selectedLeagueId}` : "/players/edit",
+        selectedLeagueId
+          ? `/players/edit?leagueId=${selectedLeagueId}`
+          : `/players/view?uid=${user.uid}`,
       );
     }
   }, [user, router, selectedLeagueId]);
@@ -99,7 +101,6 @@ function SignupPageContent() {
   }
 
   async function handleGoogleSignup() {
-    sessionStorage.setItem("post_login_redirect", "/players/edit");
     setSubmitting(true);
     setError(null);
     try {
