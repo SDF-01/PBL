@@ -29,7 +29,7 @@ export function ClubApprovalQueue({
     if (!user) return;
     setProcessing(club.id);
     try {
-      await approveClub(club.id, user.uid, club.creatorUserId);
+      await approveClub(club.id, user.uid, club.createdBy);
       onApproved?.(club.id);
     } catch (err) {
       alert(
@@ -44,7 +44,7 @@ export function ClubApprovalQueue({
     if (!user) return;
     setProcessing(club.id);
     try {
-      await rejectClub(club.id, user.uid, club.creatorUserId, rejectNotes[club.id]);
+      await rejectClub(club.id, user.uid, club.createdBy, rejectNotes[club.id]);
       onRejected?.(club.id);
     } catch (err) {
       alert(
@@ -85,7 +85,7 @@ export function ClubApprovalQueue({
                   <p className="text-ash-500 text-sm mt-1">{club.description}</p>
                 )}
                 <p className="text-ash-600 text-xs mt-2 font-mono">
-                  Submitted by: {club.creatorUserId}
+                  Submitted by: {club.createdBy}
                 </p>
               </div>
             </div>

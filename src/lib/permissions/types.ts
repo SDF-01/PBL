@@ -33,7 +33,7 @@ export interface ClubDoc {
   description: string;
   logoUrl: string | null;
   status: ClubStatus;
-  creatorUserId: string;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }

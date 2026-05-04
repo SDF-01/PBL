@@ -103,10 +103,10 @@ function SignupPageContent() {
     setError(null);
     try {
       await signIn();
+      // signInWithRedirect navigates away; execution won't reach here on success.
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Google sign-in failed.");
-    } finally {
       setSubmitting(false);
+      setError(err instanceof Error ? err.message : "Google sign-in failed.");
     }
   }
 

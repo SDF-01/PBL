@@ -7,7 +7,7 @@ export async function listUserClubs(userId: string): Promise<ClubDoc[]> {
   if (!isFirebaseConfigured()) return [];
   const q = query(
     collection(db(), COLLECTIONS.clubs),
-    where("creatorUserId", "==", userId),
+    where("createdBy", "==", userId),
     orderBy("createdAt", "desc"),
   );
   const snap = await getDocs(q);

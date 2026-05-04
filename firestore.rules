@@ -9,14 +9,25 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isSignedIn() { return request.auth != null; }
-    function isStaff() {
-      return isSignedIn() && request.auth.token.role in [
-        "REFEREE", "DIRECTOR", "ADMIN", "OWNER"
-      ];
+
+    // Role checks via users/{uid}.role (set during signup/profile updates).
+    // userRoles docs use auto-generated IDs so cannot be path-looked-up in rules.
+    function userRole() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
     }
-    function isAdmin() {
-      return isSignedIn() && request.auth.token.role in ["ADMIN", "OWNER"];
+    function isSiteAdmin() {
+      return isSignedIn() && userRole() == "SITE_ADMIN";
     }
+    function isClubDirector() {
+      return isSignedIn() && userRole() in ["SITE_ADMIN", "CLUB_ADMIN"];
+    }
+
+    // Legacy helpers — map to new role model so existing rules keep working.
+    function isStaff() { return isSiteAdmin() || isClubDirector(); }
+    function isAdmin() { return isSiteAdmin(); }
+
     function isSelf(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
@@ -194,6 +205,59 @@ service cloud.firestore {
     }
     match /eloEvents/{id} {
       allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // ========== RBAC Collections ==========
+
+    // clubs: public read; creation requires signed-in (submitClubCreation uses
+    // writeBatch — the userRoles doc is written in the same batch).
+    // Update: only the club's creator or a SiteAdmin.
+    // Delete: SiteAdmin only.
+    match /clubs/{clubId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isSignedIn() && (
+        resource.data.createdBy == request.auth.uid || isSiteAdmin()
+      );
+      allow delete: if isSiteAdmin();
+    }
+
+    // userRoles: owner reads their own roles; SiteAdmin reads/writes all.
+    // Any signed-in user can create a role doc for themselves (batch write from
+    // submitClubCreation). Deactivation (update) only via SiteAdmin or self.
+    match /userRoles/{roleDocId} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isSiteAdmin()
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid || isSiteAdmin()
+      );
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isSiteAdmin()
+      );
+      allow delete: if isSiteAdmin();
+    }
+
+    // leagueMemberships: read by owner or SiteAdmin/ClubDirector; write by staff.
+    match /leagueMemberships/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid || isStaff()
+      );
+      allow create, update: if isSignedIn() && (
+        request.resource.data.userId == request.auth.uid || isStaff()
+      );
+      allow delete: if isStaff();
+    }
+
+    // roleEvents: immutable audit log. Anyone signed in can append; no updates/deletes.
+    match /roleEvents/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.actorId == request.auth.uid ||
+        resource.data.targetUserId == request.auth.uid ||
+        isSiteAdmin()
+      );
       allow create: if isSignedIn();
       allow update, delete: if false;
     }

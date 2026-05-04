@@ -27,7 +27,7 @@ export async function submitClubCreation(
     description: input.description,
     logoUrl: input.logoUrl ?? null,
     status: "pending",
-    creatorUserId: userId,
+    createdBy: userId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -94,6 +94,12 @@ export async function approveClub(
     assignedAt: serverTimestamp(),
     assignedBy: adminUserId,
     active: true,
+  });
+
+  // Elevate the user's primary role in users/{uid} so Firestore rules pick it up.
+  batch.update(doc(database, COLLECTIONS.users, creatorUserId), {
+    role: "CLUB_ADMIN",
+    updatedAt: serverTimestamp(),
   });
 
   const eventRef = doc(collection(database, COLLECTIONS.roleEvents));

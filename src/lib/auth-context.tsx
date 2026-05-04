@@ -4,9 +4,10 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   signOut as fbSignOut,
   updateProfile,
   type User,
@@ -52,6 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setReady(true);
       return;
     }
+
+    // Capture the credential that Google sends back after signInWithRedirect.
+    getRedirectResult(auth()).catch(() => {
+      // Errors (including auth/unauthorized-domain) bubble to onAuthStateChanged;
+      // swallow here to avoid unhandled-rejection noise.
+    });
+
     const unsub = onAuthStateChanged(auth(), async (u) => {
       setUser(u);
       setReady(true);
@@ -81,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ready,
     signIn: async () => {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth(), provider);
+      await signInWithRedirect(auth(), provider);
     },
     signOut: async () => {
       await fbSignOut(auth());
