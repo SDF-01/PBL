@@ -58,10 +58,18 @@ function LoginPageContent() {
     setError(null);
     try {
       await signIn();
-      // signInWithRedirect navigates away; execution won't reach here on success.
+      // signInWithRedirect navigates away; won't reach here on success.
     } catch (err) {
       setSubmitting(false);
-      setError(err instanceof Error ? err.message : "Google sign-in failed.");
+      const code = (err as { code?: string }).code ?? "";
+      if (code === "auth/unauthorized-domain") {
+        setError(
+          `Domain not authorized: "${window.location.hostname}". ` +
+          `Add it in Firebase Console → Authentication → Settings → Authorized domains.`
+        );
+      } else {
+        setError(err instanceof Error ? err.message : "Google sign-in failed.");
+      }
     }
   }
 
