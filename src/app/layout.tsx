@@ -4,6 +4,7 @@ import { Inter, JetBrains_Mono, Press_Start_2P, Cinzel } from "next/font/google"
 import { DeviceProvider } from "@/lib/device";
 import { AuthProvider } from "@/lib/auth-context";
 import { AdminModeProvider } from "@/lib/admin-context";
+import { RoleViewProvider } from "@/lib/role-view-context";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -36,7 +37,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased">
         <DeviceProvider>
           <AuthProvider>
-            <AdminModeProvider>{children}</AdminModeProvider>
+            <AdminModeProvider>
+              <RoleViewProvider>{children}</RoleViewProvider>
+            </AdminModeProvider>
           </AuthProvider>
         </DeviceProvider>
         <AnalyticsLoader />

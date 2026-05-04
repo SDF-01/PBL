@@ -6,6 +6,7 @@ import { Home, Swords, Trophy, CalendarDays, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
+import { useRoleView } from "@/lib/role-view-context";
 
 const ADMIN_TAB = { href: "/admin", label: "Admin", icon: ShieldCheck } as const;
 
@@ -13,7 +14,8 @@ export function MobileTabBar() {
   const pathname = usePathname() ?? "/";
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, loading } = usePermissions();
-  const isStaff = !loading && (isSiteAdmin || clubDirectorFor.length > 0);
+  const { isStaffView } = useRoleView();
+  const isStaff = !loading && (isSiteAdmin || clubDirectorFor.length > 0) && isStaffView;
 
   const homeHref = user ? `/players/view?uid=${user.uid}` : "/";
 

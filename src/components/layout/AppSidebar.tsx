@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
+import { useRoleView } from "@/lib/role-view-context";
 
 const ITEMS = [
   { href: "/dashboard",         label: "Overview",    icon: LayoutDashboard },
@@ -24,7 +25,8 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
-  const isStaff = isSiteAdmin || clubDirectorFor.length > 0;
+  const { isStaffView, isAdminView } = useRoleView();
+  const isStaff = !permLoading && (isSiteAdmin || clubDirectorFor.length > 0) && isStaffView;
 
   function navLink(href: string, label: string, Icon: React.ComponentType<{ className?: string }>) {
     const active = pathname === href || pathname.startsWith(href + "/");
@@ -70,16 +72,16 @@ export function AppSidebar() {
         </div>
       )}
 
-      {!permLoading && isStaff && (
+      {isStaff && (
         <div>
           <div className="heading-fantasy text-[10px] uppercase tracking-[0.2em] text-ember-600 px-2 mb-2">
             Admin
           </div>
           <ul className="space-y-0.5">
             {navLink("/admin", "Admin Hub", ShieldCheck)}
-            {(isSiteAdmin || clubDirectorFor.length > 0) && navLink("/leagues/create", "New League", ListChecks)}
-            {isSiteAdmin && navLink("/admin/clubs", "Club Approvals", Building2)}
-            {isSiteAdmin && navLink("/admin/users", "Manage Users", UserCog)}
+            {navLink("/leagues/create", "New League", ListChecks)}
+            {isAdminView && navLink("/admin/clubs", "Club Approvals", Building2)}
+            {isAdminView && navLink("/admin/users", "Manage Users", UserCog)}
           </ul>
         </div>
       )}
