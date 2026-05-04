@@ -95,8 +95,11 @@ export interface CourtDoc {
 
 export interface LeagueDoc {
   id: string;
+  /** Legacy org reference — equals clubId for leagues created via the club system. */
   orgId: string;
-  slug: string;
+  /** Club this league belongs to (set for all new leagues). */
+  clubId?: string;
+  slug?: string;
   name: string;
   description?: string;
   city?: string;
@@ -107,6 +110,9 @@ export interface LeagueDoc {
   next_play_date?: string;
   check_in_status?: string;
   league_format?: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface SeasonDoc {

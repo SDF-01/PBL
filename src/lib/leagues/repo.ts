@@ -23,3 +23,10 @@ export async function getLeague(id: string): Promise<LeagueDoc | null> {
   const snap = await getDoc(doc(db(), COLLECTIONS.leagues, id));
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as LeagueDoc) : null;
 }
+
+export async function listLeaguesByClub(clubId: string): Promise<LeagueDoc[]> {
+  const snap = await getDocs(
+    query(collection(db(), COLLECTIONS.leagues), where("clubId", "==", clubId)),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeagueDoc);
+}

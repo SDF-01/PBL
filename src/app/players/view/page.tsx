@@ -20,10 +20,12 @@ import {
   getPlayerProfile,
   listRecentEloEvents,
 } from "@/lib/players/repo";
+import { getUserRole } from "@/lib/firestore/userRepo";
 import { skillBand } from "@/lib/players/elo";
 import type {
   PlayerProfileDoc,
   EloEventDoc,
+  UserRole,
 } from "@/lib/firestore/types";
 
 export default function PlayerViewPage() {
@@ -46,6 +48,7 @@ function PlayerView() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<PlayerProfileDoc | null>(null);
   const [events, setEvents] = useState<EloEventDoc[]>([]);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,12 +60,14 @@ function PlayerView() {
     }
     (async () => {
       try {
-        const [p, ev] = await Promise.all([
+        const [p, ev, r] = await Promise.all([
           getPlayerProfile(uid),
           listRecentEloEvents(uid, 20).catch(() => []),
+          getUserRole(uid).catch(() => null),
         ]);
         setProfile(p);
         setEvents(ev);
+        setRole(r);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load.");
       } finally {
@@ -107,6 +112,19 @@ function PlayerView() {
 
   const band = skillBand(profile.elo);
   const isMe = user?.uid === profile.userId;
+
+  const roleLabel: Record<UserRole, string> = {
+    SITE_ADMIN: "Site Admin",
+    CLUB_ADMIN: "Club Director",
+    LEAGUE_COORDINATOR: "League Coordinator",
+    PLAYER: "",
+  };
+  const roleTone: Record<UserRole, "ember" | "gold" | "spectral" | "neutral"> = {
+    SITE_ADMIN: "ember",
+    CLUB_ADMIN: "gold",
+    LEAGUE_COORDINATOR: "spectral",
+    PLAYER: "neutral",
+  };
   const winRate =
     profile.stats.matches > 0
       ? Math.round((profile.stats.wins / profile.stats.matches) * 100)
@@ -152,6 +170,9 @@ function PlayerView() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <RuneChip tone="ember">{band}</RuneChip>
+                {role && role !== "PLAYER" && (
+                  <RuneChip tone={roleTone[role]}>{roleLabel[role]}</RuneChip>
+                )}
                 {profile.dominantHand && (
                   <RuneChip tone="neutral">
                     {profile.dominantHand === "AMBI"
