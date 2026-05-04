@@ -18,7 +18,13 @@ service cloud.firestore {
     }
 
     function isSiteAdmin() {
-      return isSignedIn() && request.auth.token.role == "SITE_ADMIN";
+      // Accept either a Firebase Auth custom claim (preferred) or the Firestore
+      // users/{uid}.role document field (bootstrapping fallback until custom
+      // claims are fully deployed via the Admin SDK).
+      return isSignedIn() && (
+        request.auth.token.role == "SITE_ADMIN" ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "SITE_ADMIN"
+      );
     }
 
     function isClubDirector() {
@@ -230,7 +236,9 @@ service cloud.firestore {
 
     match /auditLog/{id} {
       allow read: if isAdmin();
-      allow write: if false;
+      // Append-only from admin clients; no updates or deletes.
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /playDates/{id} {
@@ -273,7 +281,9 @@ service cloud.firestore {
 
     match /audits/{id} {
       allow read: if isAdmin();
-      allow write: if false;
+      // Ladder operational audits are written by staff from the client.
+      allow create: if isStaff();
+      allow update, delete: if false;
     }
 
     match /players/{uid} {
@@ -315,11 +325,12 @@ service cloud.firestore {
     }
 
     match /roleEvents/{id} {
-      allow read: if isSignedIn()
-        && (resource.data.actorId == request.auth.uid
-          || resource.data.targetUserId == request.auth.uid
-          || isAdmin());
-      allow write: if false;
+      // Admins can read all events; users can read events where they are the subject.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
+      // Role events are written by admin-level client actions (approveClub, rejectClub).
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /{document=**} {

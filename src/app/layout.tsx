@@ -5,6 +5,8 @@ import { DeviceProvider } from "@/lib/device";
 import { AuthProvider } from "@/lib/auth-context";
 import { AdminModeProvider } from "@/lib/admin-context";
 import { RoleViewProvider } from "@/lib/role-view-context";
+import { ToastProvider } from "@/lib/toast-context";
+import { Toaster } from "@/components/ui/Toaster";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -37,9 +39,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased">
         <DeviceProvider>
           <AuthProvider>
-            <AdminModeProvider>
-              <RoleViewProvider>{children}</RoleViewProvider>
-            </AdminModeProvider>
+            <ToastProvider>
+              <AdminModeProvider>
+                <RoleViewProvider>{children}</RoleViewProvider>
+              </AdminModeProvider>
+              <Toaster />
+            </ToastProvider>
           </AuthProvider>
         </DeviceProvider>
         <AnalyticsLoader />
