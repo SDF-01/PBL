@@ -13,7 +13,7 @@ import { CheckCircle, X, AlertCircle } from "lucide-react";
 
 interface ScoreVerificationProps {
   match: LadderMatchDoc;
-  playerTeam: "sideA" | "sideB";
+  playerTeam?: "sideA" | "sideB";
   onVerify: () => Promise<void>;
   onDispute: () => void;
   onCancel: () => void;
@@ -21,7 +21,7 @@ interface ScoreVerificationProps {
 
 export function ScoreVerification({
   match,
-  playerTeam,
+  playerTeam = "sideA",
   onVerify,
   onDispute,
   onCancel,

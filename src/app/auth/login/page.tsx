@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
@@ -10,7 +10,7 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { useAuth } from "@/lib/auth-context";
 import { resolveSelectedLeagueId } from "@/lib/selectedLeague";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
@@ -71,5 +71,13 @@ export default function LoginPage() {
         </Panel>
       </main>
     </ResponsiveShell>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageContent />
+    </Suspense>
   );
 }

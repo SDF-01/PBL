@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { PlayerSessionData } from "@/lib/ladder/repo";
 
-export default function PlayerSessionPage() {
+function PlayerSessionContent() {
   const params = useSearchParams();
   const playDateId = params.get("playDate");
   const { user } = useAuth();
@@ -117,7 +117,11 @@ export default function PlayerSessionPage() {
         />
 
         <div id="standings">
-          <LiveStandings sessionId={sessionData.currentSession.id} />
+          <LiveStandings
+            sessionKind={sessionData.currentSession.kind}
+            courtStandings={[]}
+            currentPlayerId={user?.uid}
+          />
         </div>
 
         {scoreModal && (
@@ -136,5 +140,13 @@ export default function PlayerSessionPage() {
         )}
       </main>
     </ResponsiveShell>
+  );
+}
+
+export default function PlayerSessionPage() {
+  return (
+    <Suspense>
+      <PlayerSessionContent />
+    </Suspense>
   );
 }

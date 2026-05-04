@@ -75,8 +75,6 @@ export function ScoreModal({ match, action, onClose, onSuccess }: ScoreModalProp
             match={match}
             onSubmit={handleSubmitScore}
             onCancel={onClose}
-            isSubmitting={isSubmitting}
-            error={error}
           />
         ) : (
           <ScoreVerification
@@ -84,8 +82,6 @@ export function ScoreModal({ match, action, onClose, onSuccess }: ScoreModalProp
             onVerify={handleVerifyScore}
             onDispute={handleDisputeScore}
             onCancel={onClose}
-            isSubmitting={isSubmitting}
-            error={error}
           />
         )}
       </div>

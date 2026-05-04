@@ -13,16 +13,16 @@ import { Plus, Minus, CheckCircle, X } from "lucide-react";
 
 interface ScoreSubmissionProps {
   match: LadderMatchDoc;
-  playerTeam: "sideA" | "sideB";
-  targetPoints: number;
+  playerTeam?: "sideA" | "sideB";
+  targetPoints?: number;
   onSubmit: (scoreA: number, scoreB: number) => Promise<void>;
   onCancel: () => void;
 }
 
 export function ScoreSubmission({
   match,
-  playerTeam,
-  targetPoints,
+  playerTeam = "sideA",
+  targetPoints = 11,
   onSubmit,
   onCancel,
 }: ScoreSubmissionProps) {

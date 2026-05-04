@@ -233,7 +233,9 @@ export async function getLatestStandingsSnapshot(
     ),
   );
   if (snap.empty) return null;
-  return { id: snap.docs[0].id, ...snap.docs[0].data() } as StandingsSnapshotDoc;
+  const first = snap.docs[0];
+  if (!first) return null;
+  return { id: first.id, ...first.data() } as StandingsSnapshotDoc;
 }
 
 // ============================================================

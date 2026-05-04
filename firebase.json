@@ -8,6 +8,12 @@
     ],
     "cleanUrls": true,
     "trailingSlash": true,
+    "rewrites": [
+      {
+        "source": "/leagues/**",
+        "destination": "/leagues/__fallback"
+      }
+    ],
     "headers": [
       {
         "source": "**/*.@(js|css|woff2|png|svg|ico)",

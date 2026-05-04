@@ -293,7 +293,7 @@ export interface GenerateSessionInput {
     id: string;
     courtId: string;
     gameNumber: number;
-    sequenceInCourt: number;
+    sequenceInCourt?: number;
     sideA: string[];
     sideB: string[];
     sitOutPlayer?: string;
