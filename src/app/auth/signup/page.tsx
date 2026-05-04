@@ -99,6 +99,7 @@ function SignupPageContent() {
   }
 
   async function handleGoogleSignup() {
+    sessionStorage.setItem("post_login_redirect", "/players/edit");
     setSubmitting(true);
     setError(null);
     try {

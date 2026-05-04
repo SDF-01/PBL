@@ -54,6 +54,7 @@ function LoginPageContent() {
   }
 
   async function handleGoogleLogin() {
+    sessionStorage.setItem("post_login_redirect", "/players/edit");
     setSubmitting(true);
     setError(null);
     try {

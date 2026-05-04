@@ -54,10 +54,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Capture the credential that Google sends back after signInWithRedirect.
-    getRedirectResult(auth()).catch(() => {
-      // Errors (including auth/unauthorized-domain) bubble to onAuthStateChanged;
-      // swallow here to avoid unhandled-rejection noise.
+    // Capture the credential from a completed signInWithRedirect flow.
+    // If result.user is non-null, this was a fresh Google sign-in; navigate
+    // to the player profile page. Using window.location.replace so the login
+    // page is not left in the browser history.
+    getRedirectResult(auth()).then((result) => {
+      if (result?.user && typeof window !== "undefined") {
+        const dest = sessionStorage.getItem("post_login_redirect") ?? "/players/edit";
+        sessionStorage.removeItem("post_login_redirect");
+        window.location.replace(dest);
+      }
+    }).catch(() => {
+      // Errors bubble through onAuthStateChanged; swallow to avoid noise.
     });
 
     const unsub = onAuthStateChanged(auth(), async (u) => {
