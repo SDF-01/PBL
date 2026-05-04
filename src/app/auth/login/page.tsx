@@ -59,8 +59,7 @@ function LoginPageContent() {
     setSubmitting(true);
     setError(null);
     try {
-      await signIn();
-      // signInWithRedirect navigates away; won't reach here on success.
+      await signIn(); // redirect happens inside signIn() on success
     } catch (err) {
       setSubmitting(false);
       const code = (err as { code?: string }).code ?? "";

@@ -4,10 +4,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
-  getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithRedirect,
+  signInWithPopup,
   signOut as fbSignOut,
   updateProfile,
   type User,
@@ -54,18 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Capture the credential from a completed signInWithRedirect flow.
-    // result.user is non-null only on the first page-load after the OAuth
-    // redirect completes. Use uid from the result directly — sessionStorage
-    // does not survive the cross-origin redirect chain reliably.
-    getRedirectResult(auth()).then((result) => {
-      if (result?.user && typeof window !== "undefined") {
-        window.location.replace(`/players/view?uid=${result.user.uid}`);
-      }
-    }).catch(() => {
-      // Errors bubble through onAuthStateChanged; swallow to avoid noise.
-    });
-
     const unsub = onAuthStateChanged(auth(), async (u) => {
       setUser(u);
       setReady(true);
@@ -95,7 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ready,
     signIn: async () => {
       const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth(), provider);
+      const result = await signInWithPopup(auth(), provider);
+      if (result?.user && typeof window !== "undefined") {
+        window.location.replace(`/players/view?uid=${result.user.uid}`);
+      }
     },
     signOut: async () => {
       await fbSignOut(auth());
