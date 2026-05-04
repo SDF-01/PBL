@@ -40,7 +40,7 @@ jobs:
 
       - name: Build static export
         env:
-          NEXT_PUBLIC_FIREBASE_API_KEY:             "AIzaSyAITxJd0I7Hc5TGwtkkK2BNiJ0S_AnF5wI"
+          NEXT_PUBLIC_FIREBASE_API_KEY:             "AIzaSyC3r-AQYUqJBIfMjKDFdgK6bLenEc8Ncko"
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         "pickleleauge.firebaseapp.com"
           NEXT_PUBLIC_FIREBASE_PROJECT_ID:          "pickleleauge"
           NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:      "pickleleauge.firebasestorage.app"
