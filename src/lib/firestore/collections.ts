@@ -32,6 +32,11 @@ export const COLLECTIONS = {
   // ==== Player profiles + ELO ====
   players: "players",
   eloEvents: "eloEvents",
+  // ==== Permissions / Roles (schema v1) ====
+  clubs: "clubs",
+  userRoles: "userRoles",
+  leagueMemberships: "leagueMemberships",
+  roleEvents: "roleEvents",
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

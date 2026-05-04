@@ -4,6 +4,38 @@
 // for portability across the wire; use Firestore `serverTimestamp()` on write
 // and convert on read in the repository helpers.
 
+// ============================================================
+// USER PROFILE (users/{uid})
+// Canonical auth-level identity document. Separate from the
+// gameplay PlayerProfileDoc so auth data stays minimal.
+// ============================================================
+
+export type UserRole =
+  | "SITE_ADMIN"
+  | "CLUB_ADMIN"
+  | "LEAGUE_COORDINATOR"
+  | "PLAYER";
+
+export type AccountStatus = "ACTIVE" | "PENDING" | "SUSPENDED";
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  phoneNumber?: string | null;
+  photoURL?: string | null;
+  role: UserRole;
+  accountStatus: AccountStatus;
+  clubId: string | null;
+  leagueIds: string[];
+  startingSkillRating?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Legacy minimal shape — kept for backward compatibility with existing reads.
 export type Role = "PLAYER" | "TEAM_CAPTAIN" | "REFEREE" | "DIRECTOR" | "ADMIN" | "OWNER";
 
 export type Tier = "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND" | "MYTHIC";
