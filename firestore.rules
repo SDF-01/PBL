@@ -1,265 +1,325 @@
 rules_version = '2';
 
-// Pickleball League — Firestore security rules.
+// Pickleball League - emergency Firestore lockdown.
 //
-// Self-service mode: signed-in users can register for tournaments and
-// report match scores. Destructive actions (delete) require staff claim.
+// Privileged authorization is based on Firebase Auth custom claims here, not
+// user-writable Firestore profile fields. Admin SDK / trusted backend writes
+// bypass rules, so backend-only collections are intentionally denied to clients.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() { return request.auth != null; }
-
-    // Role checks via users/{uid}.role (set during signup/profile updates).
-    // userRoles docs use auto-generated IDs so cannot be path-looked-up in rules.
-    function userRole() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-        : null;
+    function isSignedIn() {
+      return request.auth != null;
     }
-    function isSiteAdmin() {
-      return isSignedIn() && userRole() == "SITE_ADMIN";
-    }
-    function isClubDirector() {
-      return isSignedIn() && userRole() in ["SITE_ADMIN", "CLUB_ADMIN"];
-    }
-
-    // Legacy helpers — map to new role model so existing rules keep working.
-    function isStaff() { return isSiteAdmin() || isClubDirector(); }
-    function isAdmin() { return isSiteAdmin(); }
 
     function isSelf(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+
+    function isSiteAdmin() {
+      return isSignedIn() && request.auth.token.role == "SITE_ADMIN";
+    }
+
+    function isClubDirector() {
+      return isSignedIn() &&
+        (request.auth.token.role == "SITE_ADMIN" ||
+         request.auth.token.role == "CLUB_ADMIN");
+    }
+
+    function isLeagueCoordinator() {
+      return isSignedIn() &&
+        (request.auth.token.role == "SITE_ADMIN" ||
+         request.auth.token.role == "CLUB_ADMIN" ||
+         request.auth.token.role == "LEAGUE_COORDINATOR");
+    }
+
+    function isStaff() {
+      return isSiteAdmin() || isClubDirector() || isLeagueCoordinator();
+    }
+
+    function isAdmin() {
+      return isSiteAdmin();
+    }
+
     function isTournamentCreator(tournamentId) {
       return isSignedIn() &&
+        exists(/databases/$(database)/documents/tournaments/$(tournamentId)) &&
         get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid;
     }
 
-    // --- Public read, signed-in write (bootstrap) ---
-    match /organizations/{doc=**} { allow read: if true; allow write: if isSignedIn(); }
-    match /venues/{doc=**}        { allow read: if true; allow write: if isSignedIn(); }
-    match /courts/{doc=**}        { allow read: if true; allow write: if isSignedIn(); }
-    match /leagues/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
-    match /seasons/{doc=**}       { allow read: if true; allow write: if isSignedIn(); }
-    match /divisions/{doc=**}     { allow read: if true; allow write: if isSignedIn(); }
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function hasOnlyChanged(keys) {
+      return changedKeys().hasOnly(keys);
+    }
+
+    function userCreateKeys() {
+      return [
+        "uid", "email", "firstName", "lastName", "displayName",
+        "phoneNumber", "photoURL", "role", "accountStatus",
+        "clubId", "leagueIds", "startingSkillRating",
+        "createdAt", "updatedAt"
+      ];
+    }
+
+    function userUpdateKeys() {
+      return [
+        "firstName", "lastName", "displayName", "phoneNumber",
+        "photoURL", "startingSkillRating", "updatedAt"
+      ];
+    }
+
+    function isSafeUserCreate(userId) {
+      return isSelf(userId)
+        && request.resource.data.keys().hasOnly(userCreateKeys())
+        && (!("uid" in request.resource.data) || request.resource.data.uid == userId)
+        && (!("role" in request.resource.data) || request.resource.data.role == "PLAYER")
+        && (!("accountStatus" in request.resource.data) || request.resource.data.accountStatus == "ACTIVE")
+        && (!("clubId" in request.resource.data) || request.resource.data.clubId == null)
+        && (!("leagueIds" in request.resource.data) || request.resource.data.leagueIds.size() == 0);
+    }
+
+    function isSafeUserUpdate(userId) {
+      return isSelf(userId) && hasOnlyChanged(userUpdateKeys());
+    }
+
+    function playerProfileKeys() {
+      return [
+        "userId", "displayName", "photoURL", "city", "region", "country",
+        "homeVenueId", "homeVenueName", "dominantHand", "paddleBrand",
+        "paddleModel", "yearsPlaying", "bio", "duprRating", "duprId",
+        "elo", "eloPeak", "stats", "createdAt", "updatedAt"
+      ];
+    }
+
+    function playerUpdateKeys() {
+      return [
+        "displayName", "photoURL", "city", "region", "country",
+        "homeVenueId", "homeVenueName", "dominantHand", "paddleBrand",
+        "paddleModel", "yearsPlaying", "bio", "duprRating", "duprId",
+        "updatedAt"
+      ];
+    }
+
+    function isSafePlayerCreate(uid) {
+      return isSelf(uid)
+        && request.resource.data.userId == uid
+        && request.resource.data.keys().hasOnly(playerProfileKeys())
+        && (!("elo" in request.resource.data) || request.resource.data.elo == 1500)
+        && (!("eloPeak" in request.resource.data) || request.resource.data.eloPeak == 1500);
+    }
+
+    function isSafePlayerUpdate(uid) {
+      return isSelf(uid) && hasOnlyChanged(playerUpdateKeys());
+    }
+
+    function keepsCreatedBy() {
+      return !changedKeys().hasAny(["createdBy"]);
+    }
+
+    // Public catalog reads remain for Phase 01. Privacy hardening is Phase 04.
+    match /organizations/{doc=**} { allow read: if true; allow write: if isStaff(); }
+    match /venues/{doc=**}        { allow read: if true; allow write: if isStaff(); }
+    match /courts/{doc=**}        { allow read: if true; allow write: if isStaff(); }
+    match /leagues/{doc=**}       { allow read: if true; allow write: if isStaff(); }
+    match /seasons/{doc=**}       { allow read: if true; allow write: if isStaff(); }
+    match /divisions/{doc=**}     { allow read: if true; allow write: if isStaff(); }
 
     match /tournaments/{id} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isSignedIn() && (resource.data.createdBy == request.auth.uid || isStaff());
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if (isStaff() || isTournamentCreator(id)) && keepsCreatedBy();
       allow delete: if isAdmin();
     }
 
-    // Brackets + nodes: only the tournament creator or staff can write.
     match /brackets/{id} {
       allow read: if true;
-      allow write: if isSignedIn() &&
-        (isStaff() ||
-         isTournamentCreator(request.resource.data.tournamentId) ||
-         isTournamentCreator(resource.data.tournamentId));
-    }
-    match /bracketNodes/{id} {
-      allow read: if true;
-      allow write: if isSignedIn() &&
-        (isStaff() ||
-         isTournamentCreator(request.resource.data.tournamentId) ||
-         isTournamentCreator(resource.data.tournamentId));
+      allow create: if isStaff()
+        || isTournamentCreator(request.resource.data.tournamentId);
+      allow update: if isStaff()
+        || isTournamentCreator(resource.data.tournamentId);
+      allow delete: if isAdmin();
     }
 
-    // Matches: participants OR tournament creator can update.
-    // Participants are inferred via their registration's userId (client holds
-    // registrationId; we keep this permissive because we validate via
-    // validateMatchScore on the client). Creator/staff can always write.
+    match /bracketNodes/{id} {
+      allow read: if true;
+      allow create: if isStaff()
+        || isTournamentCreator(request.resource.data.tournamentId);
+      allow update: if isStaff()
+        || isTournamentCreator(resource.data.tournamentId);
+      allow delete: if isAdmin();
+    }
+
     match /matches/{id} {
       allow read: if true;
-      allow create: if isSignedIn() &&
-        (isStaff() ||
-         isTournamentCreator(request.resource.data.tournamentId));
-      allow update, delete: if isSignedIn() &&
-        (isStaff() ||
-         isTournamentCreator(resource.data.tournamentId) ||
-         // allow score-only updates by anyone signed in for now
-         (request.resource.data.keys().hasOnly([
-            "status", "completedAt", "winnerId", "updatedAt",
-            "participantAId", "participantBId",
-            "targetPoints", "winBy", "bestOf",
-            "scheduledAt", "courtId", "tournamentId", "bracketNodeId", "startedAt"
-          ])));
+      allow create: if isStaff()
+        || isTournamentCreator(request.resource.data.tournamentId);
+      allow update: if isStaff()
+        || isTournamentCreator(resource.data.tournamentId);
+      allow delete: if isAdmin();
     }
 
     match /matchGames/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isStaff();
     }
 
-    match /standings/{doc=**}     { allow read: if true; allow write: if isStaff() || isAdmin(); }
-    match /achievements/{doc=**}  { allow read: if true; allow write: if isSignedIn(); }
-    match /announcements/{doc=**} { allow read: if true; allow write: if isSignedIn(); }
-    match /trophies/{doc=**}      { allow read: if true; allow write: if isSignedIn(); }
+    match /standings/{doc=**} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /achievements/{doc=**} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /announcements/{doc=**} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    match /trophies/{doc=**} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
 
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if isSelf(userId) || isAdmin();
+      allow create: if isSafeUserCreate(userId) || isAdmin();
+      allow update: if isSafeUserUpdate(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /registrations/{id} {
       allow read: if true;
-      // Users register themselves; userId in payload must match auth uid.
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      // Self-withdraw OR tournament creator moderates.
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        isTournamentCreator(resource.data.tournamentId) ||
-        isStaff()
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if (
+        (isSignedIn() && resource.data.userId == request.auth.uid
+          && hasOnlyChanged(["status", "updatedAt"]))
+        || isStaff()
+        || isTournamentCreator(resource.data.tournamentId)
       );
-      allow delete: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || isStaff()
-      );
+      allow delete: if isStaff();
     }
 
     match /teams/{id} {
       allow read: if true;
-      allow create, update, delete: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isStaff()
+        || (isSignedIn() && resource.data.createdBy == request.auth.uid && keepsCreatedBy());
+      allow delete: if isStaff();
     }
 
-    // Private per-user notifications. Read by recipient; create by anyone signed in.
     match /notifications/{id} {
-      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
+      allow read, update, delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+      allow create: if isStaff();
     }
 
     match /playerAchievements/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isStaff();
     }
 
     match /auditLog/{id} {
       allow read: if isAdmin();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow write: if false;
     }
 
-    // ========== Ladder League (spec v4) ==========
-    // `seasons` and `venues` already readable above. Admin writes only.
     match /playDates/{id} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isSignedIn() && (resource.data.createdBy == request.auth.uid || isStaff());
+      allow create: if isStaff()
+        || (isSignedIn() && request.resource.data.createdBy == request.auth.uid);
+      allow update: if (isStaff()
+        || (isSignedIn() && resource.data.createdBy == request.auth.uid))
+        && keepsCreatedBy();
       allow delete: if isAdmin();
     }
+
     match /ladderSessions/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isStaff();
     }
+
     match /ladderCourts/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isStaff();
     }
+
     match /ladderMatches/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isStaff();
     }
+
     match /checkIns/{id} {
       allow read: if true;
-      // Self-check-in; the id is `${playDateId}__${userId}` and userId must match auth.
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || isStaff()
-      );
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow update: if isStaff();
       allow delete: if isStaff();
     }
+
     match /standingsSnapshots/{id} {
       allow read: if true;
-      allow write: if isStaff() || isAdmin();
+      allow write: if isStaff();
     }
+
     match /audits/{id} {
       allow read: if isAdmin();
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow write: if false;
     }
 
-    // ========== Player profiles + ELO ==========
-    // Player doc id == Firebase Auth uid. Anyone signed in (or any caller,
-    // for public profile reads) may read. Only the owner may write the
-    // editable identity fields; ELO / stats are updated by server-side
-    // match flows (writes allowed for any signed-in user because the
-    // computation is validated client-side via validateMatchScore and
-    // applyMatchEloDeltas — to be tightened when Cloud Functions land).
     match /players/{uid} {
       allow read: if true;
-      allow create: if isSignedIn() && request.auth.uid == uid
-        && request.resource.data.userId == uid;
-      allow update: if isSignedIn() && (
-        request.auth.uid == uid || isStaff() ||
-        // allow ELO/stat writes from any signed-in user (match-flow writes).
-        request.resource.data.keys().hasOnly([
-          "elo", "eloPeak",
-          "stats", "stats.matches", "stats.wins", "stats.losses",
-          "stats.pointsFor", "stats.pointsAgainst", "stats.updatedAt",
-          "updatedAt"
-        ])
-      );
+      allow create: if isSafePlayerCreate(uid) || isAdmin();
+      allow update: if isSafePlayerUpdate(uid) || isAdmin();
       allow delete: if isAdmin();
     }
+
     match /eloEvents/{id} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow write: if false;
     }
 
-    // ========== RBAC Collections ==========
-
-    // clubs: public read; creation requires signed-in (submitClubCreation uses
-    // writeBatch — the userRoles doc is written in the same batch).
-    // Update: only the club's creator or a SiteAdmin.
-    // Delete: SiteAdmin only.
     match /clubs/{clubId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isSignedIn() && (
-        resource.data.createdBy == request.auth.uid || isSiteAdmin()
-      );
-      allow delete: if isSiteAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == "pending";
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && resource.data.createdBy == request.auth.uid
+          && resource.data.status == "pending"
+          && request.resource.data.status == "pending"
+          && keepsCreatedBy());
+      allow delete: if isAdmin();
     }
 
-    // userRoles: owner reads their own roles; SiteAdmin reads/writes all.
-    // Any signed-in user can create a role doc for themselves (batch write from
-    // submitClubCreation). Deactivation (update) only via SiteAdmin or self.
     match /userRoles/{roleDocId} {
-      allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || isSiteAdmin()
-      );
-      allow create: if isSignedIn() && (
-        request.resource.data.userId == request.auth.uid || isSiteAdmin()
-      );
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || isSiteAdmin()
-      );
-      allow delete: if isSiteAdmin();
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update, delete: if isAdmin();
     }
 
-    // leagueMemberships: read by owner or SiteAdmin/ClubDirector; write by staff.
     match /leagueMemberships/{id} {
-      allow read: if isSignedIn() && (
-        resource.data.userId == request.auth.uid || isStaff()
-      );
-      allow create, update: if isSignedIn() && (
-        request.resource.data.userId == request.auth.uid || isStaff()
-      );
-      allow delete: if isStaff();
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isStaff());
+      allow create, update, delete: if isStaff();
     }
 
-    // roleEvents: immutable audit log. Anyone signed in can append; no updates/deletes.
     match /roleEvents/{id} {
-      allow read: if isSignedIn() && (
-        resource.data.actorId == request.auth.uid ||
-        resource.data.targetUserId == request.auth.uid ||
-        isSiteAdmin()
-      );
-      allow create: if isSignedIn();
-      allow update, delete: if false;
+      allow read: if isSignedIn()
+        && (resource.data.actorId == request.auth.uid
+          || resource.data.targetUserId == request.auth.uid
+          || isAdmin());
+      allow write: if false;
     }
 
     match /{document=**} {
