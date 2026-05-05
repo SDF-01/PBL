@@ -7,7 +7,7 @@ export type RoleKey =
   | "Player"
   | "ClubCreatorProvisional";
 
-export type ClubStatus = "pending" | "approved" | "rejected";
+export type ClubStatus = "pending" | "approved" | "rejected" | "archived";
 
 export type LeagueMembershipStatus = "active" | "inactive" | "waitlisted" | "removed";
 

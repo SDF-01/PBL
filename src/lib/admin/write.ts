@@ -8,6 +8,7 @@
 
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   query,
@@ -95,6 +96,76 @@ export async function setUserRoleWithAudit(
   });
 
   await batch.commit();
+}
+
+/** Soft-delete: mark club as archived and write an audit entry. */
+export async function archiveClub(
+  clubId: string,
+  clubName: string,
+  adminUid: string,
+): Promise<void> {
+  const database = db();
+  const batch = writeBatch(database);
+
+  batch.update(doc(database, COLLECTIONS.clubs, clubId), {
+    status: "archived",
+    updatedAt: serverTimestamp(),
+  });
+
+  batch.set(doc(collection(database, COLLECTIONS.auditLog)), {
+    actionType: "ClubArchived",
+    performedByUserId: adminUid,
+    targetType: "club",
+    targetId: clubId,
+    targetDisplayName: clubName,
+    createdAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+}
+
+/**
+ * Hard-delete: remove the club document, deactivate all associated role
+ * assignments, and write an audit entry. Leagues and memberships are left
+ * intact for historical reference.
+ */
+export async function deleteClub(
+  clubId: string,
+  clubName: string,
+  adminUid: string,
+): Promise<void> {
+  const database = db();
+
+  // Fetch all active userRoles scoped to this club.
+  const rolesSnap = await getDocs(
+    query(
+      collection(database, COLLECTIONS.userRoles),
+      where("clubId", "==", clubId),
+      where("active", "==", true),
+    ),
+  );
+
+  const batch = writeBatch(database);
+
+  // Deactivate every club-scoped role.
+  for (const d of rolesSnap.docs) {
+    batch.update(d.ref, { active: false });
+  }
+
+  // Write audit entry before deleting so the record exists.
+  batch.set(doc(collection(database, COLLECTIONS.auditLog)), {
+    actionType: "ClubDeleted",
+    performedByUserId: adminUid,
+    targetType: "club",
+    targetId: clubId,
+    targetDisplayName: clubName,
+    createdAt: serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  // Delete the club document last (outside the batch to avoid size limits).
+  await deleteDoc(doc(database, COLLECTIONS.clubs, clubId));
 }
 
 /**

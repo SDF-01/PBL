@@ -23,6 +23,12 @@ const STATUS_CONFIG = {
     label: "Not Approved",
     detail: "Your club proposal was not approved.",
   },
+  archived: {
+    Icon: XCircle,
+    tone: "neutral" as const,
+    label: "Archived",
+    detail: "This club has been archived by an administrator.",
+  },
 };
 
 interface PendingClubCardProps {

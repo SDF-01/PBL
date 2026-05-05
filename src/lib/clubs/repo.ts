@@ -136,3 +136,14 @@ export async function listApprovedClubs(): Promise<ClubDoc[]> {
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
 }
+
+export async function listArchivedClubs(): Promise<ClubDoc[]> {
+  if (!isFirebaseConfigured()) return [];
+  const q = query(
+    collection(db(), COLLECTIONS.clubs),
+    where("status", "==", "archived"),
+    orderBy("clubName", "asc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
+}
