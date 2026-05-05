@@ -21,7 +21,7 @@ const NAV = [
 ] as const;
 
 export function TopNav() {
-  const { isAdminMode } = useAdminMode();
+  const { canAccessAdmin } = useAdminMode();
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, provisionalClubs, loading } = usePermissions();
 
@@ -63,11 +63,12 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          {isAdminMode && <ModeToggle />}
+          {canAccessAdmin && <ModeToggle />}
           {isSiteAdmin && (
-            <Link href="/admin" className="hidden sm:block">
+            <Link href="/admin">
               <Button variant="outline" size="sm" className="border-ember-500/50 text-ember-400 hover:bg-ember-500/10 hover:text-ember-300">
-                <ShieldCheck className="h-3.5 w-3.5" /> Admin Console
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Admin Console</span>
               </Button>
             </Link>
           )}

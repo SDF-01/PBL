@@ -18,11 +18,7 @@
         "destination": "/clubs/manage/__fallback"
       },
       {
-        "source": "/clubs/!(my|create|manage)/**",
-        "destination": "/clubs/__fallback"
-      },
-      {
-        "source": "/clubs/!(my|create|manage)",
+        "source": "/clubs/**",
         "destination": "/clubs/__fallback"
       }
     ],

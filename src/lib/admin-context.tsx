@@ -15,10 +15,13 @@ const AdminModeContext = createContext<AdminModeContextType | undefined>(undefin
 
 export function AdminModeProvider({ children }: { children: React.ReactNode }) {
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const { isSiteAdmin, clubDirectorFor, leagueCoordinatorFor, loading } = usePermissions();
+  const { isSiteAdmin, clubDirectorFor, leagueCoordinatorFor, coordinatorClubIds, loading } = usePermissions();
 
   const canAccessAdmin =
-    isSiteAdmin || clubDirectorFor.length > 0 || leagueCoordinatorFor.length > 0;
+    isSiteAdmin ||
+    clubDirectorFor.length > 0 ||
+    leagueCoordinatorFor.length > 0 ||
+    coordinatorClubIds.length > 0;
 
   useEffect(() => {
     if (loading) return;

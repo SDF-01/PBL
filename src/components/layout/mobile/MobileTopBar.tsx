@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { SignInButton } from "@/components/ui/SignInButton";
+import { ModeToggle } from "@/components/ui/ModeToggle";
 import { Bell } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useAdminMode } from "@/lib/admin-context";
 import { subscribeNotifications } from "@/lib/firestore/repo";
 
 export function MobileTopBar() {
   const { user } = useAuth();
+  const { canAccessAdmin } = useAdminMode();
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
@@ -33,6 +36,7 @@ export function MobileTopBar() {
           </span>
         </Link>
         <div className="flex items-center gap-2">
+          {canAccessAdmin && <ModeToggle />}
           <Link
             href="/notifications"
             aria-label="Notifications"
