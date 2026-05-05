@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
@@ -38,12 +38,17 @@ import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
 export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const routeParams = useParams<{ clubId: string }>();
+  const pathname = usePathname();
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
 
-  // slugOrId is whatever appears in the URL — could be a Firestore doc ID or a slug
+  // useParams() may return "__fallback" when the fallback shell is served for a dynamic URL.
+  // usePathname() always reflects the real browser URL, so prefer it.
+  const pathnameSegment = pathname.split("/")[2];
   const slugOrId =
-    routeParams?.clubId && routeParams.clubId !== "__fallback"
+    pathnameSegment && pathnameSegment !== "__fallback"
+      ? pathnameSegment
+      : routeParams?.clubId && routeParams.clubId !== "__fallback"
       ? routeParams.clubId
       : fallbackId;
 
@@ -55,7 +60,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!slugOrId || slugOrId === "__fallback") return;
+    if (!slugOrId || slugOrId === "__fallback") { setLoading(false); return; }
     setLoading(true);
     (async () => {
       // Try direct doc-ID lookup first (fast path for existing links)
