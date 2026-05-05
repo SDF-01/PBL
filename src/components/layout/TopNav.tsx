@@ -11,7 +11,8 @@ import { usePermissions } from "@/lib/permissions/usePermissions";
 import { Building2, ShieldCheck } from "lucide-react";
 
 const NAV = [
-  { href: "/games",             label: "Games" },
+  { href: "/clubs",              label: "Clubs" },
+  { href: "/games",              label: "Games" },
   { href: "/ladder/check-in",   label: "Check-In" },
   { href: "/ladder/play-dates", label: "Play Dates" },
   { href: "/players",           label: "Leaderboard" },
