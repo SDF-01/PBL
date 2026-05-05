@@ -78,7 +78,7 @@ export function AppSidebar() {
             Admin
           </div>
           <ul className="space-y-0.5">
-            {navLink("/admin", "Admin Hub", ShieldCheck)}
+            {navLink("/admin", "Admin Console", ShieldCheck)}
             {navLink("/leagues/create", "New League", ListChecks)}
             {isAdminView && navLink("/admin/clubs", "Club Approvals", Building2)}
             {isAdminView && navLink("/admin/users", "Manage Users", UserCog)}
