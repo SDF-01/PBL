@@ -35,6 +35,19 @@ const ROLE_KEY_TO_LEGACY: Partial<Record<RoleKey, string>> = {
   LeagueCoordinator:  "LEAGUE_COORDINATOR",
 };
 
+// Higher number = higher privilege. Used to prevent accidental downgrades.
+const LEGACY_ROLE_RANK: Record<string, number> = {
+  SITE_ADMIN:         4,
+  CLUB_ADMIN:         3,
+  LEAGUE_COORDINATOR: 2,
+  PLAYER:             1,
+};
+
+/** Returns true only if newRole outranks the currentRole (safe to write). */
+function outranks(newRole: string, currentRole: string | null | undefined): boolean {
+  return (LEGACY_ROLE_RANK[newRole] ?? 0) > (LEGACY_ROLE_RANK[currentRole ?? ""] ?? 0);
+}
+
 export async function submitClubCreation(
   userId: string,
   input: CreateClubInput,
@@ -127,9 +140,8 @@ export async function approveClub(
     active: true,
   });
 
-  // Elevate primary role so Firestore rules recognise the new privilege level.
-  // Skip if the creator already has a higher role (SITE_ADMIN outranks CLUB_ADMIN).
-  if (creatorCurrentRole !== "SITE_ADMIN") {
+  // Only elevate the primary role field — never overwrite a higher privilege level.
+  if (outranks("CLUB_ADMIN", creatorCurrentRole)) {
     batch.update(doc(database, COLLECTIONS.users, creatorUserId), {
       role: "CLUB_ADMIN",
       updatedAt: serverTimestamp(),
@@ -227,10 +239,18 @@ export async function assignRole(
   assignedBy: string,
 ): Promise<void> {
   const database = db();
+
+  const legacyRole = ROLE_KEY_TO_LEGACY[roleId];
+  const currentSnap = legacyRole
+    ? await getDoc(doc(database, COLLECTIONS.users, userId))
+    : null;
+  const currentRole = currentSnap?.exists()
+    ? (currentSnap.data() as { role?: string }).role
+    : null;
+
   const batch = writeBatch(database);
 
-  const roleRef = doc(collection(database, COLLECTIONS.userRoles));
-  batch.set(roleRef, {
+  batch.set(doc(collection(database, COLLECTIONS.userRoles)), {
     userId,
     roleId,
     clubId,
@@ -240,10 +260,8 @@ export async function assignRole(
     active: true,
   });
 
-  // Keep users/{uid}.role in sync so Firestore security rules recognise the
-  // new privilege level (rules check userRole() which reads this field).
-  const legacyRole = ROLE_KEY_TO_LEGACY[roleId];
-  if (legacyRole) {
+  // Only update users/{uid}.role if the new role outranks the current one.
+  if (legacyRole && outranks(legacyRole, currentRole)) {
     batch.update(doc(database, COLLECTIONS.users, userId), {
       role: legacyRole,
       updatedAt: serverTimestamp(),
