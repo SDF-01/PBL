@@ -25,6 +25,7 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import {
   countClubPlayers,
   getClubById,
+  getClubBySlug,
   getClubFacility,
   listClubCoordinators,
   listClubLeagues,
@@ -40,7 +41,8 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
 
-  const clubId =
+  // slugOrId is whatever appears in the URL — could be a Firestore doc ID or a slug
+  const slugOrId =
     routeParams?.clubId && routeParams.clubId !== "__fallback"
       ? routeParams.clubId
       : fallbackId;
@@ -53,28 +55,36 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!clubId || clubId === "__fallback") return;
-    Promise.all([
-      getClubById(clubId),
-      listClubLeagues(clubId),
-      listClubCoordinators(clubId),
-      getClubFacility(clubId),
-    ])
-      .then(async ([c, l, coords, f]) => {
-        setClub(c);
-        setLeagues(l);
-        setCoordinators(coords);
-        setFacility(f);
-        const count = await countClubPlayers(l.map((x) => x.id));
-        setPlayerCount(count);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [clubId]);
+    if (!slugOrId || slugOrId === "__fallback") return;
+    setLoading(true);
+    (async () => {
+      // Try direct doc-ID lookup first (fast path for existing links)
+      let c = await getClubById(slugOrId);
+      // Fall back to slug lookup for human-readable URLs
+      if (!c) c = await getClubBySlug(slugOrId);
+      if (!c) { setLoading(false); return; }
 
-  const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(clubId));
+      setClub(c);
+      const realId = c.id;
+      const [l, coords, f] = await Promise.all([
+        listClubLeagues(realId),
+        listClubCoordinators(realId),
+        getClubFacility(realId),
+      ]);
+      setLeagues(l);
+      setCoordinators(coords);
+      setFacility(f);
+      const count = await countClubPlayers(l.map((x) => x.id));
+      setPlayerCount(count);
+      setLoading(false);
+    })().catch((e) => { console.error(e); setLoading(false); });
+  }, [slugOrId]);
 
-  if (loading || (clubId === "__fallback" && !club)) {
+  // Always use the real Firestore doc ID for permission checks and manage links
+  const realClubId = club?.id ?? slugOrId;
+  const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(realClubId));
+
+  if (loading || (slugOrId === "__fallback" && !club)) {
     return (
       <ResponsiveShell desktopChromeless>
         <main className="container py-10 max-w-4xl flex justify-center">
@@ -140,7 +150,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
           {/* Director actions */}
           {isDirector && (
             <div className="flex flex-col gap-2 shrink-0">
-              <Link href={`/clubs/manage/${clubId}`}>
+              <Link href={`/clubs/manage/${realClubId}`}>
                 <Button size="sm" className="w-full sm:w-auto">
                   <Settings className="h-3.5 w-3.5" /> Manage Club
                 </Button>
@@ -190,7 +200,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                   <Layers className="h-4 w-4 text-ember-400" /> Leagues
                 </h2>
                 {isDirector && (
-                  <Link href={`/clubs/manage/${clubId}?section=leagues`}>
+                  <Link href={`/clubs/manage/${realClubId}?section=leagues`}>
                     <Button size="sm" variant="ghost" className="text-ember-400">
                       + Add League
                     </Button>
@@ -207,7 +217,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                   <Layers className="h-6 w-6 text-ash-600 mx-auto" />
                   <p className="text-ash-500 text-sm">No leagues running yet.</p>
                   {isDirector && (
-                    <Link href={`/clubs/manage/${clubId}?section=leagues`}>
+                    <Link href={`/clubs/manage/${realClubId}?section=leagues`}>
                       <Button size="sm" variant="outline" className="mt-1">Create First League</Button>
                     </Link>
                   )}
@@ -234,7 +244,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                             <Button size="sm" variant="outline">View</Button>
                           </Link>
                           {isDirector && (
-                            <Link href={`/clubs/manage/${clubId}?section=leagues`}>
+                            <Link href={`/clubs/manage/${realClubId}?section=leagues`}>
                               <Button size="sm" variant="ghost">
                                 <Settings className="h-3.5 w-3.5" />
                               </Button>
@@ -256,7 +266,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                     <MapPin className="h-4 w-4 text-ember-400" /> Facilities
                   </h2>
                   {isDirector && (
-                    <Link href={`/clubs/manage/${clubId}?section=facilities`}>
+                    <Link href={`/clubs/manage/${realClubId}?section=facilities`}>
                       <Button size="sm" variant="ghost" className="text-ember-400">Edit</Button>
                     </Link>
                   )}
@@ -320,7 +330,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                 ) : (
                   <Panel variant="base" padding="md" className="text-center">
                     <p className="text-ash-500 text-sm">No facility info added yet.</p>
-                    <Link href={`/clubs/manage/${clubId}?section=facilities`}>
+                    <Link href={`/clubs/manage/${realClubId}?section=facilities`}>
                       <Button size="sm" variant="outline" className="mt-2">Add Facility Info</Button>
                     </Link>
                   </Panel>
@@ -382,7 +392,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                   ))}
                 </div>
                 {isDirector && (
-                  <Link href={`/clubs/manage/${clubId}?section=coordinators`}>
+                  <Link href={`/clubs/manage/${realClubId}?section=coordinators`}>
                     <Button size="sm" variant="ghost" className="w-full text-ember-400">
                       Manage Coordinators
                     </Button>
@@ -396,17 +406,17 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
               <Panel variant="quest" padding="md" className="space-y-2">
                 <h3 className="heading-fantasy text-ash-300 text-xs uppercase tracking-widest">Quick Access</h3>
                 <div className="grid gap-1.5">
-                  <Link href={`/clubs/manage/${clubId}?section=leagues`}>
+                  <Link href={`/clubs/manage/${realClubId}?section=leagues`}>
                     <Button size="sm" variant="ghost" className="w-full justify-start text-ash-300 hover:text-ash-100">
                       <Layers className="h-3.5 w-3.5 text-ember-400" /> Leagues
                     </Button>
                   </Link>
-                  <Link href={`/clubs/manage/${clubId}?section=facilities`}>
+                  <Link href={`/clubs/manage/${realClubId}?section=facilities`}>
                     <Button size="sm" variant="ghost" className="w-full justify-start text-ash-300 hover:text-ash-100">
                       <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facilities
                     </Button>
                   </Link>
-                  <Link href={`/clubs/manage/${clubId}?section=coordinators`}>
+                  <Link href={`/clubs/manage/${realClubId}?section=coordinators`}>
                     <Button size="sm" variant="ghost" className="w-full justify-start text-ash-300 hover:text-ash-100">
                       <Users className="h-3.5 w-3.5 text-ember-400" /> Coordinators
                     </Button>

@@ -29,6 +29,8 @@ export interface UserRoleDoc {
 export interface ClubDoc {
   id: string;
   clubName: string;
+  /** URL-safe slug derived from clubName, e.g. "my-club-name". */
+  slug?: string;
   location: string;
   description: string;
   logoUrl: string | null;

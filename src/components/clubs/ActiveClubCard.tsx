@@ -11,7 +11,7 @@ interface ActiveClubCardProps {
 
 export function ActiveClubCard({ club }: ActiveClubCardProps) {
   const manageBase = `/clubs/manage/${club.id}`;
-  const publicBase = `/clubs/${club.id}`;
+  const publicBase = `/clubs/${club.slug ?? club.id}`;
 
   return (
     <Panel variant="hud" padding="lg" className="space-y-4">

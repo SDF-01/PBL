@@ -10,6 +10,16 @@ export async function getClubById(clubId: string): Promise<ClubDoc | null> {
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as ClubDoc) : null;
 }
 
+export async function getClubBySlug(slug: string): Promise<ClubDoc | null> {
+  if (!isFirebaseConfigured()) return null;
+  const snap = await getDocs(
+    query(collection(db(), COLLECTIONS.clubs), where("slug", "==", slug), limit(1)),
+  );
+  if (snap.empty) return null;
+  const d = snap.docs[0]!;
+  return { id: d.id, ...d.data() } as ClubDoc;
+}
+
 export async function listClubLeagues(clubId: string): Promise<LeagueDoc[]> {
   if (!isFirebaseConfigured()) return [];
   const snap = await getDocs(

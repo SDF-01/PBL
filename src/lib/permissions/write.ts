@@ -18,6 +18,15 @@ import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { CreateClubInput, RoleKey } from "./types";
 
+export function toSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
 // Maps roleId → the legacy users/{uid}.role string recognised by Firestore rules.
 const ROLE_KEY_TO_LEGACY: Partial<Record<RoleKey, string>> = {
   SiteAdmin:          "SITE_ADMIN",
@@ -35,6 +44,7 @@ export async function submitClubCreation(
   const clubRef = doc(collection(database, COLLECTIONS.clubs));
   batch.set(clubRef, {
     clubName: input.clubName,
+    slug: toSlug(input.clubName),
     location: input.location,
     description: input.description,
     logoUrl: input.logoUrl ?? null,

@@ -214,7 +214,7 @@ export default function ClubsPage() {
 
 function ClubCard({ club }: { club: ClubWithMeta }) {
   return (
-    <Link href={`/clubs/${club.id}`} className="group block h-full">
+    <Link href={`/clubs/${club.slug ?? club.id}`} className="group block h-full">
       <Panel
         variant="hud"
         padding="lg"
