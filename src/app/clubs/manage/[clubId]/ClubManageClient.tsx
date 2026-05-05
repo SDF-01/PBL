@@ -23,6 +23,7 @@ import {
   Send,
   Trash2,
   Trophy,
+  UserCheck,
   UserPlus,
   Users,
   Wrench,
@@ -524,22 +525,148 @@ function OverviewSection({
 
 type ToastFn = (message: string, variant?: "success" | "error" | "info") => void;
 
+function getDayOfWeek(dateStr: string): string {
+  if (!dateStr) return "";
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const d = new Date(dateStr + "T12:00:00");
+  return days[d.getDay()] ?? "";
+}
+
+function calcSessionCount(first: string, last: string): number | null {
+  if (!first || !last) return null;
+  const firstMs = new Date(first + "T12:00:00").getTime();
+  const lastMs = new Date(last + "T12:00:00").getTime();
+  if (lastMs < firstMs) return null;
+  return Math.floor((lastMs - firstMs) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}
+
+function UserLookup({
+  label,
+  onSelect,
+  onClear,
+}: {
+  label: string;
+  onSelect: (id: string, name: string) => void;
+  onClear: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "searching" | "found" | "notfound">("idle");
+  const [found, setFound] = useState<{ uid: string; displayName: string } | null>(null);
+
+  async function handleLookup() {
+    if (!email.trim()) return;
+    setStatus("searching");
+    try {
+      const u = await getUserByEmail(email.trim());
+      if (u) {
+        setFound({ uid: u.uid, displayName: u.displayName });
+        setStatus("found");
+        onSelect(u.uid, u.displayName);
+      } else {
+        setFound(null);
+        setStatus("notfound");
+      }
+    } catch {
+      setFound(null);
+      setStatus("notfound");
+    }
+  }
+
+  function handleClear() {
+    setEmail(""); setFound(null); setStatus("idle"); onClear();
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-ash-400 text-xs block">{label}</label>
+      {found ? (
+        <div className="flex items-center justify-between gap-2 rounded-pixel bg-obsidian-700 border border-success-500/40 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-3.5 w-3.5 text-success-400 shrink-0" />
+            <span className="text-ash-100 text-sm">{found.displayName}</span>
+          </div>
+          <button type="button" onClick={handleClear} className="text-ash-500 hover:text-ash-300 text-xs">Clear</button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <input
+            className="flex-1 rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+            placeholder="Email address"
+            type="email"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); if (status !== "idle") setStatus("idle"); }}
+            onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+          />
+          <Button size="sm" variant="outline" onClick={handleLookup} disabled={status === "searching" || !email.trim()}>
+            {status === "searching" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Find"}
+          </Button>
+        </div>
+      )}
+      {status === "notfound" && (
+        <p className="text-crimson-400 text-xs">No account found for that email.</p>
+      )}
+    </div>
+  );
+}
+
 function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
+  const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Basic
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [format, setFormat] = useState("Doubles Ladder");
+
+  // Location
+  const [venueId, setVenueId] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
 
+  // Schedule
+  const [registrationOpenDate, setRegistrationOpenDate] = useState("");
+  const [registrationCloseDate, setRegistrationCloseDate] = useState("");
+  const [firstSessionDate, setFirstSessionDate] = useState("");
+  const [lastSessionDate, setLastSessionDate] = useState("");
+
+  // Staff
+  const [directorId, setDirectorId] = useState("");
+  const [directorName, setDirectorName] = useState("");
+  const [coordinatorId, setCoordinatorId] = useState("");
+  const [coordinatorName, setCoordinatorName] = useState("");
+
   useEffect(() => {
-    listClubLeagues(clubId)
-      .then((l) => { setLeagues(l); setLoading(false); })
+    Promise.all([listClubLeagues(clubId), listVenues(clubId)])
+      .then(([l, v]) => { setLeagues(l); setVenues(v); setLoading(false); })
       .catch(() => setLoading(false));
   }, [clubId]);
+
+  const selectedVenue = venues.find((v) => v.id === venueId);
+  const dayOfWeek = getDayOfWeek(firstSessionDate);
+  const sessionCount = calcSessionCount(firstSessionDate, lastSessionDate);
+
+  function handleVenueChange(id: string) {
+    setVenueId(id);
+    const v = venues.find((x) => x.id === id);
+    if (v?.address) {
+      const parts = v.address.split(",");
+      if (parts.length >= 3) {
+        setCity(parts[parts.length - 2]?.trim() ?? "");
+        setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
+      }
+    }
+  }
+
+  function resetForm() {
+    setName(""); setDescription(""); setFormat("Doubles Ladder");
+    setVenueId(""); setCity(""); setState("");
+    setRegistrationOpenDate(""); setRegistrationCloseDate("");
+    setFirstSessionDate(""); setLastSessionDate("");
+    setDirectorId(""); setDirectorName(""); setCoordinatorId(""); setCoordinatorName("");
+  }
 
   async function handleCreate() {
     if (!name.trim()) { toast("League name is required.", "error"); return; }
@@ -552,6 +679,19 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
         city: city.trim() || undefined,
         state: state.trim() || undefined,
         leagueFormat: format,
+        venueId: venueId || undefined,
+        venueName: selectedVenue?.name,
+        venueAddress: selectedVenue?.address,
+        registrationOpenDate: registrationOpenDate || undefined,
+        registrationCloseDate: registrationCloseDate || undefined,
+        firstSessionDate: firstSessionDate || undefined,
+        lastSessionDate: lastSessionDate || undefined,
+        sessionDayOfWeek: dayOfWeek || undefined,
+        sessionCount: sessionCount ?? undefined,
+        directorId: directorId || undefined,
+        directorName: directorName || undefined,
+        coordinatorId: coordinatorId || undefined,
+        coordinatorName: coordinatorName || undefined,
       });
       setLeagues((prev) => [{
         id, orgId: clubId, clubId, name: name.trim(),
@@ -559,7 +699,7 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
         city: city.trim() || undefined, state: state.trim() || undefined,
         league_format: format, active: true, createdBy: userId,
       }, ...prev]);
-      setName(""); setDescription(""); setCity(""); setState(""); setFormat("Doubles Ladder");
+      resetForm();
       setShowForm(false);
       toast(`"${name.trim()}" league created.`, "success");
     } catch (err) {
@@ -568,6 +708,8 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
       setSaving(false);
     }
   }
+
+  const inputCls = "w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500";
 
   return (
     <div className="space-y-4">
@@ -579,27 +721,106 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
       </div>
 
       {showForm && (
-        <Panel variant="quest" padding="lg" className="space-y-3">
-          <h3 className="heading-fantasy text-ash-100 text-sm">Create League</h3>
-          <div className="space-y-2">
-            <input className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" placeholder="League name *" value={name} onChange={(e) => setName(e.target.value)} />
-            <textarea className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none" placeholder="Description (optional)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-            <div className="grid grid-cols-2 gap-2">
-              <input className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
-              <input className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
-            </div>
-            <select className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500" value={format} onChange={(e) => setFormat(e.target.value)}>
+        <Panel variant="quest" padding="lg" className="space-y-5">
+          <h3 className="heading-fantasy text-ash-100">Create League</h3>
+
+          {/* Basic Info */}
+          <div className="space-y-3">
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium border-b border-ash-800 pb-1">Basic Info</p>
+            <input className={inputCls} placeholder="League name *" value={name} onChange={(e) => setName(e.target.value)} />
+            <textarea className={`${inputCls} resize-none`} placeholder="Description (optional)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+            <select className={inputCls} value={format} onChange={(e) => setFormat(e.target.value)}>
               <option>Doubles Ladder</option>
               <option>Singles Ladder</option>
               <option>Mixed Doubles Ladder</option>
               <option>Round Robin</option>
             </select>
           </div>
-          <div className="flex gap-2">
+
+          {/* Location */}
+          <div className="space-y-3">
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium border-b border-ash-800 pb-1">Location</p>
+            {venues.length > 0 && (
+              <div>
+                <label className="text-ash-500 text-xs mb-1 block">Venue (court location)</label>
+                <select className={inputCls} value={venueId} onChange={(e) => handleVenueChange(e.target.value)}>
+                  <option value="">— No venue —</option>
+                  {venues.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                {selectedVenue?.address && (
+                  <p className="text-ash-500 text-xs mt-1 flex items-center gap-1">
+                    <MapPin className="h-3 w-3 shrink-0" />{selectedVenue.address}
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <input className={inputCls} placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+              <input className={inputCls} placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Schedule */}
+          <div className="space-y-3">
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium border-b border-ash-800 pb-1">Schedule</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-ash-500 text-xs block">Registration Opens</span>
+                <input type="date" className={inputCls} value={registrationOpenDate} onChange={(e) => setRegistrationOpenDate(e.target.value)} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-ash-500 text-xs block">Registration Closes</span>
+                <input type="date" className={inputCls} value={registrationCloseDate} onChange={(e) => setRegistrationCloseDate(e.target.value)} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-ash-500 text-xs block">First Session</span>
+                <input type="date" className={inputCls} value={firstSessionDate} onChange={(e) => setFirstSessionDate(e.target.value)} />
+              </label>
+              <label className="space-y-1">
+                <span className="text-ash-500 text-xs block">Last Session</span>
+                <input type="date" className={inputCls} value={lastSessionDate} onChange={(e) => setLastSessionDate(e.target.value)} />
+              </label>
+            </div>
+            {(dayOfWeek || sessionCount !== null) && (
+              <div className="flex gap-3">
+                {dayOfWeek && (
+                  <div className="flex-1 bg-obsidian-800 border border-ash-700 rounded-pixel px-3 py-2 text-center">
+                    <p className="text-ash-500 text-[10px] uppercase tracking-wide">Day of Week</p>
+                    <p className="heading-fantasy text-ember-400 text-sm mt-0.5">{dayOfWeek}</p>
+                  </div>
+                )}
+                {sessionCount !== null && (
+                  <div className="flex-1 bg-obsidian-800 border border-ash-700 rounded-pixel px-3 py-2 text-center">
+                    <p className="text-ash-500 text-[10px] uppercase tracking-wide">Sessions</p>
+                    <p className="heading-fantasy text-ember-400 text-sm mt-0.5">{sessionCount}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Staff */}
+          <div className="space-y-3">
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium border-b border-ash-800 pb-1">Staff</p>
+            <UserLookup
+              label="League Director"
+              onSelect={(id, n) => { setDirectorId(id); setDirectorName(n); }}
+              onClear={() => { setDirectorId(""); setDirectorName(""); }}
+            />
+            <UserLookup
+              label="League Coordinator"
+              onSelect={(id, n) => { setCoordinatorId(id); setCoordinatorName(n); }}
+              onClear={() => { setCoordinatorId(""); setCoordinatorName(""); }}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
             <Button size="sm" onClick={handleCreate} disabled={saving}>
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Create League
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button size="sm" variant="outline" onClick={() => { resetForm(); setShowForm(false); }}>Cancel</Button>
           </div>
         </Panel>
       )}
