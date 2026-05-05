@@ -2,20 +2,131 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, ShieldAlert } from "lucide-react";
+import {
+  ListChecks,
+  ShieldAlert,
+  MapPin,
+  Calendar,
+  Users,
+  Search,
+  CheckCircle,
+  X,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { getClubById, listUserClubs } from "@/lib/clubs/repo";
+import { getClubById, listUserClubs, getUserByEmail } from "@/lib/clubs/repo";
+import { listVenues } from "@/lib/ladder/repo";
 import { createLeague, type CreateLeagueInput } from "@/lib/leagues/write";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type { ClubDoc } from "@/lib/permissions/types";
+import type { VenueDoc } from "@/lib/firestore/types";
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const FORMATS = ["Doubles Ladder", "Singles Ladder", "Mixed Doubles Ladder", "Round Robin", "Tournament"];
 
 const fieldCls =
   "w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100 placeholder:text-ash-600 focus:outline-none focus:border-ember-500";
+
+function getDayOfWeek(dateStr: string): string {
+  if (!dateStr) return "";
+  return DAYS[new Date(dateStr + "T00:00:00").getDay()] ?? "";
+}
+
+function calculateSessionCount(first: string, last: string): number {
+  if (!first || !last) return 0;
+  const d1 = new Date(first + "T00:00:00").getTime();
+  const d2 = new Date(last + "T00:00:00").getTime();
+  if (d2 < d1) return 0;
+  return Math.floor((d2 - d1) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}
+
+interface ResolvedUser {
+  uid: string;
+  displayName: string;
+  email: string;
+}
+
+function UserLookup({
+  label,
+  resolved,
+  onResolve,
+  onClear,
+}: {
+  label: string;
+  resolved: ResolvedUser | null;
+  onResolve: (u: ResolvedUser) => void;
+  onClear: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  async function handleSearch() {
+    if (!email.trim()) return;
+    setSearching(true);
+    setNotFound(false);
+    try {
+      const found = await getUserByEmail(email.trim());
+      if (found) {
+        onResolve(found);
+        setEmail("");
+      } else {
+        setNotFound(true);
+      }
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  if (resolved) {
+    return (
+      <div className="flex items-center gap-2 p-2.5 rounded-pixel bg-obsidian-800 border border-obsidian-500">
+        <CheckCircle className="h-4 w-4 text-success-400 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-ash-100 text-sm font-medium truncate">{resolved.displayName}</p>
+          <p className="text-ash-500 text-xs truncate">{resolved.email}</p>
+        </div>
+        <button type="button" onClick={onClear} className="text-ash-500 hover:text-ash-200 shrink-0">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setNotFound(false); }}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
+          placeholder={`Search ${label} by email…`}
+          className={fieldCls}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={handleSearch}
+          disabled={searching || !email.trim()}
+        >
+          <Search className="h-3.5 w-3.5" />
+          {searching ? "…" : "Find"}
+        </Button>
+      </div>
+      {notFound && (
+        <p className="text-crimson-400 text-xs">No account found for that email.</p>
+      )}
+    </div>
+  );
+}
 
 export default function LeagueCreatePage() {
   const router = useRouter();
@@ -26,23 +137,44 @@ export default function LeagueCreatePage() {
 
   const [approvedClubs, setApprovedClubs] = useState<ClubDoc[]>([]);
   const [clubsLoading, setClubsLoading] = useState(true);
+  const [venues, setVenues] = useState<VenueDoc[]>([]);
 
+  // Basic
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [clubId, setClubId] = useState("");
+  const [leagueFormat, setLeagueFormat] = useState("Doubles Ladder");
+
+  // Location
+  const [venueId, setVenueId] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
-  const [leagueFormat, setLeagueFormat] = useState("Doubles Ladder");
+
+  // Schedule
+  const [registrationOpenDate, setRegistrationOpenDate] = useState("");
+  const [registrationCloseDate, setRegistrationCloseDate] = useState("");
+  const [firstSessionDate, setFirstSessionDate] = useState("");
+  const [lastSessionDate, setLastSessionDate] = useState("");
+
+  // Staff
+  const [director, setDirector] = useState<ResolvedUser | null>(null);
+  const [coordinator, setCoordinator] = useState<ResolvedUser | null>(null);
+
+  // UI
+  const [openSection, setOpenSection] = useState<"location" | "schedule" | "staff" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const dayOfWeek = getDayOfWeek(firstSessionDate);
+  const sessionCount = calculateSessionCount(firstSessionDate, lastSessionDate);
+  const selectedVenue = venues.find((v) => v.id === venueId);
 
   useEffect(() => {
     if (!user || !canCreate || !isFirebaseConfigured()) {
       setClubsLoading(false);
       return;
     }
-    // Merge clubs created by user with clubs where user was assigned as director.
     const directorIds = [...new Set([...clubDirectorFor, ...coordinatorClubIds])];
     Promise.all([
       listUserClubs(user.uid),
@@ -61,11 +193,26 @@ export default function LeagueCreatePage() {
       .finally(() => setClubsLoading(false));
   }, [user, canCreate]);
 
+  // Load venues when club changes
+  useEffect(() => {
+    if (!clubId || !isFirebaseConfigured()) { setVenues([]); setVenueId(""); return; }
+    listVenues(clubId).then((v) => {
+      setVenues(v);
+      setVenueId("");
+    }).catch(() => setVenues([]));
+  }, [clubId]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
     if (!name.trim()) { setError("League name is required."); return; }
     if (!clubId) { setError("Select a club for this league."); return; }
+    if (firstSessionDate && lastSessionDate && lastSessionDate < firstSessionDate) {
+      setError("Last session date must be on or after the first session date."); return;
+    }
+    if (registrationCloseDate && registrationOpenDate && registrationCloseDate < registrationOpenDate) {
+      setError("Registration close date must be on or after the open date."); return;
+    }
 
     setSubmitting(true);
     setError(null);
@@ -77,6 +224,19 @@ export default function LeagueCreatePage() {
         city: city.trim() || undefined,
         state: state.trim() || undefined,
         leagueFormat: leagueFormat.trim() || undefined,
+        venueId: venueId || undefined,
+        venueName: selectedVenue?.name || undefined,
+        venueAddress: selectedVenue?.address || undefined,
+        registrationOpenDate: registrationOpenDate || undefined,
+        registrationCloseDate: registrationCloseDate || undefined,
+        firstSessionDate: firstSessionDate || undefined,
+        lastSessionDate: lastSessionDate || undefined,
+        sessionDayOfWeek: dayOfWeek || undefined,
+        sessionCount: sessionCount > 0 ? sessionCount : undefined,
+        directorId: director?.uid,
+        directorName: director?.displayName,
+        coordinatorId: coordinator?.uid,
+        coordinatorName: coordinator?.displayName,
       };
       const leagueId = await createLeague(user.uid, input);
       setSuccess(true);
@@ -105,12 +265,8 @@ export default function LeagueCreatePage() {
           <Panel variant="quest" padding="lg" className="text-center space-y-3">
             <ShieldAlert className="h-8 w-8 text-crimson-500 mx-auto" />
             <h2 className="heading-fantasy text-ash-100 text-base">Club Director Required</h2>
-            <p className="text-ash-400 text-sm">
-              You need an approved club to create a league.
-            </p>
-            <Button size="sm" onClick={() => router.push("/clubs/create")}>
-              Create a Club
-            </Button>
+            <p className="text-ash-400 text-sm">You need an approved club to create a league.</p>
+            <Button size="sm" onClick={() => router.push("/clubs/create")}>Create a Club</Button>
           </Panel>
         </main>
       </ResponsiveShell>
@@ -124,12 +280,8 @@ export default function LeagueCreatePage() {
           <Panel variant="quest" padding="lg" className="text-center space-y-3">
             <ListChecks className="h-8 w-8 text-ash-500 mx-auto" />
             <h2 className="heading-fantasy text-ash-100 text-base">No Approved Clubs</h2>
-            <p className="text-ash-400 text-sm">
-              Your club submission is pending approval. You can create a league once approved.
-            </p>
-            <Button size="sm" variant="outline" onClick={() => router.push("/clubs/my")}>
-              View Club Status
-            </Button>
+            <p className="text-ash-400 text-sm">Your club is pending approval. You can create a league once approved.</p>
+            <Button size="sm" variant="outline" onClick={() => router.push("/clubs/my")}>View Club Status</Button>
           </Panel>
         </main>
       </ResponsiveShell>
@@ -150,6 +302,43 @@ export default function LeagueCreatePage() {
     );
   }
 
+  function SectionHeader({
+    id,
+    icon,
+    title,
+    subtitle,
+    filled,
+  }: {
+    id: typeof openSection;
+    icon: React.ReactNode;
+    title: string;
+    subtitle?: string;
+    filled?: boolean;
+  }) {
+    const isOpen = openSection === id;
+    return (
+      <button
+        type="button"
+        onClick={() => setOpenSection(isOpen ? null : id)}
+        className="w-full flex items-center gap-3 text-left"
+      >
+        <div className={`p-2 rounded-pixel shrink-0 ${filled ? "bg-ember-500/20 text-ember-400" : "bg-obsidian-700 text-ash-500"}`}>
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${filled ? "text-ash-100" : "text-ash-300"}`}>{title}</p>
+          {subtitle && <p className="text-ash-500 text-xs truncate">{subtitle}</p>}
+        </div>
+        {filled && <RuneChip tone="success" className="text-[9px] shrink-0">Set</RuneChip>}
+        {isOpen ? <ChevronUp className="h-4 w-4 text-ash-500 shrink-0" /> : <ChevronDown className="h-4 w-4 text-ash-500 shrink-0" />}
+      </button>
+    );
+  }
+
+  const locationFilled = !!(venueId || city || state);
+  const scheduleFilled = !!(firstSessionDate && lastSessionDate);
+  const staffFilled = !!(director || coordinator);
+
   return (
     <ResponsiveShell desktopChromeless>
       <main className="container py-6 md:py-10 space-y-6 max-w-xl">
@@ -161,8 +350,12 @@ export default function LeagueCreatePage() {
           </p>
         </div>
 
-        <Panel variant="quest" padding="lg">
-          <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+
+          {/* ── Section 1: Basic Info ── */}
+          <Panel variant="quest" padding="lg" className="space-y-4">
+            <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Basic Info</h2>
+
             <label className="text-xs text-ash-400 space-y-1 block">
               <span>Club <span className="text-crimson-500">*</span></span>
               <select
@@ -190,63 +383,225 @@ export default function LeagueCreatePage() {
             </label>
 
             <label className="text-xs text-ash-400 space-y-1 block">
+              <span>Format</span>
+              <select
+                value={leagueFormat}
+                onChange={(e) => setLeagueFormat(e.target.value)}
+                className={fieldCls}
+              >
+                {FORMATS.map((f) => <option key={f}>{f}</option>)}
+              </select>
+            </label>
+
+            <label className="text-xs text-ash-400 space-y-1 block">
               <span>Description</span>
               <textarea
                 className={fieldCls}
-                rows={3}
+                rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief description of the league…"
               />
             </label>
+          </Panel>
 
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs text-ash-400 space-y-1 block">
-                <span>City</span>
-                <input
-                  type="text"
-                  className={fieldCls}
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="Austin"
-                />
-              </label>
-              <label className="text-xs text-ash-400 space-y-1 block">
-                <span>State</span>
-                <input
-                  type="text"
-                  className={fieldCls}
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  placeholder="TX"
-                  maxLength={2}
-                />
-              </label>
-            </div>
+          {/* ── Section 2: Location (collapsible) ── */}
+          <Panel variant="inventory" padding="lg" className="space-y-4">
+            <SectionHeader
+              id="location"
+              icon={<MapPin className="h-4 w-4" />}
+              title="Location"
+              subtitle={selectedVenue ? selectedVenue.name : city ? `${city}${state ? `, ${state}` : ""}` : "Courts & address"}
+              filled={locationFilled}
+            />
+            {openSection === "location" && (
+              <div className="space-y-3 pt-1 border-t border-obsidian-600">
+                {venues.length > 0 && (
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>Court / Venue</span>
+                    <select
+                      value={venueId}
+                      onChange={(e) => setVenueId(e.target.value)}
+                      className={fieldCls}
+                    >
+                      <option value="">— No specific venue —</option>
+                      {venues.map((v) => (
+                        <option key={v.id} value={v.id}>{v.name}</option>
+                      ))}
+                    </select>
+                    {selectedVenue?.address && (
+                      <p className="text-ash-500 text-xs mt-1 flex items-center gap-1">
+                        <MapPin className="h-3 w-3 shrink-0" />{selectedVenue.address}
+                      </p>
+                    )}
+                  </label>
+                )}
+                {venues.length === 0 && (
+                  <p className="text-ash-500 text-xs">No venues set up for this club yet. Add one in the club's Facilities section.</p>
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>City</span>
+                    <input
+                      type="text"
+                      className={fieldCls}
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Minneapolis"
+                    />
+                  </label>
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>State</span>
+                    <input
+                      type="text"
+                      className={fieldCls}
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      placeholder="MN"
+                      maxLength={2}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+          </Panel>
 
-            <label className="text-xs text-ash-400 space-y-1 block">
-              <span>Format</span>
-              <input
-                type="text"
-                className={fieldCls}
-                value={leagueFormat}
-                onChange={(e) => setLeagueFormat(e.target.value)}
-                placeholder="Doubles Ladder"
-              />
-            </label>
+          {/* ── Section 3: Schedule (collapsible) ── */}
+          <Panel variant="inventory" padding="lg" className="space-y-4">
+            <SectionHeader
+              id="schedule"
+              icon={<Calendar className="h-4 w-4" />}
+              title="Schedule"
+              subtitle={scheduleFilled ? `${sessionCount} ${dayOfWeek} sessions` : "Dates & session count"}
+              filled={scheduleFilled}
+            />
+            {openSection === "schedule" && (
+              <div className="space-y-4 pt-1 border-t border-obsidian-600">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>Registration Opens</span>
+                    <input
+                      type="date"
+                      className={fieldCls}
+                      value={registrationOpenDate}
+                      onChange={(e) => setRegistrationOpenDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>Registration Closes</span>
+                    <input
+                      type="date"
+                      className={fieldCls}
+                      value={registrationCloseDate}
+                      onChange={(e) => setRegistrationCloseDate(e.target.value)}
+                      min={registrationOpenDate || undefined}
+                    />
+                  </label>
+                </div>
 
-            {error && <p className="text-sm text-crimson-400">{error}</p>}
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>First Session <span className="text-crimson-500">*</span></span>
+                    <input
+                      type="date"
+                      className={fieldCls}
+                      value={firstSessionDate}
+                      onChange={(e) => setFirstSessionDate(e.target.value)}
+                    />
+                  </label>
+                  <label className="text-xs text-ash-400 space-y-1 block">
+                    <span>Last Session <span className="text-crimson-500">*</span></span>
+                    <input
+                      type="date"
+                      className={fieldCls}
+                      value={lastSessionDate}
+                      onChange={(e) => setLastSessionDate(e.target.value)}
+                      min={firstSessionDate || undefined}
+                    />
+                  </label>
+                </div>
 
-            <div className="flex gap-3 pt-1">
-              <Button type="submit" size="md" className="flex-1" disabled={submitting}>
-                {submitting ? "Creating…" : "Create League"}
-              </Button>
-              <Button type="button" variant="outline" size="md" onClick={() => router.back()} disabled={submitting}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Panel>
+                {firstSessionDate && lastSessionDate && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Panel variant="base" padding="sm" className="text-center">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 mb-0.5">Day of Week</p>
+                      <p className="heading-fantasy text-ash-100 text-lg">{dayOfWeek}</p>
+                    </Panel>
+                    <Panel variant="base" padding="sm" className={`text-center ${lastSessionDate < firstSessionDate ? "border-crimson-500/50" : ""}`}>
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 mb-0.5">Sessions</p>
+                      <p className={`heading-fantasy text-lg ${sessionCount > 0 ? "text-ember-400" : "text-crimson-400"}`}>
+                        {sessionCount > 0 ? sessionCount : "—"}
+                      </p>
+                      {sessionCount > 0 && (
+                        <p className="text-ash-600 text-[10px]">{sessionCount} × {dayOfWeek}</p>
+                      )}
+                    </Panel>
+                  </div>
+                )}
+
+                {firstSessionDate && lastSessionDate && lastSessionDate < firstSessionDate && (
+                  <p className="text-crimson-400 text-xs">Last session must be on or after the first session.</p>
+                )}
+              </div>
+            )}
+          </Panel>
+
+          {/* ── Section 4: Staff (collapsible) ── */}
+          <Panel variant="inventory" padding="lg" className="space-y-4">
+            <SectionHeader
+              id="staff"
+              icon={<Users className="h-4 w-4" />}
+              title="Staff"
+              subtitle={
+                director && coordinator
+                  ? `${director.displayName} · ${coordinator.displayName}`
+                  : director
+                  ? `Director: ${director.displayName}`
+                  : coordinator
+                  ? `Coordinator: ${coordinator.displayName}`
+                  : "Optional: assign director & coordinator"
+              }
+              filled={staffFilled}
+            />
+            {openSection === "staff" && (
+              <div className="space-y-4 pt-1 border-t border-obsidian-600">
+                <div>
+                  <p className="text-xs text-ash-400 mb-1.5 font-medium">League Director <span className="text-ash-600">(optional)</span></p>
+                  <p className="text-ash-600 text-[11px] mb-2">The director oversees league operations. They must already have Club Director access.</p>
+                  <UserLookup
+                    label="director"
+                    resolved={director}
+                    onResolve={setDirector}
+                    onClear={() => setDirector(null)}
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-ash-400 mb-1.5 font-medium">League Coordinator <span className="text-ash-600">(optional)</span></p>
+                  <p className="text-ash-600 text-[11px] mb-2">The coordinator manages day-to-day operations. If left blank, you'll be assigned as coordinator.</p>
+                  <UserLookup
+                    label="coordinator"
+                    resolved={coordinator}
+                    onResolve={setCoordinator}
+                    onClear={() => setCoordinator(null)}
+                  />
+                </div>
+              </div>
+            )}
+          </Panel>
+
+          {error && (
+            <p className="text-sm text-crimson-400 px-1">{error}</p>
+          )}
+
+          <div className="flex gap-3">
+            <Button type="submit" size="md" className="flex-1" disabled={submitting || !name.trim() || !clubId}>
+              {submitting ? "Creating…" : "Create League"}
+            </Button>
+            <Button type="button" variant="outline" size="md" onClick={() => router.back()} disabled={submitting}>
+              Cancel
+            </Button>
+          </div>
+        </form>
       </main>
     </ResponsiveShell>
   );

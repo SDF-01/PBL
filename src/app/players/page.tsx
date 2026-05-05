@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Trophy, Users, Pencil, MapPin } from "lucide-react";
+import { Search, Trophy, Users, Pencil, MapPin, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { SkeletonList } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { subscribeLeaderboard, getPlayerProfile } from "@/lib/players/repo";
 import { skillBand } from "@/lib/players/elo";
 import type { PlayerProfileDoc } from "@/lib/firestore/types";
 
-const BAND_TONE: Record<
-  ReturnType<typeof skillBand>,
-  Parameters<typeof RuneChip>[0]["tone"]
-> = {
+type Band = ReturnType<typeof skillBand>;
+
+const BAND_TONE: Record<Band, Parameters<typeof RuneChip>[0]["tone"]> = {
   NOVICE: "neutral",
   BEGINNER: "spectral",
   INTERMEDIATE: "rune",
@@ -25,11 +26,33 @@ const BAND_TONE: Record<
   ELITE: "crimson",
 };
 
+const ALL_BANDS: Band[] = ["NOVICE", "BEGINNER", "INTERMEDIATE", "ADVANCED", "EXPERT", "ELITE"];
+
 export default function PlayersPage() {
   const { user, ready } = useAuth();
   const [rows, setRows] = useState<PlayerProfileDoc[] | null>(null);
   const [myProfile, setMyProfile] = useState<PlayerProfileDoc | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [bandFilter, setBandFilter] = useState<Band | null>(null);
+
+  const filteredRows = useMemo(() => {
+    if (!rows) return null;
+    let r = rows;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      r = r.filter(
+        (p) =>
+          p.displayName.toLowerCase().includes(q) ||
+          p.city?.toLowerCase().includes(q) ||
+          p.region?.toLowerCase().includes(q),
+      );
+    }
+    if (bandFilter) {
+      r = r.filter((p) => skillBand(p.elo) === bandFilter);
+    }
+    return r;
+  }, [rows, search, bandFilter]);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -97,25 +120,73 @@ export default function PlayersPage() {
           </Panel>
         )}
 
-        {rows === null ? (
-          <Panel variant="base" padding="md">
-            <p className="text-ash-400 text-sm">Loading leaderboard…</p>
-          </Panel>
-        ) : rows.length === 0 ? (
-          <Panel variant="base" padding="lg">
-            <div className="flex items-center gap-3 text-ash-400">
-              <Users className="h-5 w-5" />
-              <span className="text-sm">
-                No players on the board yet. Be the first to create a
-                profile.
-              </span>
+        {/* Search + filter */}
+        {rows !== null && rows.length > 0 && (
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ash-500 pointer-events-none" />
+              <input
+                className="w-full rounded-pixel bg-obsidian-800 border border-ash-700 text-ash-100 pl-9 pr-9 py-2 text-sm focus:outline-none focus:border-ember-500 placeholder:text-ash-600"
+                placeholder="Search by name or city…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ash-500 hover:text-ash-100 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-          </Panel>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_BANDS.map((band) => (
+                <button
+                  key={band}
+                  type="button"
+                  onClick={() => setBandFilter((prev) => (prev === band ? null : band))}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    bandFilter === band
+                      ? "bg-ember-500/20 border-ember-500/60 text-ember-300"
+                      : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500 hover:text-ash-200"
+                  }`}
+                >
+                  {band.charAt(0) + band.slice(1).toLowerCase()}
+                </button>
+              ))}
+              {(search || bandFilter) && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setBandFilter(null); }}
+                  className="px-2.5 py-1 rounded-full text-xs border border-ash-700 text-ash-500 hover:text-ash-200 transition-colors"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {filteredRows === null ? (
+          <SkeletonList count={5} />
+        ) : filteredRows.length === 0 ? (
+          <EmptyState
+            icon={<Users className="h-8 w-8" />}
+            title={rows && rows.length > 0 ? "No players match your search" : "No players yet"}
+            description={
+              rows && rows.length > 0
+                ? "Try adjusting your search or filters."
+                : "Be the first to create a profile and appear on the leaderboard."
+            }
+          />
         ) : (
           <Panel variant="inventory" padding="md">
             <ol className="divide-y divide-obsidian-400">
-              {rows.map((p, i) => {
+              {filteredRows.map((p, i) => {
                 const band = skillBand(p.elo);
+                const globalRank = rows ? rows.findIndex((r) => r.userId === p.userId) + 1 : i + 1;
                 const isMe = user && p.userId === user.uid;
                 return (
                   <li
@@ -123,7 +194,7 @@ export default function PlayersPage() {
                     className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                   >
                     <span className="w-8 text-right heading-fantasy text-sm text-ash-500">
-                      {i + 1}
+                      {globalRank}
                     </span>
                     <Link
                       href={`/players/view?uid=${p.userId}`}

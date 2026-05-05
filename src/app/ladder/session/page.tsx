@@ -10,15 +10,58 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { PlayerHome } from "@/components/player/PlayerHome";
 import { LiveStandings } from "@/components/player/LiveStandings";
 import { ScoreModal } from "@/components/player/ScoreModal";
-import { getPlayerSessionData } from "@/lib/ladder/repo";
+import { getPlayerSessionData, subscribeSessionMatches } from "@/lib/ladder/repo";
+import { LiveCourts } from "@/components/player/LiveCourts";
 import { useAuth } from "@/lib/auth-context";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import {
   Swords,
   MapPin,
   Trophy,
+  LayoutGrid,
 } from "lucide-react";
 import type { PlayerSessionData } from "@/lib/ladder/repo";
+import type { LadderMatchDoc } from "@/lib/firestore/types";
+
+function deriveMatchesForPlayer(
+  playerId: string,
+  allMatches: LadderMatchDoc[],
+  courtNumber: number,
+): Pick<PlayerSessionData, "currentMatch" | "nextMatch" | "sitOutMatch" | "allMatches"> {
+  const playerMatches = allMatches
+    .filter(
+      (m) =>
+        m.sideA.includes(playerId) ||
+        m.sideB.includes(playerId) ||
+        m.sittingOut === playerId,
+    )
+    .sort((a, b) => a.gameNumber - b.gameNumber);
+
+  let currentMatch: (LadderMatchDoc & { courtNumber: number }) | undefined;
+  let nextMatch: (LadderMatchDoc & { courtNumber: number }) | undefined;
+  let sitOutMatch: (LadderMatchDoc & { courtNumber: number }) | undefined;
+
+  for (const match of playerMatches) {
+    const matchWithCourt = { ...match, courtNumber };
+    if (match.sittingOut === playerId) {
+      if (!sitOutMatch) sitOutMatch = matchWithCourt;
+      continue;
+    }
+    const isOnSideA = match.sideA.includes(playerId);
+    const isOnSideB = match.sideB.includes(playerId);
+    const needsSubmission = match.status === "SCHEDULED" && ((isOnSideA && !match.scoreA) || (isOnSideB && !match.scoreB));
+    const needsVerification = match.status === "SUBMITTED" && ((isOnSideA && !match.verifiedAt) || (isOnSideB && !match.verifiedAt));
+    if (needsSubmission || needsVerification) {
+      if (!currentMatch) currentMatch = matchWithCourt;
+      else if (!nextMatch) nextMatch = matchWithCourt;
+    } else if (!currentMatch) {
+      currentMatch = matchWithCourt;
+    } else if (!nextMatch) {
+      nextMatch = matchWithCourt;
+    }
+  }
+  return { currentMatch, nextMatch, sitOutMatch, allMatches };
+}
 
 function PlayerSessionContent() {
   const params = useSearchParams();
@@ -26,6 +69,7 @@ function PlayerSessionContent() {
   const { user } = useAuth();
 
   const [sessionData, setSessionData] = useState<PlayerSessionData | null>(null);
+  const [showCourts, setShowCourts] = useState(false);
   const [scoreModal, setScoreModal] = useState<{
     match: any;
     action: "submit" | "verify";
@@ -34,7 +78,30 @@ function PlayerSessionContent() {
   useEffect(() => {
     if (!isFirebaseConfigured() || !user || !playDateId) return;
 
-    getPlayerSessionData(user.uid, playDateId).then(setSessionData);
+    let unsubMatches: (() => void) | null = null;
+
+    getPlayerSessionData(user.uid, playDateId).then((data) => {
+      setSessionData(data);
+
+      if (data.currentSession && data.assignedCourt) {
+        const sessionId = data.currentSession.id;
+        const courtNumber = data.assignedCourt.courtNumber;
+        const playerId = user.uid;
+
+        unsubMatches = subscribeSessionMatches(sessionId, (matches) => {
+          setSessionData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  ...deriveMatchesForPlayer(playerId, matches, courtNumber),
+                }
+              : prev,
+          );
+        });
+      }
+    });
+
+    return () => { unsubMatches?.(); };
   }, [user, playDateId]);
 
   if (!sessionData?.currentSession) {
@@ -112,9 +179,24 @@ function PlayerSessionContent() {
             document.getElementById("standings")?.scrollIntoView({ behavior: "smooth" });
           }}
           onViewCourts={() => {
-            // TODO: Navigate to courts view
+            setShowCourts((v) => !v);
+            setTimeout(() => document.getElementById("live-courts")?.scrollIntoView({ behavior: "smooth" }), 50);
           }}
         />
+
+        {showCourts && sessionData.allCourts && sessionData.allCourts.length > 0 && (
+          <div id="live-courts" className="space-y-3">
+            <div className="flex items-center gap-2">
+              <LayoutGrid className="h-4 w-4 text-ember-400" />
+              <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Live Courts</h2>
+            </div>
+            <LiveCourts
+              courts={sessionData.allCourts}
+              matches={sessionData.allMatches}
+              currentPlayerId={user?.uid}
+            />
+          </div>
+        )}
 
         <div id="standings">
           <LiveStandings
@@ -131,10 +213,7 @@ function PlayerSessionContent() {
             onClose={() => setScoreModal(null)}
             onSuccess={() => {
               setScoreModal(null);
-              // Refresh session data
-              if (user && playDateId) {
-                getPlayerSessionData(user.uid, playDateId).then(setSessionData);
-              }
+              // Real-time subscription will update sessionData automatically
             }}
           />
         )}

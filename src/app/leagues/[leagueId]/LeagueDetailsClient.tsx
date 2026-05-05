@@ -9,8 +9,12 @@ import {
   Layers,
   Loader2,
   LogIn,
+  MapPin,
+  Save,
+  Settings,
   ShieldCheck,
   UserCheck,
+  UserX,
   Users,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
@@ -18,11 +22,211 @@ import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { getLeague, getUserLeagueMembership } from "@/lib/leagues/repo";
-import { joinLeague } from "@/lib/leagues/write";
+import { joinLeague, leaveLeague, updateLeagueSettings, type UpdateLeagueInput } from "@/lib/leagues/write";
 import { resolveSelectedLeagueId, storeSelectedLeagueId } from "@/lib/selectedLeague";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import type { LeagueDoc } from "@/lib/firestore/types";
+
+const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function getDayOfWeekFromDate(dateStr: string): string {
+  if (!dateStr) return "";
+  return DAYS_OF_WEEK[new Date(dateStr + "T00:00:00").getDay()] ?? "";
+}
+
+function calcSessionCount(first: string, last: string): number {
+  if (!first || !last) return 0;
+  const d1 = new Date(first + "T00:00:00").getTime();
+  const d2 = new Date(last + "T00:00:00").getTime();
+  if (d2 < d1) return 0;
+  return Math.floor((d2 - d1) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}
+
+function LeagueSettingsEditor({
+  league,
+  leagueId,
+  onSaved,
+}: {
+  league: LeagueDoc;
+  leagueId: string;
+  onSaved: (updated: Partial<LeagueDoc>) => void;
+}) {
+  const [name, setName] = useState(league.name);
+  const [description, setDescription] = useState(league.description ?? "");
+  const [city, setCity] = useState(league.city ?? "");
+  const [state, setState] = useState(league.state ?? "");
+  const [format, setFormat] = useState(league.league_format ?? "Doubles Ladder");
+  const [active, setActive] = useState(league.active !== false);
+  const [regOpen, setRegOpen] = useState(league.registrationOpenDate ?? "");
+  const [regClose, setRegClose] = useState(league.registrationCloseDate ?? "");
+  const [firstSession, setFirstSession] = useState(league.firstSessionDate ?? "");
+  const [lastSession, setLastSession] = useState(league.lastSessionDate ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dayOfWeek = getDayOfWeekFromDate(firstSession);
+  const sessionCount = calcSessionCount(firstSession, lastSession);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const updates: UpdateLeagueInput = {
+        name, description, city, state, leagueFormat: format, active,
+        registrationOpenDate: regOpen || undefined,
+        registrationCloseDate: regClose || undefined,
+        firstSessionDate: firstSession || undefined,
+        lastSessionDate: lastSession || undefined,
+        sessionDayOfWeek: dayOfWeek || undefined,
+        sessionCount: sessionCount > 0 ? sessionCount : undefined,
+      };
+      await updateLeagueSettings(leagueId, updates);
+      onSaved({
+        name, description, city, state, league_format: format, active,
+        registrationOpenDate: regOpen || undefined,
+        registrationCloseDate: regClose || undefined,
+        firstSessionDate: firstSession || undefined,
+        lastSessionDate: lastSession || undefined,
+        sessionDayOfWeek: dayOfWeek || undefined,
+        sessionCount: sessionCount > 0 ? sessionCount : undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Panel variant="inventory" padding="lg">
+      <div className="flex items-center gap-2 mb-4">
+        <Settings className="h-4 w-4 text-ember-400" />
+        <h3 className="heading-fantasy text-ash-100">League Settings</h3>
+      </div>
+      <form onSubmit={handleSave} className="space-y-3">
+        <Field label="League Name">
+          <input
+            className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="City">
+            <input
+              className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+            />
+          </Field>
+          <Field label="State">
+            <input
+              className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Format">
+          <input
+            className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+            value={format}
+            onChange={(e) => setFormat(e.target.value)}
+          />
+        </Field>
+        <Field label="Description">
+          <textarea
+            className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100 resize-none"
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </Field>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm text-ash-300">League is active</span>
+        </label>
+
+        <div className="pt-3 border-t border-obsidian-600 space-y-3">
+          <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Schedule</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Registration Opens">
+              <input
+                type="date"
+                className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+                value={regOpen}
+                onChange={(e) => setRegOpen(e.target.value)}
+              />
+            </Field>
+            <Field label="Registration Closes">
+              <input
+                type="date"
+                className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+                value={regClose}
+                onChange={(e) => setRegClose(e.target.value)}
+                min={regOpen || undefined}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="First Session">
+              <input
+                type="date"
+                className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+                value={firstSession}
+                onChange={(e) => setFirstSession(e.target.value)}
+              />
+            </Field>
+            <Field label="Last Session">
+              <input
+                type="date"
+                className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+                value={lastSession}
+                onChange={(e) => setLastSession(e.target.value)}
+                min={firstSession || undefined}
+              />
+            </Field>
+          </div>
+          {firstSession && lastSession && sessionCount > 0 && (
+            <p className="text-ash-400 text-xs">
+              {sessionCount} {dayOfWeek} session{sessionCount !== 1 ? "s" : ""} calculated.
+            </p>
+          )}
+        </div>
+
+        {error && <p className="text-crimson-500 text-sm">{error}</p>}
+        <Button type="submit" size="sm" disabled={saving}>
+          <Save className="h-3.5 w-3.5" />
+          {saving ? "Saving…" : "Save Settings"}
+        </Button>
+      </form>
+    </Panel>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="text-xs text-ash-400 space-y-1 block">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function formatDate(value?: string): string {
+  if (!value) return "—";
+  const d = new Date(value + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
 
 function formatNextPlayDate(value?: string): string {
   if (!value) return "TBD";
@@ -63,7 +267,9 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     undefined,
   );
   const [joining, setJoining] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const preserved = resolveSelectedLeagueId(searchParams) ?? leagueId;
@@ -117,6 +323,17 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     }
   }
 
+  async function handleLeave() {
+    if (!user) return;
+    setLeaving(true);
+    try {
+      await leaveLeague(user.uid, leagueId);
+      setMembership((m) => m ? { ...m, status: "left" } : null);
+    } finally {
+      setLeaving(false);
+    }
+  }
+
   return (
     <ResponsiveShell desktopChromeless>
       <main className="container py-10 max-w-4xl">
@@ -158,18 +375,100 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                   </div>
                   <div className="grid gap-3 text-sm text-ash-300">
                     <div>
-                      <span className="text-ash-100">Next play date:</span>{" "}
-                      {formatNextPlayDate(league.next_play_date)}
-                    </div>
-                    <div>
-                      <span className="text-ash-100">Check-in status:</span>{" "}
-                      {league.check_in_status ?? "Unknown"}
-                    </div>
-                    <div>
-                      <span className="text-ash-100">League format:</span>{" "}
+                      <span className="text-ash-100">Format:</span>{" "}
                       {league.league_format ?? "Pickleball league"}
                     </div>
+                    {league.next_play_date && (
+                      <div>
+                        <span className="text-ash-100">Next play date:</span>{" "}
+                        {formatNextPlayDate(league.next_play_date)}
+                      </div>
+                    )}
+                    {league.check_in_status && (
+                      <div>
+                        <span className="text-ash-100">Check-in status:</span>{" "}
+                        {league.check_in_status}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Venue */}
+                  {(league.venueName || league.venueAddress) && (
+                    <div className="pt-3 border-t border-obsidian-600">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 mb-1.5">Venue</p>
+                      <div className="flex items-start gap-2 text-sm text-ash-300">
+                        <MapPin className="h-3.5 w-3.5 text-ember-400 mt-0.5 shrink-0" />
+                        <div>
+                          {league.venueName && <p className="text-ash-100">{league.venueName}</p>}
+                          {league.venueAddress && <p className="text-ash-500 text-xs">{league.venueAddress}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Schedule */}
+                  {(league.firstSessionDate || league.registrationOpenDate) && (
+                    <div className="pt-3 border-t border-obsidian-600">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 mb-2">Schedule</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {league.sessionDayOfWeek && league.sessionCount && (
+                          <div className="col-span-2 flex items-center gap-3 mb-1">
+                            <CalendarDays className="h-3.5 w-3.5 text-ember-400 shrink-0" />
+                            <span className="text-ash-100 font-medium">
+                              {league.sessionCount} {league.sessionDayOfWeek} session{league.sessionCount !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                        )}
+                        {league.firstSessionDate && (
+                          <div>
+                            <p className="text-ash-600 mb-0.5">First session</p>
+                            <p className="text-ash-200">{formatDate(league.firstSessionDate)}</p>
+                          </div>
+                        )}
+                        {league.lastSessionDate && (
+                          <div>
+                            <p className="text-ash-600 mb-0.5">Last session</p>
+                            <p className="text-ash-200">{formatDate(league.lastSessionDate)}</p>
+                          </div>
+                        )}
+                        {league.registrationOpenDate && (
+                          <div>
+                            <p className="text-ash-600 mb-0.5">Reg. opens</p>
+                            <p className="text-ash-200">{formatDate(league.registrationOpenDate)}</p>
+                          </div>
+                        )}
+                        {league.registrationCloseDate && (
+                          <div>
+                            <p className="text-ash-600 mb-0.5">Reg. closes</p>
+                            <p className="text-ash-200">{formatDate(league.registrationCloseDate)}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Staff */}
+                  {(league.directorName || league.coordinatorName) && (
+                    <div className="pt-3 border-t border-obsidian-600">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 mb-1.5">Staff</p>
+                      <div className="space-y-1 text-xs">
+                        {league.directorName && (
+                          <div className="flex items-center gap-2">
+                            <Users className="h-3 w-3 text-gold-400" />
+                            <span className="text-ash-500">Director:</span>
+                            <span className="text-ash-200">{league.directorName}</span>
+                          </div>
+                        )}
+                        {league.coordinatorName && (
+                          <div className="flex items-center gap-2">
+                            <Users className="h-3 w-3 text-spectral-400" />
+                            <span className="text-ash-500">Coordinator:</span>
+                            <span className="text-ash-200">{league.coordinatorName}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </Panel>
 
                 <Panel variant="inventory" padding="lg" className="space-y-2">
@@ -203,18 +502,38 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                           </Button>
                         </Link>
                       )}
+                      <Link href={`/leagues/${leagueId}/roster`}>
+                        <Button size="sm" variant="outline" className="w-full">
+                          <Users className="h-3.5 w-3.5" /> Roster
+                        </Button>
+                      </Link>
                       <Link href="/ladder/play-dates">
                         <Button size="sm" variant="outline" className="w-full">
                           <CalendarDays className="h-3.5 w-3.5" /> Play Dates
                         </Button>
                       </Link>
-                      <Link href="/players">
-                        <Button size="sm" variant="outline" className="w-full">
-                          <Users className="h-3.5 w-3.5" /> Leaderboard
-                        </Button>
-                      </Link>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full"
+                        onClick={() => setSettingsOpen((o) => !o)}
+                      >
+                        {settingsOpen ? "Hide Settings" : "Edit League Settings"}
+                      </Button>
                     </div>
                   </Panel>
+                )}
+
+                {/* League settings editor (staff only) */}
+                {isStaff && settingsOpen && league && (
+                  <LeagueSettingsEditor
+                    league={league}
+                    leagueId={leagueId}
+                    onSaved={(updated) => {
+                      setLeague((l) => l ? { ...l, ...updated } : l);
+                      setSettingsOpen(false);
+                    }}
+                  />
                 )}
 
                 {/* ── Active member ── */}
@@ -237,16 +556,31 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                           <UserCheck className="h-3.5 w-3.5" /> Check In
                         </Button>
                       </Link>
+                      <Link href={`/leagues/${leagueId}/roster`}>
+                        <Button size="sm" variant="outline" className="w-full">
+                          <Users className="h-3.5 w-3.5" /> Roster
+                        </Button>
+                      </Link>
                       <Link href="/ladder/play-dates">
                         <Button size="sm" variant="outline" className="w-full">
                           <CalendarDays className="h-3.5 w-3.5" /> Play Dates
                         </Button>
                       </Link>
-                      <Link href="/players">
+                      <Link href="/ladder/standings">
                         <Button size="sm" variant="outline" className="w-full">
                           <Layers className="h-3.5 w-3.5" /> Standings
                         </Button>
                       </Link>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full text-crimson-400 hover:text-crimson-300"
+                        onClick={handleLeave}
+                        disabled={leaving}
+                      >
+                        <UserX className="h-3.5 w-3.5" />
+                        {leaving ? "Leaving…" : "Leave League"}
+                      </Button>
                     </div>
                   </Panel>
                 )}

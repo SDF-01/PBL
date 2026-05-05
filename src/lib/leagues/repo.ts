@@ -31,6 +31,25 @@ export async function listLeaguesByClub(clubId: string): Promise<LeagueDoc[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeagueDoc);
 }
 
+export interface LeagueMemberEntry {
+  id: string;
+  leagueId: string;
+  userId: string;
+  status: string;
+  joinedAt?: string;
+  displayName?: string;
+}
+
+export async function listLeagueMembers(leagueId: string): Promise<LeagueMemberEntry[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.leagueMemberships),
+      where("leagueId", "==", leagueId),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeagueMemberEntry);
+}
+
 export async function getUserLeagueMembership(
   leagueId: string,
   userId: string,

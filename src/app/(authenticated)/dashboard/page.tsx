@@ -9,6 +9,7 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 import { PlayerHome } from "@/components/player/PlayerHome";
+import { PlayerDashboardFallback } from "@/components/player/PlayerDashboardFallback";
 import { isFirebaseConfigured } from '@/lib/firebase'; 
 import { listLadderSeasons, listPlayDates } from "@/lib/ladder/repo";
 import {
@@ -24,6 +25,7 @@ import { getPlayerSessionData } from "@/lib/ladder/repo";
 import { ScoreModal } from "@/components/player/ScoreModal";
 import type { PlayerSessionData } from "@/lib/ladder/repo";
 import { LadderSeasonDoc, PlayDateDoc } from '@/lib/firestore/types';
+import { listLeaderboard } from "@/lib/players/repo";
 interface Stats {
   seasons: number;
   playDates: number;
@@ -48,6 +50,8 @@ export default function DashboardPage() {
     match: any;
     action: "submit" | "verify";
   } | null>(null);
+  const [leaderboardRank, setLeaderboardRank] = useState<number | undefined>(undefined);
+  const [totalPlayers, setTotalPlayers] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -61,27 +65,33 @@ export default function DashboardPage() {
         setUpcomingPlayDates(playDates.filter(pd => pd.status === 'SCHEDULED'));
       })();
     } else if (user) {
-      // Fetch player session data
       (async () => {
-        // For now, get the most recent play date. In production, this should
-        // be more sophisticated to find the active play date for the user
-        const playDates = await listPlayDates().catch(() => []);
-        const today = new Date().toISOString().split('T')[0] as string;
-       // Make sure playDates is not empty
-      if (playDates.length === 0) {
-        console.warn('No play dates available');
-      } else {
-        // Find the active play date
-        const activePlayDate = playDates.find(pd =>
-          pd.date >= today && (pd.status === 'CHECK_IN_OPEN' || pd.status === 'IN_PROGRESS')
-        ) ?? playDates[0]; // fallback to first play date date
+        const today = new Date().toISOString().split("T")[0] as string;
+        const [playDates, leaderboard] = await Promise.all([
+          listPlayDates().catch(() => [] as PlayDateDoc[]),
+          listLeaderboard(200).catch(() => []),
+        ]);
 
-        if (activePlayDate) {
-          const data = await getPlayerSessionData(user.uid, activePlayDate.id);
-          setPlayerSessionData(data);
+        // Leaderboard rank for this player
+        const myIdx = leaderboard.findIndex((p) => p.userId === user.uid);
+        if (myIdx >= 0) {
+          setLeaderboardRank(myIdx + 1);
+          setTotalPlayers(leaderboard.length);
         }
-      }
-})();
+
+        if (playDates.length > 0) {
+          const activePlayDate =
+            playDates.find(
+              (pd) =>
+                pd.date >= today &&
+                (pd.status === "CHECK_IN_OPEN" || pd.status === "IN_PROGRESS"),
+            ) ?? playDates[0];
+          if (activePlayDate) {
+            const data = await getPlayerSessionData(user.uid, activePlayDate.id);
+            setPlayerSessionData(data);
+          }
+        }
+      })();
     }
   }, [isAdminMode, user]);
 
@@ -155,7 +165,16 @@ export default function DashboardPage() {
     );
   }
 
-  // Fallback: generic dashboard for players not in active session
+  // Fallback: personalized player dashboard when no active session
+  if (user) {
+    return (
+      <PlayerDashboardFallback
+        userId={user.uid}
+        leaderboardRank={leaderboardRank}
+        totalPlayers={totalPlayers}
+      />
+    );
+  }
   return isMobile ? <DashboardMobile stats={{ seasons: 0, playDates: 0, players: 0, tournaments: 0, liveTourneys: 0 }} /> : <DashboardDesktop stats={{ seasons: 0, playDates: 0, players: 0, tournaments: 0, liveTourneys: 0 }} />;
 }
 

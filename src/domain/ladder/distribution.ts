@@ -39,32 +39,20 @@ function calculateCourtSizes(playerCount: number): number[] {
     // Divides evenly: all 4-player courts
     return Array(playerCount / 4).fill(4);
   } else if (remainder === 1) {
-    // Count = 4k + 1 => use 1 court of 5 and (k-1) courts of 4
+    // n = 4k+1 → 1 court of 5 + (k-1) courts of 4; minimum n=5
+    if (playerCount < 5) throw new Error(`Cannot distribute ${playerCount} players (min 5 for remainder-1).`);
     const fourCourts = (playerCount - 5) / 4;
     return [5, ...Array(fourCourts).fill(4)];
   } else if (remainder === 2) {
-    // Count = 4k + 2 => use 2 courts of 5 and (k-2) courts of 4
+    // n = 4k+2 → 2 courts of 5 + (k-2) courts of 4; minimum n=10
+    if (playerCount < 10) throw new Error(`Cannot distribute ${playerCount} players into courts of 4 or 5 only.`);
     const fourCourts = (playerCount - 10) / 4;
     return [5, 5, ...Array(fourCourts).fill(4)];
   } else {
-    // remainder === 3
-    // Count = 4k + 3 => use 1 court of 5 and (k) courts of 4 (only works if 5+4k = 4k+3)
-    // Actually: 5 + 4k = 4k + 3 is impossible. Need different approach.
-    // 4k + 3 = 5 + 5 + (4k - 7) won't work if k < 2
-    // Better: 4k + 3 = 4(k-1) + 7 or use more 5s
-    // Simplest: 4k + 3 = 5 + 4(k-1) + 4 = 5 + 4 + 4 + ... wait that's wrong
-    // Let me think: if n = 4k + 3:
-    // Option A: 5 + 4(k-1) + 4 = 5 + 4k - 4 + 4 = 4k + 5 ✗
-    // Option B: Two 5s and rest 4s? 5 + 5 + 4m = 10 + 4m = 4k + 3
-    //           So 4m = 4k - 7, needs k ≥ 2 and 4 divides (4k-7)
-    // Simpler approach per spec: Use 1 court of 5, rest of 4
-    // n = 5 + 4m => for n = 4k+3, need 5 + 4m = 4k + 3, so 4m = 4k - 2, m = k - 0.5 (doesn't work)
-    // Actually the spec says "prefer 5-player courts" when n % 4 !== 0
-    // So for remainder 3: (4k + 3) = 5 + 5 + 5 + 4 + 4 + ...?
-    // Let's try: 5 + remaining, and recurse...
-    // Safest: 1 court of 5, rest fill with 4
-    const fourCourts = (playerCount - 5) / 4;
-    return [5, ...Array(fourCourts).fill(4)];
+    // remainder === 3: n = 4k+3 → 3 courts of 5 + (k-3) courts of 4; minimum n=15
+    if (playerCount < 15) throw new Error(`Cannot distribute ${playerCount} players into courts of 4 or 5 only.`);
+    const fourCourts = (playerCount - 15) / 4;
+    return [5, 5, 5, ...Array(fourCourts).fill(4)];
   }
 }
 
@@ -136,9 +124,14 @@ export function distributePlayersToCourts(
     // Smaller courts first, then larger (worse players get larger courts for balance)
     arrangedSizes.sort((a, b) => a - b); // Ascending: 4s before 5s
   } else if (placement === "MIDDLE") {
-    // Try to put 5-player courts in middle positions
-    // This is more complex - skip for v1
-    arrangedSizes.sort((a, b) => b - a); // Default to TOP_HEAVY for now
+    // Place 5-player courts in the center block, 4-player courts on the edges
+    const fiveCount = arrangedSizes.filter((s) => s === 5).length;
+    const total = arrangedSizes.length;
+    arrangedSizes = Array(total).fill(4);
+    const startPos = Math.floor((total - fiveCount) / 2);
+    for (let i = 0; i < fiveCount; i++) {
+      arrangedSizes[startPos + i] = 5;
+    }
   }
 
   let playerIndex = 0;

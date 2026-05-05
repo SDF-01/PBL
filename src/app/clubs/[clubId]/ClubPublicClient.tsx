@@ -230,7 +230,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                   {leagues.map((league) => (
                     <Panel key={league.id} variant="inventory" padding="md">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="heading-fantasy text-ash-100 text-sm">{league.name}</span>
                             {league.active !== false && (
@@ -241,11 +241,22 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                             {[league.city, league.state].filter(Boolean).join(", ")}
                             {league.league_format ? ` · ${league.league_format}` : ""}
                           </p>
+                          {league.next_play_date && (
+                            <p className="text-ash-400 text-xs mt-1 flex items-center gap-1">
+                              <CalendarDays className="h-3 w-3 text-spectral-400 shrink-0" />
+                              Next: {league.next_play_date}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex gap-2 shrink-0">
+                        <div className="flex gap-2 shrink-0 flex-wrap justify-end">
                           <Link href={`/leagues/${league.id}`}>
                             <Button size="sm" variant="outline">View</Button>
                           </Link>
+                          {user && !isDirector && league.active !== false && (
+                            <Link href={`/leagues/${league.id}`}>
+                              <Button size="sm">Join</Button>
+                            </Link>
+                          )}
                           {isDirector && (
                             <Link href={`/clubs/manage/${realClubId}?section=leagues`}>
                               <Button size="sm" variant="ghost">

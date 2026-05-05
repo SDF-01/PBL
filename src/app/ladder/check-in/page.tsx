@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MapPin, CheckCircle2, XCircle, Compass } from "lucide-react";
+import { MapPin, CheckCircle2, XCircle, Compass, ShieldCheck, Users } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { getPlayDate, getVenue, listPlayDates } from "@/lib/ladder/repo";
-import { createCheckIn } from "@/lib/ladder/write";
+import { getPlayDate, getVenue, listPlayDates, subscribeCheckIns } from "@/lib/ladder/repo";
+import { createCheckIn, adminOverrideCheckIn } from "@/lib/ladder/write";
+import { usePermissions } from "@/lib/permissions/usePermissions";
 import { distanceMeters } from "@/lib/ladder/geofence";
 import type {
+  CheckInDoc,
   PlayDateDoc,
   VenueDoc,
   CheckInStatus,
@@ -47,6 +49,9 @@ function CheckInInner() {
   const initialId = params.get("playDate");
   const { user, ready, signIn } = useAuth();
 
+  const { isSiteAdmin, leagueCoordinatorFor, coordinatorClubIds } = usePermissions();
+  const isAdmin = isSiteAdmin || leagueCoordinatorFor.length > 0 || coordinatorClubIds.length > 0;
+
   const [playDates, setPlayDates] = useState<PlayDateDoc[]>([]);
   const [selectedId, setSelectedId] = useState<string>(initialId ?? "");
   const [playDate, setPlayDate] = useState<PlayDateDoc | null>(null);
@@ -54,6 +59,8 @@ function CheckInInner() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
+  const [checkIns, setCheckIns] = useState<CheckInDoc[]>([]);
+  const [overriding, setOverriding] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
@@ -117,6 +124,23 @@ function CheckInInner() {
       },
       { enableHighAccuracy: true, timeout: 15_000 },
     );
+  }
+
+  // Subscribe to check-ins when a play date is selected (admin view)
+  useEffect(() => {
+    if (!selectedId || !isAdmin) return;
+    const unsub = subscribeCheckIns(selectedId, setCheckIns);
+    return () => unsub();
+  }, [selectedId, isAdmin]);
+
+  async function handleAdminOverride(checkInId: string) {
+    if (!user) return;
+    setOverriding(checkInId);
+    try {
+      await adminOverrideCheckIn(checkInId, user.uid);
+    } finally {
+      setOverriding(null);
+    }
   }
 
   async function onRequestAdminOverride() {
@@ -288,6 +312,60 @@ function CheckInInner() {
         )}
 
         {statusCard}
+
+        {/* Coordinator override panel */}
+        {isAdmin && selectedId && (
+          <div className="space-y-3 border-t border-obsidian-600 pt-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-ember-400" />
+              <h2 className="heading-fantasy text-ash-100 text-base">Check-In Management</h2>
+              <RuneChip tone="ember" className="text-[9px]">Coordinator</RuneChip>
+            </div>
+
+            {checkIns.length === 0 ? (
+              <Panel variant="base" padding="md" className="flex items-center gap-3 text-ash-500">
+                <Users className="h-4 w-4" />
+                <span className="text-sm">No check-ins yet for this play date.</span>
+              </Panel>
+            ) : (
+              <Panel variant="inventory" padding="md">
+                <ul className="divide-y divide-obsidian-600">
+                  {checkIns.map((ci) => (
+                    <li key={ci.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-ash-200 text-sm truncate">{ci.displayName}</p>
+                        <p className="text-ash-500 text-[11px] font-mono">
+                          {ci.distanceMeters != null ? `${Math.round(ci.distanceMeters)}m from venue` : "No GPS"}
+                        </p>
+                      </div>
+                      <RuneChip
+                        tone={
+                          ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED"
+                            ? "success"
+                            : ci.status === "PENDING"
+                            ? "warning"
+                            : "crimson"
+                        }
+                        className="text-[9px] shrink-0"
+                      >
+                        {ci.status}
+                      </RuneChip>
+                      {(ci.status === "GEO_REJECTED" || ci.status === "PENDING") && (
+                        <button
+                          onClick={() => handleAdminOverride(ci.id)}
+                          disabled={overriding === ci.id}
+                          className="shrink-0 text-[11px] px-2 py-1 rounded bg-ember-500/20 border border-ember-500/40 text-ember-400 hover:bg-ember-500/30 transition-colors disabled:opacity-50"
+                        >
+                          {overriding === ci.id ? "…" : "Override"}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </Panel>
+            )}
+          </div>
+        )}
       </main>
     </ResponsiveShell>
   );

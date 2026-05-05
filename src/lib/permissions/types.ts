@@ -75,6 +75,8 @@ export interface ClubFacility {
   tennisConversionCourts?: number;
   hasParking?: boolean;
   hasLights?: boolean;
+  isIndoor?: boolean;
+  surfaceType?: "hard" | "clay" | "turf" | "indoor";
   amenities?: string[];
   notes?: string;
   updatedAt?: string;

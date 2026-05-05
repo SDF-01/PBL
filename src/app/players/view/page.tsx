@@ -11,6 +11,7 @@ import {
   Trophy,
   Activity,
 } from "lucide-react";
+import { SkeletonCard, SkeletonList } from "@/components/ui/Skeleton";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +21,7 @@ import {
   getPlayerProfile,
   listRecentEloEvents,
 } from "@/lib/players/repo";
+import { getHeadToHeadRecord, type HeadToHeadRecord } from "@/lib/ladder/repo";
 import { getUserRole } from "@/lib/firestore/userRepo";
 import { skillBand } from "@/lib/players/elo";
 import type {
@@ -49,6 +51,7 @@ function PlayerView() {
   const [profile, setProfile] = useState<PlayerProfileDoc | null>(null);
   const [events, setEvents] = useState<EloEventDoc[]>([]);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [h2h, setH2h] = useState<HeadToHeadRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +71,9 @@ function PlayerView() {
         setProfile(p);
         setEvents(ev);
         setRole(r);
+        if (user && user.uid !== uid) {
+          getHeadToHeadRecord(user.uid, uid).then(setH2h).catch(() => {});
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load.");
       } finally {
@@ -79,10 +85,14 @@ function PlayerView() {
   if (loading) {
     return (
       <ResponsiveShell desktopChromeless>
-        <main className="container py-10">
-          <Panel variant="base" padding="md">
-            <p className="text-ash-400 text-sm">Loading profile…</p>
-          </Panel>
+        <main className="container py-6 md:py-10 space-y-4 max-w-3xl">
+          <SkeletonCard className="h-32" />
+          <div className="grid grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} className="h-20" />
+            ))}
+          </div>
+          <SkeletonList count={3} />
         </main>
       </ResponsiveShell>
     );
@@ -237,6 +247,33 @@ function PlayerView() {
           />
         </div>
 
+        {h2h && h2h.matches > 0 && (
+          <Panel variant="quest" padding="md">
+            <div className="flex items-center gap-3">
+              <Swords className="h-5 w-5 text-ember-400 shrink-0" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-ash-500 mb-0.5">Head-to-Head vs You</p>
+                <div className="flex items-center gap-3">
+                  <span className="heading-fantasy text-2xl text-ember-400">{h2h.wins}</span>
+                  <span className="text-ash-500 text-sm">–</span>
+                  <span className="heading-fantasy text-2xl text-ash-400">{h2h.losses}</span>
+                  <span className="text-ash-500 text-xs font-mono">
+                    ({h2h.matches} game{h2h.matches === 1 ? "" : "s"})
+                  </span>
+                </div>
+                <p className="text-ash-500 text-xs mt-0.5">
+                  {profile.displayName.split(" ")[0]} leads {h2h.wins > h2h.losses ? "" : h2h.wins < h2h.losses ? "you lead " : "tied "}
+                  {h2h.wins !== h2h.losses && Math.abs(h2h.wins - h2h.losses) > 0 && (
+                    <span className={h2h.wins > h2h.losses ? "text-crimson-400" : "text-success-400"}>
+                      {Math.abs(h2h.wins - h2h.losses)}-{Math.min(h2h.wins, h2h.losses)}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </Panel>
+        )}
+
         {(profile.paddleBrand || profile.paddleModel || profile.yearsPlaying) && (
           <Panel variant="inventory" padding="md">
             <h2 className="heading-fantasy text-lg text-ash-100 mb-2">
@@ -256,6 +293,15 @@ function PlayerView() {
                 />
               )}
             </dl>
+          </Panel>
+        )}
+
+        {events.length > 0 && (
+          <Panel variant="base" padding="md">
+            <h2 className="heading-fantasy text-lg text-ash-100 mb-3">
+              ELO Trend
+            </h2>
+            <EloTrendChart events={events} />
           </Panel>
         )}
 
@@ -339,6 +385,123 @@ function DescItem({ label, value }: { label: string; value: string }) {
         {label}
       </dt>
       <dd className="text-ash-100">{value}</dd>
+    </div>
+  );
+}
+
+function EloTrendChart({ events }: { events: EloEventDoc[] }) {
+  const W = 600;
+  const H = 120;
+  const PAD = { top: 12, right: 16, bottom: 24, left: 44 };
+
+  // Reverse to get chronological order; build series: eloBefore of first, then eloAfter of each
+  const chrono = [...events].reverse();
+  const values: number[] = [chrono[0]!.eloBefore, ...chrono.map((e) => e.eloAfter)];
+
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const range = maxV - minV || 1;
+
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+
+  function xAt(i: number) {
+    return PAD.left + (i / (values.length - 1)) * innerW;
+  }
+  function yAt(v: number) {
+    return PAD.top + (1 - (v - minV) / range) * innerH;
+  }
+
+  const points = values.map((v, i) => `${xAt(i)},${yAt(v)}`).join(" ");
+  const areaPoints = `${PAD.left},${PAD.top + innerH} ${points} ${xAt(values.length - 1)},${PAD.top + innerH}`;
+
+  const lastX = xAt(values.length - 1);
+  const lastY = yAt(values[values.length - 1]!);
+  const firstY = yAt(values[0]!);
+  const isPositive = values[values.length - 1]! >= values[0]!;
+
+  return (
+    <div className="w-full overflow-hidden">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full h-auto"
+        aria-label="ELO trend chart"
+      >
+        {/* Horizontal guide lines */}
+        {[0, 0.5, 1].map((t) => {
+          const y = PAD.top + t * innerH;
+          const v = Math.round(maxV - t * range);
+          return (
+            <g key={t}>
+              <line
+                x1={PAD.left}
+                y1={y}
+                x2={PAD.left + innerW}
+                y2={y}
+                stroke="#3a3a4a"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+              <text
+                x={PAD.left - 4}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="10"
+                fill="#6b7280"
+                fontFamily="monospace"
+              >
+                {v}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Area fill */}
+        <polygon
+          points={areaPoints}
+          fill={isPositive ? "rgba(239,104,32,0.08)" : "rgba(220,38,38,0.08)"}
+        />
+
+        {/* Trend line */}
+        <polyline
+          points={points}
+          fill="none"
+          stroke={isPositive ? "#ef6820" : "#dc2626"}
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+
+        {/* Start dot */}
+        <circle cx={PAD.left} cy={firstY} r="3" fill="#6b7280" />
+
+        {/* End dot */}
+        <circle cx={lastX} cy={lastY} r="4" fill={isPositive ? "#ef6820" : "#dc2626"} />
+
+        {/* Current ELO label */}
+        <text
+          x={lastX + 5}
+          y={Math.min(lastY + 4, PAD.top + innerH - 4)}
+          fontSize="11"
+          fill={isPositive ? "#ef6820" : "#dc2626"}
+          fontFamily="monospace"
+          fontWeight="bold"
+        >
+          {values[values.length - 1]}
+        </text>
+
+        {/* X-axis match count */}
+        <text
+          x={PAD.left + innerW / 2}
+          y={H - 4}
+          textAnchor="middle"
+          fontSize="10"
+          fill="#6b7280"
+          fontFamily="monospace"
+        >
+          last {values.length - 1} matches
+        </text>
+      </svg>
     </div>
   );
 }

@@ -79,6 +79,28 @@ export async function createLadderSeason(
   return slug;
 }
 
+/** Clone a season's settings into a new season with updated dates. */
+export async function copyLadderSeason(
+  sourceSeasonId: string,
+  newName: string,
+  newStartDate: string,
+  newEndDate: string,
+  createdBy: string,
+): Promise<string> {
+  const srcSnap = await getDoc(doc(db(), COLLECTIONS.seasons, sourceSeasonId));
+  if (!srcSnap.exists()) throw new Error("Source season not found.");
+  const src = { id: srcSnap.id, ...srcSnap.data() } as LadderSeasonDoc;
+  return createLadderSeason({
+    name: newName,
+    startDate: newStartDate,
+    endDate: newEndDate,
+    targetPoints: src.targetPoints,
+    movementPattern: src.movementPattern,
+    courtDistributionPlacement: src.courtDistributionPlacement,
+    createdBy,
+  });
+}
+
 // ============================================================
 // VENUES
 // ============================================================
@@ -290,6 +312,21 @@ export async function submitLadderMatchScore(
   } catch (err) {
     console.warn("[elo] ladder ELO apply failed", err);
   }
+
+  // Notify the opposing side that a score has been submitted and needs verification.
+  const submitterOnSideA = match.sideA.includes(submittedBy);
+  const opposingSide = submitterOnSideA ? match.sideB : match.sideA;
+  const notifyPromises = opposingSide.map((uid) =>
+    writeNotification({
+      userId: uid,
+      title: "Score submitted — verify now",
+      body: `Game ${match.gameNumber} score: ${scoreA}–${scoreB}. Tap to confirm or dispute.`,
+      kind: "SCORE_SUBMITTED",
+      href: "/dashboard",
+      createdBy: submittedBy,
+    }).catch(() => { /* best-effort */ }),
+  );
+  await Promise.all(notifyPromises);
 }
 
 // ============================================================
@@ -377,7 +414,64 @@ export async function verifyLadderMatchScore(
     status: "VERIFIED",
   });
 
-  // TODO: Apply audit trail
+  await writeAudit({
+    kind: "MATCH_VERIFIED",
+    targetId: matchId,
+    targetKind: "match",
+    actorId: verifiedBy,
+  });
+}
+
+/**
+ * Flag a match score as disputed. Admins resolve via the dispute panel.
+ */
+export async function disputeLadderMatch(
+  matchId: string,
+  disputedBy: string,
+  reason?: string,
+): Promise<void> {
+
+  await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
+    status: "DISPUTED",
+    disputedBy,
+    disputedAt: serverTimestamp(),
+    disputeReason: reason ?? null,
+  });
+
+  await writeAudit({
+    kind: "MATCH_DISPUTED",
+    targetId: matchId,
+    targetKind: "match",
+    actorId: disputedBy,
+    payload: { reason: reason ?? null },
+  });
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+export async function writeNotification(input: {
+  userId: string;
+  title: string;
+  body: string;
+  kind: "SCORE_SUBMITTED" | "SCORE_DISPUTED" | "LADDER_PROMOTED" | "LADDER_DEMOTED" | "MATCH_READY" | "ANNOUNCEMENT" | "GENERAL";
+  href?: string;
+  createdBy?: string;
+}): Promise<void> {
+  await addDoc(
+    collection(db(), COLLECTIONS.notifications),
+    stripUndefined({
+      userId: input.userId,
+      title: input.title,
+      body: input.body,
+      kind: input.kind,
+      href: input.href ?? null,
+      read: false,
+      createdBy: input.createdBy ?? null,
+      createdAt: serverTimestamp(),
+    }),
+  );
 }
 
 /**
@@ -457,6 +551,43 @@ export async function generateSessionB(
   await updateDoc(doc(db(), COLLECTIONS.playDates, playDate.id), {
     sessionBId: sessionBData.session.id,
   });
+
+  // Notify players of promotion/demotion
+  const courtAMap = new Map<string, number>();
+  for (const court of courtsA) {
+    for (const pid of court.playerIds) courtAMap.set(pid, court.courtNumber);
+  }
+  const courtBMap = new Map<string, number>();
+  for (const court of sessionBData.courts) {
+    for (const pid of court.playerIds) courtBMap.set(pid, court.courtNumber);
+  }
+  const notifyPromises: Promise<void>[] = [];
+  for (const [playerId, courtA] of courtAMap.entries()) {
+    const courtB = courtBMap.get(playerId);
+    if (courtB === undefined) continue;
+    if (courtB < courtA) {
+      notifyPromises.push(
+        writeNotification({
+          userId: playerId,
+          title: "Court Promotion!",
+          body: `You moved up from court ${courtA} to court ${courtB} for Session B.`,
+          kind: "LADDER_PROMOTED",
+          href: "/ladder/session",
+        }),
+      );
+    } else if (courtB > courtA) {
+      notifyPromises.push(
+        writeNotification({
+          userId: playerId,
+          title: "Court Change",
+          body: `You moved down from court ${courtA} to court ${courtB} for Session B.`,
+          kind: "LADDER_DEMOTED",
+          href: "/ladder/session",
+        }),
+      );
+    }
+  }
+  await Promise.allSettled(notifyPromises);
 
   return sessionBData.session.id;
 }

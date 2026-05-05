@@ -7,20 +7,36 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { SkeletonList } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import {
   listLadderSeasons,
+  listLadderSessions,
   listPlayDates,
   listVenues,
 } from "@/lib/ladder/repo";
 import { createPlayDate, createVenue } from "@/lib/ladder/write";
 import type {
   LadderSeasonDoc,
+  LadderSessionDoc,
+  LadderSessionStatus,
   PlayDateDoc,
   PlayDateStatus,
   VenueDoc,
 } from "@/lib/firestore/types";
+
+const SESSION_STATUS_TONE: Record<
+  LadderSessionStatus,
+  Parameters<typeof RuneChip>[0]["tone"]
+> = {
+  DRAFT: "neutral",
+  GENERATED: "spectral",
+  LIVE: "ember",
+  AWAITING_FINALIZATION: "warning",
+  FINALIZED: "success",
+};
 
 const STATUS_TONE: Record<
   PlayDateStatus,
@@ -37,6 +53,7 @@ export default function PlayDatesPage() {
   const [playDates, setPlayDates] = useState<PlayDateDoc[] | null>(null);
   const [seasons, setSeasons] = useState<LadderSeasonDoc[]>([]);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
+  const [sessionMap, setSessionMap] = useState<Record<string, LadderSessionDoc[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [show, setShow] = useState<"none" | "playDate" | "venue">("none");
 
@@ -54,6 +71,15 @@ export default function PlayDatesPage() {
       setPlayDates(pd);
       setSeasons(s);
       setVenues(v);
+
+      // Fetch sessions for each play date in parallel
+      const entries = await Promise.all(
+        pd.map(async (p) => {
+          const sessions = await listLadderSessions(p.id).catch(() => [] as LadderSessionDoc[]);
+          return [p.id, sessions] as const;
+        }),
+      );
+      setSessionMap(Object.fromEntries(entries));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load.");
     }
@@ -164,42 +190,68 @@ export default function PlayDatesPage() {
         )}
 
         {playDates === null ? (
-          <Panel variant="base" padding="md">
-            <p className="text-ash-400 text-sm">Loading play dates…</p>
-          </Panel>
+          <SkeletonList count={3} />
         ) : playDates.length === 0 ? (
-          <Panel variant="base" padding="lg">
-            <div className="flex items-center gap-3 text-ash-400">
-              <CalendarDays className="h-5 w-5" />
-              <span className="text-sm">No play dates scheduled yet.</span>
-            </div>
-          </Panel>
+          <EmptyState
+            icon={<CalendarDays className="h-8 w-8" />}
+            title="No play dates yet"
+            description="Play dates will appear here once a coordinator schedules them."
+          />
         ) : (
           <ul className="grid gap-3 md:grid-cols-2">
-            {playDates.map((pd) => (
-              <li key={pd.id}>
-                <Panel variant="inventory" padding="md">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <h2 className="heading-fantasy text-lg text-ash-100">
-                      {pd.date}
-                    </h2>
-                    <RuneChip tone={STATUS_TONE[pd.status]}>
-                      {pd.status.replace(/_/g, " ").toLowerCase()}
-                    </RuneChip>
-                  </div>
-                  <div className="text-xs text-ash-500 font-mono mb-3">
-                    {seasonName(pd.seasonId)} · {venueName(pd.venueId)}
-                  </div>
-                  <div className="flex gap-2">
-                    <Link href={`/ladder/check-in?playDate=${pd.id}`}>
-                      <Button size="sm" variant="outline">
-                        Check-In
-                      </Button>
-                    </Link>
-                  </div>
-                </Panel>
-              </li>
-            ))}
+            {playDates.map((pd) => {
+              const sessions = sessionMap[pd.id] ?? [];
+              const sessionA = sessions.find((s) => s.kind === "A");
+              const sessionB = sessions.find((s) => s.kind === "B");
+              return (
+                <li key={pd.id}>
+                  <Panel variant="inventory" padding="md">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h2 className="heading-fantasy text-lg text-ash-100">
+                        {pd.date}
+                      </h2>
+                      <RuneChip tone={STATUS_TONE[pd.status]}>
+                        {pd.status.replace(/_/g, " ").toLowerCase()}
+                      </RuneChip>
+                    </div>
+                    <div className="text-xs text-ash-500 font-mono mb-2">
+                      {seasonName(pd.seasonId)} · {venueName(pd.venueId)}
+                    </div>
+
+                    {/* Session status badges */}
+                    {(sessionA || sessionB) && (
+                      <div className="flex gap-1.5 mb-3 flex-wrap">
+                        {sessionA && (
+                          <RuneChip tone={SESSION_STATUS_TONE[sessionA.status]} className="text-[9px]">
+                            Session A · {sessionA.status.replace(/_/g, " ").toLowerCase()}
+                          </RuneChip>
+                        )}
+                        {sessionB && (
+                          <RuneChip tone={SESSION_STATUS_TONE[sessionB.status]} className="text-[9px]">
+                            Session B · {sessionB.status.replace(/_/g, " ").toLowerCase()}
+                          </RuneChip>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 flex-wrap">
+                      <Link href={`/ladder/check-in?playDate=${pd.id}`}>
+                        <Button size="sm" variant="outline">
+                          Check-In
+                        </Button>
+                      </Link>
+                      {(sessionA || sessionB) && (
+                        <Link href={`/ladder/session?playDate=${pd.id}`}>
+                          <Button size="sm" variant="ghost">
+                            Session →
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  </Panel>
+                </li>
+              );
+            })}
           </ul>
         )}
       </main>

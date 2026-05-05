@@ -13,12 +13,19 @@ import {
   XCircle,
   Users,
   Crown,
+  Megaphone,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/lib/permissions/usePermissions";
+import { useToast } from "@/lib/toast-context";
 import { getAdminStats, listRecentRoleEvents, type AdminStats } from "@/lib/admin/repo";
+import { listAllUsers } from "@/lib/firestore/userRepo";
+import { writeNotification } from "@/lib/ladder/write";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type { RoleEventDoc } from "@/lib/permissions/types";
 
@@ -84,11 +91,15 @@ function StatCard({ label, value, icon, tone = "text-ash-400", href, badge }: St
 
 export default function AdminHubPage() {
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
+  const { toast } = useToast();
   const isStaff = isSiteAdmin || clubDirectorFor.length > 0;
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentEvents, setRecentEvents] = useState<RoleEventDoc[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [announceTitle, setAnnounceTitle] = useState("");
+  const [announceBody, setAnnounceBody] = useState("");
+  const [announcing, setAnnouncing] = useState(false);
 
   useEffect(() => {
     if (permLoading || !isSiteAdmin || !isFirebaseConfigured()) {
@@ -102,6 +113,35 @@ export default function AdminHubPage() {
       })
       .finally(() => setStatsLoading(false));
   }, [isSiteAdmin, permLoading]);
+
+  async function handleAnnounce() {
+    if (!announceTitle.trim() || !announceBody.trim()) {
+      toast("Title and message are required.", "error");
+      return;
+    }
+    setAnnouncing(true);
+    try {
+      const allUsers = await listAllUsers(1000);
+      await Promise.allSettled(
+        allUsers.map((u) =>
+          writeNotification({
+            userId: u.uid,
+            title: announceTitle.trim(),
+            body: announceBody.trim(),
+            kind: "ANNOUNCEMENT",
+            href: "/",
+          }),
+        ),
+      );
+      toast(`Platform announcement sent to ${allUsers.length} users.`, "success");
+      setAnnounceTitle("");
+      setAnnounceBody("");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to send announcement.", "error");
+    } finally {
+      setAnnouncing(false);
+    }
+  }
 
   if (permLoading) {
     return (
@@ -336,6 +376,46 @@ export default function AdminHubPage() {
             </Link>
           </div>
         </section>
+
+        {/* Platform announcement — site admins only */}
+        {isSiteAdmin && (
+          <section>
+            <h2 className="heading-fantasy text-xs uppercase tracking-[0.2em] text-ash-500 mb-3 flex items-center gap-2">
+              <Megaphone className="h-3.5 w-3.5" /> Platform Announcement
+            </h2>
+            <Panel variant="quest" padding="lg" className="space-y-3">
+              <p className="text-ash-400 text-xs">
+                Sends an in-app notification to every registered user on the platform.
+              </p>
+              <input
+                type="text"
+                placeholder="Announcement title…"
+                value={announceTitle}
+                onChange={(e) => setAnnounceTitle(e.target.value)}
+                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 placeholder:text-ash-600"
+              />
+              <textarea
+                placeholder="Message body…"
+                value={announceBody}
+                onChange={(e) => setAnnounceBody(e.target.value)}
+                rows={3}
+                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 placeholder:text-ash-600 resize-none"
+              />
+              <Button
+                size="sm"
+                onClick={handleAnnounce}
+                disabled={announcing || !announceTitle.trim() || !announceBody.trim()}
+              >
+                {announcing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                {announcing ? "Sending…" : "Send to All Users"}
+              </Button>
+            </Panel>
+          </section>
+        )}
 
         {/* Recent actions — site admins only */}
         {isSiteAdmin && !statsLoading && recentEvents.length > 0 && (

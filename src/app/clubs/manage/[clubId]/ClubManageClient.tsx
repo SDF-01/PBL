@@ -5,16 +5,22 @@ import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  Bell,
   Building2,
   Car,
   ChevronRight,
   CheckCircle,
+  Copy,
+  Edit2,
   Layers,
   Lightbulb,
+  Link as LinkIcon,
   Loader2,
   MapPin,
+  Megaphone,
   Plus,
   Save,
+  Send,
   Trash2,
   Trophy,
   UserPlus,
@@ -25,6 +31,7 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/lib/toast-context";
 import {
   countClubPlayers,
@@ -34,9 +41,11 @@ import {
   listClubCoordinators,
   getUserByEmail,
 } from "@/lib/clubs/repo";
-import { upsertClubFacility } from "@/lib/clubs/write";
-import { createLeague } from "@/lib/leagues/write";
-import { createVenue } from "@/lib/ladder/write";
+import { upsertClubFacility, deleteClubFacility } from "@/lib/clubs/write";
+import { createLeague, leaveLeague } from "@/lib/leagues/write";
+import { listLeagueMembers, type LeagueMemberEntry } from "@/lib/leagues/repo";
+import { getPlayerProfile } from "@/lib/players/repo";
+import { createVenue, writeNotification } from "@/lib/ladder/write";
 import { assignRole, deactivateUserRole } from "@/lib/permissions/write";
 import { listVenues } from "@/lib/ladder/repo";
 import { useAuth } from "@/lib/auth-context";
@@ -45,7 +54,7 @@ import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
 import type { LeagueDoc, VenueDoc } from "@/lib/firestore/types";
 import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
-type Section = "overview" | "leagues" | "facilities" | "coordinators";
+type Section = "overview" | "leagues" | "facilities" | "coordinators" | "members";
 
 const AMENITY_OPTIONS = [
   "Restrooms",
@@ -134,7 +143,8 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
     { id: "overview",     label: "Overview",     Icon: Building2 },
     { id: "leagues",      label: "Leagues",      Icon: Layers },
     { id: "facilities",   label: "Facilities",   Icon: Wrench },
-    { id: "coordinators", label: "Coordinators", Icon: Users },
+    { id: "members",      label: "Members",      Icon: Users },
+    { id: "coordinators", label: "Coordinators", Icon: UserPlus },
   ];
 
   return (
@@ -171,6 +181,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
         {section === "overview"     && <OverviewSection club={club} clubId={clubId} onNavigate={setSection} />}
         {section === "leagues"      && <LeaguesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "facilities"   && <FacilitiesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
+        {section === "members"      && <MembersSection clubId={clubId} toast={toast} />}
         {section === "coordinators" && <CoordinatorsSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
       </main>
     </ResponsiveShell>
@@ -379,70 +390,82 @@ function OverviewSection({
             </button>
           </Panel>
         ) : (
-          <button
-            type="button"
-            onClick={() => onNavigate("facilities")}
-            className="w-full text-left"
-          >
-            <Panel variant="inventory" padding="md" className="space-y-3 hover:border-ember-500/40 transition-colors cursor-pointer">
-              {/* Name + address */}
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
-                  <MapPin className="h-4 w-4 text-ember-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    <div className="min-w-0">
-                      {facility.facilityName && (
-                        <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
-                      )}
-                      {facility.address && (
-                        <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0 bg-obsidian-700 border border-ash-700 rounded-pixel px-2 py-1">
+          <Panel variant="inventory" padding="md" className="space-y-3">
+            {/* Name + address */}
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                <MapPin className="h-4 w-4 text-ember-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="min-w-0">
+                    {facility.facilityName && (
+                      <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                    )}
+                    {facility.address && (
+                      <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="bg-obsidian-700 border border-ash-700 rounded-pixel px-2 py-1 flex items-center gap-1.5">
                       <Layers className="h-3 w-3 text-ember-400" />
                       <span className="heading-fantasy text-ash-100 text-sm">{leagues.length}</span>
                       <span className="text-ash-500 text-[10px]">{leagues.length === 1 ? "league" : "leagues"}</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate("facilities")}
+                      className="p-1.5 rounded text-ash-500 hover:text-ember-400 transition-colors"
+                      title="Edit facility"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
-                    {(facility.pickleballCourts ?? 0) > 0 && (
-                      <span>{facility.pickleballCourts} Pickleball Courts</span>
-                    )}
-                    {(facility.tennisConversionCourts ?? 0) > 0 && (
-                      <span>{facility.tennisConversionCourts} Tennis Conversion</span>
-                    )}
-                    {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
-                    {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
-                  </div>
-                  {(facility.amenities?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {facility.amenities!.slice(0, 4).map((a) => (
-                        <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
-                      ))}
-                      {facility.amenities!.length > 4 && (
-                        <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
-                      )}
-                    </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {facility.isIndoor && (
+                    <RuneChip tone="rune" className="text-[10px]">Indoor</RuneChip>
+                  )}
+                  {facility.surfaceType && (
+                    <RuneChip tone="neutral" className="text-[10px] capitalize">{facility.surfaceType}</RuneChip>
                   )}
                 </div>
-              </div>
-
-              {/* Map embed */}
-              {facility.address && (
-                <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
-                  <iframe
-                    title="Facility location"
-                    src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
-                    className="w-full h-full border-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
+                <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
+                  {(facility.pickleballCourts ?? 0) > 0 && (
+                    <span>{facility.pickleballCourts} Pickleball Courts</span>
+                  )}
+                  {(facility.tennisConversionCourts ?? 0) > 0 && (
+                    <span>{facility.tennisConversionCourts} Tennis Conversion</span>
+                  )}
+                  {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
+                  {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
                 </div>
-              )}
-            </Panel>
-          </button>
+                {(facility.amenities?.length ?? 0) > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {facility.amenities!.slice(0, 4).map((a) => (
+                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
+                    ))}
+                    {facility.amenities!.length > 4 && (
+                      <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Map embed */}
+            {facility.address && (
+              <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
+                <iframe
+                  title="Facility location"
+                  src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
+                  className="w-full h-full border-0"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
+            )}
+          </Panel>
         )}
       </div>
 
@@ -615,9 +638,12 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
 function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [savingVenue, setSavingVenue] = useState(false);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [showVenueForm, setShowVenueForm] = useState(false);
+  const [hasFacility, setHasFacility] = useState(false);
 
   // Facility fields
   const [facilityName, setFacilityName] = useState("");
@@ -626,6 +652,8 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   const [tennisConversionCourts, setTennisConversionCourts] = useState<number>(0);
   const [hasParking, setHasParking] = useState(false);
   const [hasLights, setHasLights] = useState(false);
+  const [isIndoor, setIsIndoor] = useState(false);
+  const [surfaceType, setSurfaceType] = useState<"hard" | "clay" | "turf" | "indoor" | "">("");
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
@@ -637,12 +665,15 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   useEffect(() => {
     Promise.all([getClubFacility(clubId), listVenues(clubId)]).then(([f, v]) => {
       if (f) {
+        setHasFacility(true);
         setFacilityName(f.facilityName ?? "");
         setAddress(f.address ?? "");
         setPickleballCourts(f.pickleballCourts ?? 0);
         setTennisConversionCourts(f.tennisConversionCourts ?? 0);
         setHasParking(f.hasParking ?? false);
         setHasLights(f.hasLights ?? false);
+        setIsIndoor(f.isIndoor ?? false);
+        setSurfaceType(f.surfaceType ?? "");
         setSelectedAmenities(f.amenities ?? []);
         setNotes(f.notes ?? "");
       }
@@ -666,14 +697,34 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
         pickleballCourts,
         tennisConversionCourts,
         hasParking, hasLights,
+        isIndoor,
+        surfaceType: surfaceType || undefined,
         amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
         notes: notes.trim() || undefined,
       }, userId);
+      setHasFacility(true);
       toast("Facility information saved.", "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save.", "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteClubFacility(clubId);
+      setHasFacility(false);
+      setFacilityName(""); setAddress(""); setPickleballCourts(0); setTennisConversionCourts(0);
+      setHasParking(false); setHasLights(false); setIsIndoor(false); setSurfaceType("");
+      setSelectedAmenities([]); setNotes("");
+      setConfirmDelete(false);
+      toast("Facility information removed.", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to delete.", "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -711,12 +762,43 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
 
       {/* Court Facilities */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Court Facilities</h2>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save
-          </Button>
+          <div className="flex items-center gap-2">
+            {hasFacility && !confirmDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-pixel text-xs text-ash-500 hover:text-crimson-400 border border-transparent hover:border-crimson-500/40 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+            )}
+            {confirmDelete && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-crimson-400">Remove all facility info?</span>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-2.5 py-1.5 rounded-pixel text-xs bg-crimson-500/20 text-crimson-400 border border-crimson-500/40 hover:bg-crimson-500/30 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline" /> : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-2.5 py-1.5 rounded-pixel text-xs text-ash-400 border border-ash-700 hover:text-ash-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Save
+            </Button>
+          </div>
         </div>
 
         <Panel variant="quest" padding="lg" className="space-y-4">
@@ -763,6 +845,27 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
                   onChange={(e) => setTennisConversionCourts(parseInt(e.target.value, 10) || 0)}
                 />
               </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-2 block">Court Type &amp; Surface</label>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <ToggleRow icon={<Building2 className="h-4 w-4" />} label="Indoor Facility" value={isIndoor} onChange={setIsIndoor} />
+            </div>
+            <div>
+              <label className="text-ash-500 text-xs mb-1 block">Surface Type</label>
+              <select
+                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+                value={surfaceType}
+                onChange={(e) => setSurfaceType(e.target.value as typeof surfaceType)}
+              >
+                <option value="">— Not specified —</option>
+                <option value="hard">Hard (Concrete / Asphalt)</option>
+                <option value="clay">Clay</option>
+                <option value="turf">Turf / Synthetic</option>
+                <option value="indoor">Indoor (Gymnasium / Sport Court)</option>
+              </select>
             </div>
           </div>
 
@@ -883,6 +986,266 @@ function ToggleRow({ icon, label, value, onChange }: { icon: React.ReactNode; la
       <span className="text-xs font-medium">{label}</span>
       <span className={`ml-auto text-[10px] font-bold ${value ? "text-ember-400" : "text-ash-600"}`}>{value ? "YES" : "NO"}</span>
     </button>
+  );
+}
+
+// ============================================================
+// MEMBERS
+// ============================================================
+
+interface ClubMemberRow {
+  userId: string;
+  displayName: string;
+  elo: number;
+  memberships: Array<{ id: string; leagueId: string; leagueName: string; status: string }>;
+}
+
+interface PendingRemove {
+  userId: string;
+  membershipId: string;
+  leagueId: string;
+  leagueName: string;
+  displayName: string;
+}
+
+function MembersSection({ clubId, toast }: { clubId: string; toast: ToastFn }) {
+  const [loading, setLoading] = useState(true);
+  const [members, setMembers] = useState<ClubMemberRow[]>([]);
+  const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<PendingRemove | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [showAnnouncement, setShowAnnouncement] = useState(false);
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementBody, setAnnouncementBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const inviteUrl = typeof window !== "undefined" ? `${window.location.origin}/clubs/${clubId}` : `/clubs/${clubId}`;
+
+  async function handleSendAnnouncement() {
+    if (!announcementTitle.trim() || !announcementBody.trim()) {
+      toast("Title and message are required.", "error");
+      return;
+    }
+    const recipients = members.map((m) => m.userId);
+    if (recipients.length === 0) { toast("No members to notify.", "error"); return; }
+    setSending(true);
+    try {
+      await Promise.all(
+        recipients.map((uid) =>
+          writeNotification({
+            userId: uid,
+            title: announcementTitle.trim(),
+            body: announcementBody.trim(),
+            kind: "ANNOUNCEMENT",
+            href: `/clubs/${clubId}`,
+          }),
+        ),
+      );
+      toast(`Announcement sent to ${recipients.length} member${recipients.length === 1 ? "" : "s"}.`, "success");
+      setAnnouncementTitle(""); setAnnouncementBody(""); setShowAnnouncement(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to send.", "error");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function handleCopyLink() {
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setCopied(true);
+      toast("Invite link copied to clipboard.", "success");
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => toast("Could not copy link.", "error"));
+  }
+
+  useEffect(() => {
+    async function load() {
+      const clubLeagues = await listClubLeagues(clubId);
+      setLeagues(clubLeagues);
+      const allMemberships = await Promise.all(
+        clubLeagues.map((l) => listLeagueMembers(l.id).then((ms) => ms.map((m) => ({ ...m, leagueName: l.name })))),
+      );
+      const flat = allMemberships.flat().filter((m) => m.status === "active");
+      const byUser = new Map<string, typeof flat>();
+      for (const m of flat) {
+        if (!byUser.has(m.userId)) byUser.set(m.userId, []);
+        byUser.get(m.userId)!.push(m);
+      }
+      const profiles = await Promise.all(
+        Array.from(byUser.keys()).map((uid) => getPlayerProfile(uid)),
+      );
+      const rows: ClubMemberRow[] = Array.from(byUser.entries()).map(([uid, ms], i) => ({
+        userId: uid,
+        displayName: profiles[i]?.displayName ?? uid,
+        elo: profiles[i]?.elo ?? 1500,
+        memberships: ms.map((m) => ({ id: m.id, leagueId: m.leagueId, leagueName: m.leagueName, status: m.status })),
+      }));
+      rows.sort((a, b) => b.elo - a.elo);
+      setMembers(rows);
+      setLoading(false);
+    }
+    load().catch(() => setLoading(false));
+  }, [clubId]);
+
+  async function handleRemove(userId: string, membershipId: string, leagueId: string, leagueName: string) {
+    setRemoving(membershipId);
+    try {
+      await leaveLeague(userId, leagueId);
+      setMembers((prev) =>
+        prev
+          .map((m) =>
+            m.userId === userId
+              ? { ...m, memberships: m.memberships.filter((ms) => ms.id !== membershipId) }
+              : m,
+          )
+          .filter((m) => m.memberships.length > 0),
+      );
+      toast(`Removed from ${leagueName}.`, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Remove failed.", "error");
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Members</h2>
+        <span className="text-ash-500 text-xs">{loading ? "…" : `${members.length} active`}</span>
+      </div>
+
+      {/* Announcement composer */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowAnnouncement((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-pixel bg-obsidian-700 border border-ash-700 hover:border-ember-500/40 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-ember-400" />
+            <span className="text-ash-200 text-sm font-medium">Send Announcement</span>
+          </div>
+          <span className="text-ash-500 text-xs">{members.length} recipients</span>
+        </button>
+        {showAnnouncement && (
+          <Panel variant="quest" padding="lg" className="mt-2 space-y-3">
+            <input
+              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+              placeholder="Announcement title *"
+              value={announcementTitle}
+              onChange={(e) => setAnnouncementTitle(e.target.value)}
+            />
+            <textarea
+              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
+              placeholder="Message body *"
+              rows={3}
+              value={announcementBody}
+              onChange={(e) => setAnnouncementBody(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSendAnnouncement} disabled={sending || members.length === 0}>
+                {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {sending ? "Sending…" : `Send to ${members.length}`}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowAnnouncement(false)}>Cancel</Button>
+            </div>
+          </Panel>
+        )}
+      </div>
+
+      {/* Invite link */}
+      <Panel variant="quest" padding="md">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded bg-ash-800 shrink-0">
+            <LinkIcon className="h-4 w-4 text-ember-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-ash-100 text-sm font-medium mb-0.5">Invite Link</p>
+            <p className="text-ash-400 text-xs mb-2">Share this link so players can view your club and join its active leagues.</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 min-w-0 truncate bg-obsidian-900 border border-ash-700 rounded px-2 py-1.5 text-xs text-ash-300 font-mono">
+                {inviteUrl}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-pixel text-xs border transition-colors shrink-0 ${
+                  copied
+                    ? "bg-success-500/20 border-success-500/40 text-success-400"
+                    : "bg-obsidian-700 border-ash-700 text-ash-300 hover:border-ember-500/40 hover:text-ember-300"
+                }`}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      {loading ? (
+        <Panel variant="base" padding="lg" className="flex justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
+        </Panel>
+      ) : members.length === 0 ? (
+        <Panel variant="base" padding="lg" className="text-center">
+          <Users className="h-8 w-8 text-ash-600 mx-auto mb-2" />
+          <p className="text-ash-400 text-sm">No active members yet.</p>
+        </Panel>
+      ) : (
+        <div className="space-y-2">
+          {members.map((member) => (
+            <Panel key={member.userId} variant="inventory" padding="md">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-ash-100 text-sm font-medium">{member.displayName}</p>
+                  <p className="text-ash-500 text-xs">ELO {member.elo}</p>
+                </div>
+              </div>
+              <div className="mt-2 space-y-1">
+                {member.memberships.map((ms) => (
+                  <div key={ms.id} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <RuneChip tone="rune" className="text-[10px] shrink-0">League</RuneChip>
+                      <span className="text-ash-300 text-xs truncate">{ms.leagueName}</span>
+                    </div>
+                    <button
+                      onClick={() => setConfirmRemove({ userId: member.userId, membershipId: ms.id, leagueId: ms.leagueId, leagueName: ms.leagueName, displayName: member.displayName })}
+                      disabled={removing === ms.id}
+                      className="text-ash-500 hover:text-crimson-400 transition-colors disabled:opacity-50 shrink-0"
+                      title="Remove from league"
+                    >
+                      {removing === ms.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          ))}
+        </div>
+      )}
+
+      {confirmRemove && (
+        <ConfirmDialog
+          title="Remove from League"
+          description={`Remove ${confirmRemove.displayName} from "${confirmRemove.leagueName}"? Their match history will be preserved.`}
+          confirmLabel="Remove"
+          variant="danger"
+          submitting={removing === confirmRemove.membershipId}
+          onConfirm={() => {
+            handleRemove(confirmRemove.userId, confirmRemove.membershipId, confirmRemove.leagueId, confirmRemove.leagueName);
+            setConfirmRemove(null);
+          }}
+          onCancel={() => setConfirmRemove(null)}
+        />
+      )}
+    </div>
   );
 }
 

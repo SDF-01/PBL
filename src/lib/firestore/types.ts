@@ -110,6 +110,25 @@ export interface LeagueDoc {
   next_play_date?: string;
   check_in_status?: string;
   league_format?: string;
+  /** Venue (court location) where the league is played. */
+  venueId?: string;
+  venueName?: string;
+  venueAddress?: string;
+  /** ISO date strings (YYYY-MM-DD). */
+  registrationOpenDate?: string;
+  registrationCloseDate?: string;
+  firstSessionDate?: string;
+  lastSessionDate?: string;
+  /** Derived from firstSessionDate, e.g. "Tuesday". */
+  sessionDayOfWeek?: string;
+  /** Number of sessions between first and last (inclusive, same weekday). */
+  sessionCount?: number;
+  /** User ID of the league director (display only; permissions come from ClubDirector role). */
+  directorId?: string;
+  directorName?: string;
+  /** User ID of the primary league coordinator. */
+  coordinatorId?: string;
+  coordinatorName?: string;
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -239,7 +258,16 @@ export interface NotificationDoc {
   title: string;
   body: string;
   href?: string | null;
-  kind: "TOURNAMENT_CREATED" | "BRACKET_PUBLISHED" | "MATCH_READY" | "ANNOUNCEMENT" | "GENERAL";
+  kind:
+    | "TOURNAMENT_CREATED"
+    | "BRACKET_PUBLISHED"
+    | "MATCH_READY"
+    | "ANNOUNCEMENT"
+    | "SCORE_SUBMITTED"
+    | "SCORE_DISPUTED"
+    | "LADDER_PROMOTED"
+    | "LADDER_DEMOTED"
+    | "GENERAL";
   read: boolean;
   createdAt: string;
   createdBy?: string;
@@ -270,6 +298,7 @@ export type LadderMatchStatus =
   | "SUBMITTED"
   | "AWAITING_VERIFICATION"
   | "VERIFIED"
+  | "DISPUTED"
   | "ADMIN_ASSIGNED";
 
 export type CheckInStatus =
@@ -393,11 +422,9 @@ export interface CheckInDoc {
   displayName: string;
   status: CheckInStatus;
   checkedInAt?: string;
-  /** Reported geolocation at check-in time. */
+  /** Reported geolocation at check-in time. WGS84, matches VenueDoc naming. */
   lat?: number;
   lng?: number;
-  latitude?: number;
-  longitude?: number;
   /** Distance from venue center in meters, if computed. */
   distanceMeters?: number;
   geofenceResult?: string;

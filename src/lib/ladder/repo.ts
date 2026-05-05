@@ -222,6 +222,133 @@ export function subscribeLadderMatches(
 // STANDINGS SNAPSHOTS
 // ============================================================
 
+export async function listPlayerRecentMatches(
+  playerId: string,
+  maxResults = 10,
+): Promise<LadderMatchDoc[]> {
+  // Fetch recent verified + admin-assigned matches containing this player.
+  const [snapA, snapB] = await Promise.all([
+    getDocs(
+      query(
+        collection(db(), COLLECTIONS.ladderMatches),
+        where("sideA", "array-contains", playerId),
+        where("status", "in", ["VERIFIED", "ADMIN_ASSIGNED"]),
+        orderBy("verifiedAt", "desc"),
+        limit(maxResults),
+      ),
+    ),
+    getDocs(
+      query(
+        collection(db(), COLLECTIONS.ladderMatches),
+        where("sideB", "array-contains", playerId),
+        where("status", "in", ["VERIFIED", "ADMIN_ASSIGNED"]),
+        orderBy("verifiedAt", "desc"),
+        limit(maxResults),
+      ),
+    ),
+  ]);
+  const all = [
+    ...snapA.docs.map((d) => ({ id: d.id, ...d.data() }) as LadderMatchDoc),
+    ...snapB.docs.map((d) => ({ id: d.id, ...d.data() }) as LadderMatchDoc),
+  ];
+  // Deduplicate and sort newest first, take top N.
+  const seen = new Set<string>();
+  return all
+    .filter((m) => { if (seen.has(m.id)) return false; seen.add(m.id); return true; })
+    .sort((a, b) => (b.verifiedAt ?? "").localeCompare(a.verifiedAt ?? ""))
+    .slice(0, maxResults);
+}
+
+export async function getPlayerStandingInSeason(
+  playerId: string,
+  seasonId: string,
+): Promise<{ rank: number; total: number; elo: number } | null> {
+  // Use the most recent standings snapshot for this season.
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.standingsSnapshots),
+      where("seasonId", "==", seasonId),
+      orderBy("snapshotAt", "desc"),
+      limit(1),
+    ),
+  );
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  if (!doc) return null;
+  const data = { id: doc.id, ...doc.data() } as StandingsSnapshotDoc;
+  const entry = data.resultsByPlayer.find((r) => r.playerId === playerId);
+  if (!entry) return null;
+  return { rank: entry.rank, total: data.totalPlayers, elo: 0 };
+}
+
+export async function listDisputedMatches(): Promise<LadderMatchDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.ladderMatches),
+      where("status", "==", "DISPUTED"),
+      orderBy("gameNumber", "asc"),
+      limit(100),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LadderMatchDoc);
+}
+
+export interface HeadToHeadRecord {
+  wins: number;
+  losses: number;
+  matches: number;
+}
+
+export async function getHeadToHeadRecord(
+  playerAId: string,
+  playerBId: string,
+): Promise<HeadToHeadRecord> {
+  const [snapA, snapB] = await Promise.all([
+    getDocs(
+      query(
+        collection(db(), COLLECTIONS.ladderMatches),
+        where("sideA", "array-contains", playerAId),
+        where("status", "==", "VERIFIED"),
+        limit(200),
+      ),
+    ),
+    getDocs(
+      query(
+        collection(db(), COLLECTIONS.ladderMatches),
+        where("sideB", "array-contains", playerAId),
+        where("status", "==", "VERIFIED"),
+        limit(200),
+      ),
+    ),
+  ]);
+
+  const allMatches = [
+    ...snapA.docs.map((d) => ({ id: d.id, ...d.data() }) as LadderMatchDoc),
+    ...snapB.docs.map((d) => ({ id: d.id, ...d.data() }) as LadderMatchDoc),
+  ];
+
+  let wins = 0;
+  let losses = 0;
+
+  for (const m of allMatches) {
+    const aOnSideA = m.sideA.includes(playerAId);
+    const bOnSideB = m.sideB.includes(playerBId);
+    const bOnSideA = m.sideA.includes(playerBId);
+    const aOnSideB = m.sideB.includes(playerAId);
+
+    const isH2H = (aOnSideA && bOnSideB) || (aOnSideB && bOnSideA);
+    if (!isH2H) continue;
+    if (m.scoreA === undefined || m.scoreB === undefined) continue;
+
+    const aWins =
+      (aOnSideA && m.scoreA > m.scoreB) || (aOnSideB && m.scoreB > m.scoreA);
+    if (aWins) wins++;
+    else losses++;
+  }
+
+  return { wins, losses, matches: wins + losses };
+}
+
 export async function getLatestStandingsSnapshot(
   sessionId: string,
 ): Promise<StandingsSnapshotDoc | null> {
@@ -246,6 +373,7 @@ export async function getLatestStandingsSnapshot(
 export interface PlayerSessionData {
   currentSession?: LadderSessionDoc;
   assignedCourt?: LadderCourtDoc;
+  allCourts?: LadderCourtDoc[];
   currentMatch?: LadderMatchDoc & { courtNumber: number };
   nextMatch?: LadderMatchDoc & { courtNumber: number };
   sitOutMatch?: LadderMatchDoc & { courtNumber: number };
@@ -327,9 +455,25 @@ export async function getPlayerSessionData(
   return {
     currentSession: activeSession,
     assignedCourt,
+    allCourts: courts,
     currentMatch,
     nextMatch,
     sitOutMatch,
     allMatches,
   };
+}
+
+export function subscribeSessionMatches(
+  sessionId: string,
+  onChange: (matches: LadderMatchDoc[]) => void,
+): Unsubscribe {
+  return onSnapshot(
+    query(
+      collection(db(), COLLECTIONS.ladderMatches),
+      where("sessionId", "==", sessionId),
+    ),
+    (snap) => {
+      onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LadderMatchDoc));
+    },
+  );
 }

@@ -92,4 +92,96 @@ describe("ELO", () => {
     expect(skillBand(1100)).toBe("NOVICE");
     expect(skillBand(2100)).toBe("ELITE");
   });
+
+  it("skillBand boundary values", () => {
+    expect(skillBand(1199)).toBe("NOVICE");
+    expect(skillBand(1200)).toBe("BEGINNER");
+    expect(skillBand(1399)).toBe("BEGINNER");
+    expect(skillBand(1400)).toBe("INTERMEDIATE");
+    expect(skillBand(1599)).toBe("INTERMEDIATE");
+    expect(skillBand(1600)).toBe("ADVANCED");
+    expect(skillBand(1799)).toBe("ADVANCED");
+    expect(skillBand(1800)).toBe("EXPERT");
+    expect(skillBand(1999)).toBe("EXPERT");
+    expect(skillBand(2000)).toBe("ELITE");
+  });
+
+  it("blowout awards more ELO than narrow win", () => {
+    const blowout = computeEloDeltas({
+      sideA: [{ userId: "a", elo: 1500, matches: 50 }],
+      sideB: [{ userId: "b", elo: 1500, matches: 50 }],
+      scoreA: 11,
+      scoreB: 0,
+      targetPoints: 11,
+    });
+    const narrow = computeEloDeltas({
+      sideA: [{ userId: "a", elo: 1500, matches: 50 }],
+      sideB: [{ userId: "b", elo: 1500, matches: 50 }],
+      scoreA: 11,
+      scoreB: 10,
+      targetPoints: 11,
+    });
+    expect(blowout[0]!.delta).toBeGreaterThan(narrow[0]!.delta);
+  });
+
+  it("ELO change is zero-sum across all players in a singles match", () => {
+    const deltas = computeEloDeltas({
+      sideA: [{ userId: "a", elo: 1600, matches: 50 }],
+      sideB: [{ userId: "b", elo: 1400, matches: 50 }],
+      scoreA: 11,
+      scoreB: 8,
+      targetPoints: 11,
+    });
+    const sum = deltas.reduce((acc, d) => acc + d.delta, 0);
+    expect(sum).toBe(0);
+  });
+
+  it("ELO change is zero-sum across all players in a doubles match", () => {
+    const deltas = computeEloDeltas({
+      sideA: [
+        { userId: "a1", elo: 1600, matches: 50 },
+        { userId: "a2", elo: 1400, matches: 50 },
+      ],
+      sideB: [
+        { userId: "b1", elo: 1500, matches: 50 },
+        { userId: "b2", elo: 1500, matches: 50 },
+      ],
+      scoreA: 11,
+      scoreB: 7,
+      targetPoints: 11,
+    });
+    const sum = deltas.reduce((acc, d) => acc + d.delta, 0);
+    expect(sum).toBe(0);
+  });
+
+  it("rejects empty sides", () => {
+    expect(() =>
+      computeEloDeltas({
+        sideA: [],
+        sideB: [{ userId: "b", elo: 1500, matches: 10 }],
+        scoreA: 11,
+        scoreB: 7,
+        targetPoints: 11,
+      }),
+    ).toThrow();
+  });
+
+  it("delta.after === delta.before + delta.delta for all players", () => {
+    const deltas = computeEloDeltas({
+      sideA: [
+        { userId: "a1", elo: 1550, matches: 20 },
+        { userId: "a2", elo: 1450, matches: 100 },
+      ],
+      sideB: [
+        { userId: "b1", elo: 1600, matches: 5 },
+        { userId: "b2", elo: 1500, matches: 50 },
+      ],
+      scoreA: 11,
+      scoreB: 9,
+      targetPoints: 11,
+    });
+    deltas.forEach((d) => {
+      expect(d.after).toBe(d.before + d.delta);
+    });
+  });
 });

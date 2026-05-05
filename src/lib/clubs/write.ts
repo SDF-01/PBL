@@ -1,6 +1,6 @@
 "use client";
 
-import { deleteField, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { deleteDoc, deleteField, doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubFacility } from "@/lib/permissions/types";
@@ -21,4 +21,8 @@ export async function upsertClubFacility(
     { ...cleaned, clubId, updatedBy, updatedAt: serverTimestamp() },
     { merge: true },
   );
+}
+
+export async function deleteClubFacility(clubId: string): Promise<void> {
+  await deleteDoc(doc(db(), COLLECTIONS.clubFacilities, clubId));
 }

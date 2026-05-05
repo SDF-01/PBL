@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ShieldAlert, ClipboardList, ArrowLeft, RefreshCw } from "lucide-react";
+import { ShieldAlert, ClipboardList, ArrowLeft, RefreshCw, Download, X } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
@@ -53,15 +54,70 @@ function RoleLabel({ roleId }: { roleId: string | null }) {
   return <span className="font-mono text-ash-200">{labels[roleId] ?? roleId}</span>;
 }
 
+const ALL_EVENT_TYPES = Object.keys(EVENT_LABEL) as RoleEventType[];
+
+function toISODate(ts: unknown): string {
+  if (!ts) return "";
+  const d =
+    ts && typeof ts === "object" && "toDate" in ts
+      ? (ts as { toDate(): Date }).toDate()
+      : new Date(ts as string);
+  return d.toISOString().slice(0, 10);
+}
+
+function escapeCsv(val: string): string {
+  if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+    return `"${val.replace(/"/g, '""')}"`;
+  }
+  return val;
+}
+
+function exportCsv(rows: RoleEventDoc[]) {
+  const headers = ["ID", "Type", "User ID", "Club ID", "Old Role", "New Role", "Timestamp", "Notes"];
+  const lines = [
+    headers.join(","),
+    ...rows.map((ev) =>
+      [
+        ev.id,
+        ev.eventType,
+        ev.userId,
+        ev.clubId ?? "",
+        ev.oldRoleId ?? "",
+        ev.newRoleId ?? "",
+        toISODate(ev.eventTimestamp),
+        escapeCsv(ev.notes),
+      ].join(","),
+    ),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminAuditPage() {
   const { isSiteAdmin, loading: permLoading } = usePermissions();
   const [events, setEvents]   = useState<RoleEventDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<RoleEventType | "">("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const filteredEvents = useMemo(() => {
+    let r = events;
+    if (typeFilter) r = r.filter((ev) => ev.eventType === typeFilter);
+    if (dateFrom) r = r.filter((ev) => toISODate(ev.eventTimestamp) >= dateFrom);
+    if (dateTo) r = r.filter((ev) => toISODate(ev.eventTimestamp) <= dateTo);
+    return r;
+  }, [events, typeFilter, dateFrom, dateTo]);
 
   function load() {
     if (!isFirebaseConfigured()) { setLoading(false); return; }
     setLoading(true);
-    listRecentRoleEvents(50)
+    listRecentRoleEvents(200)
       .then(setEvents)
       .finally(() => setLoading(false));
   }
@@ -122,25 +178,66 @@ export default function AdminAuditPage() {
             <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </Button>
+            <Button size="sm" variant="outline" onClick={() => exportCsv(filteredEvents)} disabled={filteredEvents.length === 0}>
+              <Download className="h-3.5 w-3.5" /> CSV
+            </Button>
           </div>
         </div>
 
-        {/* Stats */}
-        <Panel variant="base" padding="sm" className="flex items-center gap-3">
-          <span className="text-ash-500 text-sm">Events shown:</span>
-          <span className="heading-fantasy text-ember-300 text-lg">{events.length}</span>
-          <span className="text-ash-600 text-xs">(last 50)</span>
+        {/* Filters */}
+        <Panel variant="base" padding="md" className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-ash-500 text-xs uppercase tracking-widest">Filter:</span>
+            <select
+              className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-2 py-1.5 text-xs focus:outline-none focus:border-ember-500"
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as RoleEventType | "")}
+            >
+              <option value="">All types</option>
+              {ALL_EVENT_TYPES.map((t) => (
+                <option key={t} value={t}>{EVENT_LABEL[t]}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-2 py-1.5 text-xs focus:outline-none focus:border-ember-500"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              placeholder="From"
+            />
+            <span className="text-ash-600 text-xs">→</span>
+            <input
+              type="date"
+              className="rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-2 py-1.5 text-xs focus:outline-none focus:border-ember-500"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              placeholder="To"
+            />
+            {(typeFilter || dateFrom || dateTo) && (
+              <button
+                type="button"
+                onClick={() => { setTypeFilter(""); setDateFrom(""); setDateTo(""); }}
+                className="flex items-center gap-1 text-ash-500 hover:text-ash-100 text-xs transition-colors"
+              >
+                <X className="h-3 w-3" /> Clear
+              </button>
+            )}
+          </div>
+          <p className="text-ash-500 text-xs">
+            Showing {filteredEvents.length} of {events.length} events
+          </p>
         </Panel>
 
         {/* Event list */}
-        {events.length === 0 ? (
-          <Panel variant="base" padding="lg" className="text-center space-y-2">
-            <ClipboardList className="h-8 w-8 text-ash-600 mx-auto" />
-            <p className="text-ash-400 text-sm">No audit events found.</p>
-          </Panel>
+        {filteredEvents.length === 0 ? (
+          <EmptyState
+            icon={<ClipboardList className="h-8 w-8" />}
+            title={events.length === 0 ? "No audit events found" : "No events match filters"}
+            description={events.length === 0 ? "Administrative actions will appear here." : "Try adjusting the date range or event type filter."}
+          />
         ) : (
           <div className="space-y-2">
-            {events.map((ev) => (
+            {filteredEvents.map((ev) => (
               <Panel key={ev.id} variant="inventory" padding="md">
                 <div className="flex items-start gap-3 flex-wrap">
                   <RuneChip
