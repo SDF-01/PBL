@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   CheckCircle2,
@@ -35,8 +35,17 @@ function formatNextPlayDate(value?: string): string {
   });
 }
 
-export function LeagueDetailsClient({ leagueId }: { leagueId: string }) {
+export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string }) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  // URL shape: /leagues/{leagueId} → segment index 2
+  // usePathname() always reflects the real browser URL; the prop may be "__fallback".
+  const pathnameSegment = pathname.split("/")[2];
+  const leagueId =
+    pathnameSegment && pathnameSegment !== "__fallback"
+      ? pathnameSegment
+      : fallbackId;
   const { user } = useAuth();
   const {
     isSiteAdmin,
@@ -62,6 +71,7 @@ export function LeagueDetailsClient({ leagueId }: { leagueId: string }) {
   }, [leagueId, searchParams]);
 
   useEffect(() => {
+    if (!leagueId || leagueId === "__fallback") { setLoading(false); return; }
     (async () => {
       setLoading(true);
       try {

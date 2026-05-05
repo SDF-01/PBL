@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
@@ -62,16 +62,20 @@ const AMENITY_OPTIONS = [
 
 export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
   const routeParams = useParams<{ clubId: string }>();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const { clubDirectorFor, isSiteAdmin, loading: permLoading } = usePermissions();
   const { toast } = useToast();
 
-  // useParams() returns the real URL param on the client, even when Firebase Hosting
-  // serves the __fallback shell. Fall back to the prop (which may be "__fallback")
-  // only during SSR/build when window isn't available.
+  // usePathname() always reflects the real browser URL; useParams() may return
+  // "__fallback" when the fallback shell is served for a dynamic URL.
+  // URL shape: /clubs/manage/{clubId} → segment index 3
+  const pathnameSegment = pathname.split("/")[3];
   const clubId =
-    routeParams?.clubId && routeParams.clubId !== "__fallback"
+    pathnameSegment && pathnameSegment !== "__fallback"
+      ? pathnameSegment
+      : routeParams?.clubId && routeParams.clubId !== "__fallback"
       ? routeParams.clubId
       : fallbackId;
 
@@ -81,10 +85,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
   const [section, setSection] = useState<Section>(initialSection);
 
   useEffect(() => {
-    if (!clubId || clubId === "__fallback") {
-      // Still waiting for the real clubId to arrive from useParams after hydration.
-      return;
-    }
+    if (!clubId || clubId === "__fallback") { setLoading(false); return; }
     getClubById(clubId)
       .then((c) => { setClub(c); setLoading(false); })
       .catch(() => { setClub(null); setLoading(false); });
