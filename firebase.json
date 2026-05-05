@@ -11,15 +11,15 @@
     "rewrites": [
       {
         "source": "/leagues/**",
-        "destination": "/leagues/__fallback"
+        "destination": "/leagues/__fallback/index.html"
       },
       {
         "source": "/clubs/manage/**",
-        "destination": "/clubs/manage/__fallback"
+        "destination": "/clubs/manage/__fallback/index.html"
       },
       {
         "source": "/clubs/**",
-        "destination": "/clubs/__fallback"
+        "destination": "/clubs/__fallback/index.html"
       }
     ],
     "headers": [
