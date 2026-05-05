@@ -114,8 +114,6 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
     );
   }
 
-  const totalCourts = (facility?.pickleballCourts ?? 0) + (facility?.tennisConversionCourts ?? 0);
-
   return (
     <ResponsiveShell desktopChromeless>
       <main className="container py-6 md:py-10 space-y-8 max-w-4xl">
@@ -278,69 +276,76 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                 </div>
 
                 {facility ? (
-                  <Panel variant="quest" padding="lg" className="space-y-4">
-                    {facility.facilityName && (
-                      <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
-                    )}
-                    {facility.address && (
-                      <div className="flex items-start gap-2">
-                        <MapPin className="h-4 w-4 text-ember-400 mt-0.5 shrink-0" />
-                        <p className="text-ash-300 text-sm">{facility.address}</p>
+                  <Panel variant="inventory" padding="md" className="space-y-3">
+                    {/* Name + address + league count badge */}
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                        <MapPin className="h-4 w-4 text-ember-400" />
                       </div>
-                    )}
-
-                    {totalCourts > 0 && (
-                      <div className="grid grid-cols-2 gap-3">
-                        {(facility.pickleballCourts ?? 0) > 0 && (
-                          <div className="rounded-pixel bg-obsidian-700 px-3 py-2">
-                            <p className="text-ash-100 text-lg font-bold heading-fantasy">{facility.pickleballCourts}</p>
-                            <p className="text-ash-500 text-[10px] uppercase tracking-wide">Pickleball Courts</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="min-w-0">
+                            {facility.facilityName && (
+                              <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                            )}
+                            {facility.address && (
+                              <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 bg-obsidian-700 border border-ash-700 rounded-pixel px-2 py-1">
+                            <Layers className="h-3 w-3 text-ember-400" />
+                            <span className="heading-fantasy text-ash-100 text-sm">{leagues.length}</span>
+                            <span className="text-ash-500 text-[10px]">{leagues.length === 1 ? "league" : "leagues"}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
+                          {(facility.pickleballCourts ?? 0) > 0 && (
+                            <span>{facility.pickleballCourts} Pickleball Courts</span>
+                          )}
+                          {(facility.tennisConversionCourts ?? 0) > 0 && (
+                            <span>{facility.tennisConversionCourts} Tennis Conversion</span>
+                          )}
+                          {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
+                          {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
+                        </div>
+                        {(facility.amenities?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {facility.amenities!.slice(0, 4).map((a) => (
+                              <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
+                            ))}
+                            {facility.amenities!.length > 4 && (
+                              <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
+                            )}
                           </div>
                         )}
-                        {(facility.tennisConversionCourts ?? 0) > 0 && (
-                          <div className="rounded-pixel bg-obsidian-700 px-3 py-2">
-                            <p className="text-ash-100 text-lg font-bold heading-fantasy">{facility.tennisConversionCourts}</p>
-                            <p className="text-ash-500 text-[10px] uppercase tracking-wide">Tennis Conversion</p>
-                          </div>
-                        )}
                       </div>
-                    )}
-
-                    <div className="flex gap-3 flex-wrap">
-                      {facility.hasParking && (
-                        <div className="flex items-center gap-1.5 text-xs text-ash-300">
-                          <Car className="h-3.5 w-3.5 text-ember-400" /> Parking
-                        </div>
-                      )}
-                      {facility.hasLights && (
-                        <div className="flex items-center gap-1.5 text-xs text-ash-300">
-                          <Lightbulb className="h-3.5 w-3.5 text-ember-400" /> Court Lights
-                        </div>
-                      )}
                     </div>
 
-                    {(facility.amenities?.length ?? 0) > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1 border-t border-ash-800">
-                        {facility.amenities!.map((a) => (
-                          <span key={a} className="px-2 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">
-                            {a}
-                          </span>
-                        ))}
+                    {/* Map embed */}
+                    {facility.address && (
+                      <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
+                        <iframe
+                          title="Facility location"
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
+                          className="w-full h-full border-0"
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
                       </div>
                     )}
 
                     {facility.notes && (
-                      <p className="text-ash-500 text-xs leading-relaxed pt-1 border-t border-ash-800">
-                        {facility.notes}
-                      </p>
+                      <p className="text-ash-500 text-xs leading-relaxed pt-2 border-t border-ash-800">{facility.notes}</p>
                     )}
                   </Panel>
                 ) : (
                   <Panel variant="base" padding="md" className="text-center">
                     <p className="text-ash-500 text-sm">No facility info added yet.</p>
-                    <Link href={`/clubs/manage/${realClubId}?section=facilities`}>
-                      <Button size="sm" variant="outline" className="mt-2">Add Facility Info</Button>
-                    </Link>
+                    {isDirector && (
+                      <Link href={`/clubs/manage/${realClubId}?section=facilities`}>
+                        <Button size="sm" variant="outline" className="mt-2">Add Facility Info</Button>
+                      </Link>
+                    )}
                   </Panel>
                 )}
               </section>
