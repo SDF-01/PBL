@@ -11,13 +11,11 @@ import { usePermissions } from "@/lib/permissions/usePermissions";
 import { Building2, ShieldCheck } from "lucide-react";
 
 const NAV = [
-  { href: "/clubs",              label: "Clubs" },
-  { href: "/games",              label: "Games" },
-  { href: "/ladder/check-in",   label: "Check-In" },
-  { href: "/ladder/play-dates", label: "Play Dates" },
-  { href: "/players",           label: "Leaderboard" },
-  { href: "/tournaments",       label: "Tournaments" },
-  { href: "/dashboard",         label: "Dashboard" },
+  { href: "/clubs",         label: "Clubs" },
+  { href: "/games",         label: "Games" },
+  { href: "/players",       label: "Leaderboard" },
+  { href: "/tournaments",   label: "Tournaments" },
+  { href: "/dashboard",     label: "Dashboard" },
 ] as const;
 
 export function TopNav() {
