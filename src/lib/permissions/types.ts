@@ -69,6 +69,7 @@ export interface CreateClubInput {
 
 export interface ClubFacility {
   clubId: string;
+  facilityName?: string;
   address?: string;
   pickleballCourts?: number;
   tennisConversionCourts?: number;

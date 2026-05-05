@@ -279,6 +279,9 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
 
                 {facility ? (
                   <Panel variant="quest" padding="lg" className="space-y-4">
+                    {facility.facilityName && (
+                      <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                    )}
                     {facility.address && (
                       <div className="flex items-start gap-2">
                         <MapPin className="h-4 w-4 text-ember-400 mt-0.5 shrink-0" />

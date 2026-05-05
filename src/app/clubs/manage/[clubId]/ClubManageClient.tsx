@@ -521,9 +521,10 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   const [showVenueForm, setShowVenueForm] = useState(false);
 
   // Facility fields
+  const [facilityName, setFacilityName] = useState("");
   const [address, setAddress] = useState("");
-  const [pickleballCourts, setPickleballCourts] = useState<number | "">("");
-  const [tennisConversionCourts, setTennisConversionCourts] = useState<number | "">("");
+  const [pickleballCourts, setPickleballCourts] = useState<number>(0);
+  const [tennisConversionCourts, setTennisConversionCourts] = useState<number>(0);
   const [hasParking, setHasParking] = useState(false);
   const [hasLights, setHasLights] = useState(false);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
@@ -537,9 +538,10 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   useEffect(() => {
     Promise.all([getClubFacility(clubId), listVenues(clubId)]).then(([f, v]) => {
       if (f) {
+        setFacilityName(f.facilityName ?? "");
         setAddress(f.address ?? "");
-        setPickleballCourts(f.pickleballCourts ?? "");
-        setTennisConversionCourts(f.tennisConversionCourts ?? "");
+        setPickleballCourts(f.pickleballCourts ?? 0);
+        setTennisConversionCourts(f.tennisConversionCourts ?? 0);
         setHasParking(f.hasParking ?? false);
         setHasLights(f.hasLights ?? false);
         setSelectedAmenities(f.amenities ?? []);
@@ -560,9 +562,10 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
     setSaving(true);
     try {
       await upsertClubFacility(clubId, {
+        facilityName: facilityName.trim() || undefined,
         address: address.trim() || undefined,
-        pickleballCourts: pickleballCourts !== "" ? Number(pickleballCourts) : undefined,
-        tennisConversionCourts: tennisConversionCourts !== "" ? Number(tennisConversionCourts) : undefined,
+        pickleballCourts,
+        tennisConversionCourts,
         hasParking, hasLights,
         amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
         notes: notes.trim() || undefined,
@@ -620,6 +623,18 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
         <Panel variant="quest" padding="lg" className="space-y-4">
           <div>
             <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5 text-ember-400" /> Facility Name
+            </label>
+            <input
+              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
+              placeholder="e.g. Coon Rapids Community Center"
+              value={facilityName}
+              onChange={(e) => setFacilityName(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
             </label>
             <input
@@ -637,16 +652,16 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
                 <label className="text-ash-500 text-xs mb-1 block">Dedicated Pickleball</label>
                 <input type="number" min={0} max={99}
                   className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                  placeholder="0" value={pickleballCourts}
-                  onChange={(e) => setPickleballCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                  value={pickleballCourts}
+                  onChange={(e) => setPickleballCourts(parseInt(e.target.value, 10) || 0)}
                 />
               </div>
               <div>
                 <label className="text-ash-500 text-xs mb-1 block">Tennis Conversion</label>
                 <input type="number" min={0} max={99}
                   className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                  placeholder="0" value={tennisConversionCourts}
-                  onChange={(e) => setTennisConversionCourts(e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                  value={tennisConversionCourts}
+                  onChange={(e) => setTennisConversionCourts(parseInt(e.target.value, 10) || 0)}
                 />
               </div>
             </div>
