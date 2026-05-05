@@ -39,11 +39,33 @@ export async function listClubCoordinators(clubId: string): Promise<CoordinatorE
       where("active", "==", true),
     ),
   );
-  return snap.docs.map((d) => ({
+  const entries = snap.docs.map((d) => ({
     userRoleId: d.id,
     userId: d.data().userId as string,
+    displayName: undefined as string | undefined,
     assignedAt: d.data().assignedAt as string,
   }));
+  await Promise.all(
+    entries.map(async (e) => {
+      const userSnap = await getDoc(doc(db(), COLLECTIONS.users, e.userId));
+      if (userSnap.exists()) {
+        e.displayName = (userSnap.data().displayName ?? userSnap.data().email ?? e.userId) as string;
+      }
+    }),
+  );
+  return entries;
+}
+
+export async function countClubPlayers(leagueIds: string[]): Promise<number> {
+  if (!isFirebaseConfigured() || leagueIds.length === 0) return 0;
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.leagueMemberships),
+      where("leagueId", "in", leagueIds.slice(0, 30)),
+    ),
+  );
+  const unique = new Set(snap.docs.map((d) => d.data().userId as string));
+  return unique.size;
 }
 
 export async function getClubFacility(clubId: string): Promise<ClubFacility | null> {

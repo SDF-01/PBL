@@ -1,11 +1,14 @@
+"use client";
+
 import Link from "next/link";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { Button } from "@/components/ui/Button";
 import { SignInButton } from "@/components/ui/SignInButton";
 import { ModeToggle } from "@/components/ui/ModeToggle";
 import { useAdminMode } from "@/lib/admin-context";
+import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { ShieldCheck } from "lucide-react";
+import { Building2, ShieldCheck } from "lucide-react";
 
 const NAV = [
   { href: "/games",             label: "Games" },
@@ -18,7 +21,14 @@ const NAV = [
 
 export function TopNav() {
   const { isAdminMode } = useAdminMode();
-  const { isSiteAdmin } = usePermissions();
+  const { user } = useAuth();
+  const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, provisionalClubs, loading } = usePermissions();
+
+  const hasClubAccess =
+    !loading &&
+    (clubDirectorFor.length > 0 ||
+      coordinatorClubIds.length > 0 ||
+      provisionalClubs.length > 0);
 
   return (
     <header className="sticky top-0 z-40 border-b border-obsidian-400 bg-obsidian-800/80 backdrop-blur supports-[backdrop-filter]:bg-obsidian-800/65">
@@ -40,6 +50,15 @@ export function TopNav() {
               {n.label}
             </Link>
           ))}
+          {user && hasClubAccess && (
+            <Link
+              href="/clubs/my"
+              className="px-3 py-1.5 text-ash-300 hover:text-ash-100 hover:bg-obsidian-600 rounded-pixel transition-colors flex items-center gap-1.5"
+            >
+              <Building2 className="h-3.5 w-3.5 text-ember-400" />
+              My Clubs
+            </Link>
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">

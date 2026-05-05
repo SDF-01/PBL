@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { listUserClubs } from "@/lib/clubs/repo";
+import { getClubById, listUserClubs } from "@/lib/clubs/repo";
 import { createLeague, type CreateLeagueInput } from "@/lib/leagues/write";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type { ClubDoc } from "@/lib/permissions/types";
@@ -20,9 +20,9 @@ const fieldCls =
 export default function LeagueCreatePage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
+  const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, loading: permLoading } = usePermissions();
 
-  const canCreate = isSiteAdmin || clubDirectorFor.length > 0;
+  const canCreate = isSiteAdmin || clubDirectorFor.length > 0 || coordinatorClubIds.length > 0;
 
   const [approvedClubs, setApprovedClubs] = useState<ClubDoc[]>([]);
   const [clubsLoading, setClubsLoading] = useState(true);
@@ -42,9 +42,19 @@ export default function LeagueCreatePage() {
       setClubsLoading(false);
       return;
     }
-    listUserClubs(user.uid)
-      .then((clubs) => {
-        const approved = clubs.filter((c) => c.status === "approved");
+    // Merge clubs created by user with clubs where user was assigned as director.
+    const directorIds = [...new Set([...clubDirectorFor, ...coordinatorClubIds])];
+    Promise.all([
+      listUserClubs(user.uid),
+      Promise.all(directorIds.map((id) => getClubById(id))),
+    ])
+      .then(([created, directed]) => {
+        const seen = new Set<string>();
+        const merged: typeof created = [];
+        for (const c of [...created, ...directed.filter((c): c is NonNullable<typeof c> => c !== null)]) {
+          if (!seen.has(c.id)) { seen.add(c.id); merged.push(c); }
+        }
+        const approved = merged.filter((c) => c.status === "approved");
         setApprovedClubs(approved);
         if (approved[0]) setClubId(approved[0].id);
       })

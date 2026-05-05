@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Building2,
   Car,
+  ChevronRight,
   CheckCircle,
   Layers,
   Lightbulb,
@@ -15,6 +16,7 @@ import {
   Plus,
   Save,
   Trash2,
+  Trophy,
   UserPlus,
   Users,
   Wrench,
@@ -25,6 +27,7 @@ import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useToast } from "@/lib/toast-context";
 import {
+  countClubPlayers,
   getClubById,
   getClubFacility,
   listClubLeagues,
@@ -164,7 +167,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
           ))}
         </div>
 
-        {section === "overview"     && <OverviewSection club={club} />}
+        {section === "overview"     && <OverviewSection club={club} clubId={clubId} onNavigate={setSection} />}
         {section === "leagues"      && <LeaguesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "facilities"   && <FacilitiesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "coordinators" && <CoordinatorsSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
@@ -177,30 +180,218 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
 // OVERVIEW
 // ============================================================
 
-function OverviewSection({ club }: { club: ClubDoc }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  onClick,
+}: {
+  label: string;
+  value: number | null;
+  icon: React.ReactNode;
+  onClick?: () => void;
+}) {
+  const inner = (
+    <>
+      <div className="flex justify-center mb-2">{icon}</div>
+      <p className="heading-fantasy text-ash-100 text-2xl">
+        {value === null ? (
+          <Loader2 className="h-5 w-5 animate-spin text-ember-400 mx-auto" />
+        ) : (
+          value
+        )}
+      </p>
+      <p className="text-ash-500 text-[10px] uppercase tracking-wider mt-0.5">{label}</p>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full text-center p-4 rounded-pixel bg-obsidian-800 border border-ash-800 hover:border-ember-500/50 transition-colors group"
+      >
+        {inner}
+      </button>
+    );
+  }
   return (
-    <Panel variant="quest" padding="lg" className="space-y-3">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded bg-ash-800">
-          <Building2 className="h-5 w-5 text-ember-400" />
+    <div className="text-center p-4 rounded-pixel bg-obsidian-800 border border-ash-800">
+      {inner}
+    </div>
+  );
+}
+
+function OverviewSection({
+  club,
+  clubId,
+  onNavigate,
+}: {
+  club: ClubDoc;
+  clubId: string;
+  onNavigate: (section: Section) => void;
+}) {
+  const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
+  const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
+  const [playerCount, setPlayerCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([listClubLeagues(clubId), listClubCoordinators(clubId)])
+      .then(async ([l, c]) => {
+        setLeagues(l);
+        setCoordinators(c);
+        const count = await countClubPlayers(l.map((x) => x.id));
+        setPlayerCount(count);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [clubId]);
+
+  return (
+    <div className="space-y-6">
+      {/* Club info */}
+      <Panel variant="quest" padding="lg" className="space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded bg-ash-800 shrink-0">
+            <Building2 className="h-5 w-5 text-ember-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="heading-fantasy text-ash-100">{club.clubName}</h2>
+              <RuneChip tone="success">
+                <CheckCircle className="h-3 w-3" /> Approved
+              </RuneChip>
+            </div>
+            <p className="text-ash-400 text-sm">{club.location}</p>
+            {club.description && (
+              <p className="text-ash-500 text-xs mt-1 leading-relaxed">{club.description}</p>
+            )}
+          </div>
         </div>
-        <div>
-          <h2 className="heading-fantasy text-ash-100">{club.clubName}</h2>
-          <p className="text-ash-400 text-sm">{club.location}</p>
+      </Panel>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard
+          label="Leagues"
+          value={loading ? null : leagues.length}
+          icon={<Layers className="h-5 w-5 text-ember-400" />}
+          onClick={() => onNavigate("leagues")}
+        />
+        <StatCard
+          label="Coordinators"
+          value={loading ? null : coordinators.length}
+          icon={<Users className="h-5 w-5 text-ember-400" />}
+          onClick={() => onNavigate("coordinators")}
+        />
+        <StatCard
+          label="Players"
+          value={loading ? null : (playerCount ?? 0)}
+          icon={<Trophy className="h-5 w-5 text-ember-400" />}
+        />
+      </div>
+
+      {/* Leagues */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Leagues</h2>
+          <button
+            type="button"
+            onClick={() => onNavigate("leagues")}
+            className="text-ember-400 hover:text-ember-300 text-xs flex items-center gap-0.5 transition-colors"
+          >
+            Manage <ChevronRight className="h-3.5 w-3.5" />
+          </button>
         </div>
+
+        {loading ? (
+          <Panel variant="base" padding="md" className="flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
+          </Panel>
+        ) : leagues.length === 0 ? (
+          <Panel variant="base" padding="md" className="text-center space-y-2">
+            <Layers className="h-6 w-6 text-ash-600 mx-auto" />
+            <p className="text-ash-500 text-sm">No leagues yet.</p>
+            <button
+              type="button"
+              onClick={() => onNavigate("leagues")}
+              className="text-ember-400 hover:text-ember-300 text-xs transition-colors"
+            >
+              Create your first league →
+            </button>
+          </Panel>
+        ) : (
+          <div className="space-y-2">
+            {leagues.map((league) => (
+              <Panel key={league.id} variant="inventory" padding="md" className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="heading-fantasy text-ash-100 text-sm">{league.name}</span>
+                    {league.active !== false && (
+                      <RuneChip tone="success" className="text-[10px]">Active</RuneChip>
+                    )}
+                  </div>
+                  <p className="text-ash-500 text-xs">
+                    {[league.city, league.state].filter(Boolean).join(", ")}
+                    {league.league_format ? ` · ${league.league_format}` : ""}
+                  </p>
+                </div>
+                <Link href={`/leagues/${league.id}`}>
+                  <Button size="sm" variant="ghost">View</Button>
+                </Link>
+              </Panel>
+            ))}
+          </div>
+        )}
       </div>
-      {club.description && (
-        <p className="text-ash-300 text-sm leading-relaxed pt-3 border-t border-ash-800">
-          {club.description}
-        </p>
-      )}
-      <div className="flex items-center gap-2 pt-1">
-        <RuneChip tone="success">
-          <CheckCircle className="h-3 w-3" /> Approved
-        </RuneChip>
-        <span className="text-ash-500 text-xs">Use the tabs above to manage your club.</span>
+
+      {/* Coordinators */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Coordinators</h2>
+          <button
+            type="button"
+            onClick={() => onNavigate("coordinators")}
+            className="text-ember-400 hover:text-ember-300 text-xs flex items-center gap-0.5 transition-colors"
+          >
+            Manage <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <Panel variant="base" padding="md" className="flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
+          </Panel>
+        ) : coordinators.length === 0 ? (
+          <Panel variant="base" padding="md" className="text-center space-y-2">
+            <Users className="h-6 w-6 text-ash-600 mx-auto" />
+            <p className="text-ash-500 text-sm">No coordinators assigned.</p>
+            <button
+              type="button"
+              onClick={() => onNavigate("coordinators")}
+              className="text-ember-400 hover:text-ember-300 text-xs transition-colors"
+            >
+              Assign a coordinator →
+            </button>
+          </Panel>
+        ) : (
+          <div className="space-y-2">
+            {coordinators.map((entry) => (
+              <Panel key={entry.userRoleId} variant="inventory" padding="md" className="flex items-center gap-3">
+                <div className="p-1.5 rounded-full bg-obsidian-700 shrink-0">
+                  <Users className="h-3.5 w-3.5 text-ember-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-ash-100 text-sm font-medium">{entry.displayName ?? "Player"}</p>
+                  <RuneChip tone="rune" className="text-[10px]">Coordinator</RuneChip>
+                </div>
+              </Panel>
+            ))}
+          </div>
+        )}
       </div>
-    </Panel>
+    </div>
   );
 }
 

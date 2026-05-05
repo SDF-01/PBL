@@ -15,7 +15,10 @@ export interface PermissionState {
   loading: boolean;
   isSiteAdmin: boolean;
   clubDirectorFor: string[];
+  /** League IDs where this user has a league-scoped LeagueCoordinator role. */
   leagueCoordinatorFor: string[];
+  /** Club IDs where this user has a club-level LeagueCoordinator role (leagueId=null). */
+  coordinatorClubIds: string[];
   provisionalClubs: string[];
   hasRole: (roleId: RoleKey, scopeId?: string) => boolean;
 }
@@ -69,6 +72,11 @@ export function usePermissions(): PermissionState {
     .filter((r) => r.roleId === "LeagueCoordinator" && r.leagueId)
     .map((r) => r.leagueId as string);
 
+  // Club-level coordinators: assigned with leagueId=null (club-wide scope).
+  const coordinatorClubIds = roles
+    .filter((r) => r.roleId === "LeagueCoordinator" && r.clubId && !r.leagueId)
+    .map((r) => r.clubId as string);
+
   const provisionalClubs = roles
     .filter((r) => r.roleId === "ClubCreatorProvisional" && r.clubId)
     .map((r) => r.clubId as string);
@@ -89,6 +97,7 @@ export function usePermissions(): PermissionState {
     isSiteAdmin: isSiteAdminUser,
     clubDirectorFor,
     leagueCoordinatorFor,
+    coordinatorClubIds,
     provisionalClubs,
     hasRole,
   };

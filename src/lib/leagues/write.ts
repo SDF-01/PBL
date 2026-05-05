@@ -2,7 +2,7 @@
 
 "use client";
 
-import { collection, doc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, doc, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { RoleKey } from "@/lib/permissions/types";
@@ -54,4 +54,14 @@ export async function createLeague(
 
   await batch.commit();
   return leagueRef.id;
+}
+
+export async function joinLeague(userId: string, leagueId: string): Promise<void> {
+  // Deterministic id prevents duplicate memberships.
+  await setDoc(doc(db(), COLLECTIONS.leagueMemberships, `${leagueId}__${userId}`), {
+    leagueId,
+    userId,
+    status: "active",
+    joinedAt: serverTimestamp(),
+  });
 }

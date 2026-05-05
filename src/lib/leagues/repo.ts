@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { LeagueDoc } from "@/lib/firestore/types";
@@ -29,4 +29,21 @@ export async function listLeaguesByClub(clubId: string): Promise<LeagueDoc[]> {
     query(collection(db(), COLLECTIONS.leagues), where("clubId", "==", clubId)),
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LeagueDoc);
+}
+
+export async function getUserLeagueMembership(
+  leagueId: string,
+  userId: string,
+): Promise<{ id: string; status: string } | null> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.leagueMemberships),
+      where("leagueId", "==", leagueId),
+      where("userId", "==", userId),
+      limit(1),
+    ),
+  );
+  if (snap.empty) return null;
+  const d = snap.docs[0]!;
+  return { id: d.id, status: d.data().status as string };
 }
