@@ -78,11 +78,13 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
   const [section, setSection] = useState<Section>(initialSection);
 
   useEffect(() => {
-    if (!clubId || clubId === "__fallback") return;
-    getClubById(clubId).then((c) => {
-      setClub(c);
-      setLoading(false);
-    });
+    if (!clubId || clubId === "__fallback") {
+      // Still waiting for the real clubId to arrive from useParams after hydration.
+      return;
+    }
+    getClubById(clubId)
+      .then((c) => { setClub(c); setLoading(false); })
+      .catch(() => { setClub(null); setLoading(false); });
   }, [clubId]);
 
   const canManage =
