@@ -42,6 +42,7 @@ export function MobileTabBar() {
         : BASE_TABS;
 
   const colCount = tabs.length;
+  const gridCols = colCount === 5 ? "grid-cols-5" : "grid-cols-4";
 
   return (
     <nav
@@ -49,7 +50,7 @@ export function MobileTabBar() {
       className="fixed bottom-0 inset-x-0 z-40 bg-obsidian-900/95 backdrop-blur-md border-t border-obsidian-700"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className={cn("grid", `grid-cols-${colCount}`)}>
+      <ul className={cn("grid", gridCols)}>
         {tabs.map(({ href, label, icon: Icon }) => {
           const hrefPath = href.split("?")[0] ?? href;
           const active =
