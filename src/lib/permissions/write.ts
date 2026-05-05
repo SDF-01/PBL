@@ -7,6 +7,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -87,15 +88,22 @@ export async function approveClub(
 ): Promise<void> {
   const database = db();
 
-  const provisionalSnap = await getDocs(
-    query(
-      collection(database, COLLECTIONS.userRoles),
-      where("userId", "==", creatorUserId),
-      where("roleId", "==", "ClubCreatorProvisional"),
-      where("clubId", "==", clubId),
-      where("active", "==", true),
+  const [provisionalSnap, creatorSnap] = await Promise.all([
+    getDocs(
+      query(
+        collection(database, COLLECTIONS.userRoles),
+        where("userId", "==", creatorUserId),
+        where("roleId", "==", "ClubCreatorProvisional"),
+        where("clubId", "==", clubId),
+        where("active", "==", true),
+      ),
     ),
-  );
+    getDoc(doc(database, COLLECTIONS.users, creatorUserId)),
+  ]);
+
+  const creatorCurrentRole = creatorSnap.exists()
+    ? (creatorSnap.data() as { role?: string }).role
+    : null;
 
   const batch = writeBatch(database);
 
@@ -120,10 +128,13 @@ export async function approveClub(
   });
 
   // Elevate primary role so Firestore rules recognise the new privilege level.
-  batch.update(doc(database, COLLECTIONS.users, creatorUserId), {
-    role: "CLUB_ADMIN",
-    updatedAt: serverTimestamp(),
-  });
+  // Skip if the creator already has a higher role (SITE_ADMIN outranks CLUB_ADMIN).
+  if (creatorCurrentRole !== "SITE_ADMIN") {
+    batch.update(doc(database, COLLECTIONS.users, creatorUserId), {
+      role: "CLUB_ADMIN",
+      updatedAt: serverTimestamp(),
+    });
+  }
 
   const eventRef = doc(collection(database, COLLECTIONS.roleEvents));
   batch.set(eventRef, {
