@@ -391,12 +391,21 @@ function OverviewSection({
                   <MapPin className="h-4 w-4 text-ember-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  {facility.facilityName && (
-                    <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
-                  )}
-                  {facility.address && (
-                    <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
-                  )}
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="min-w-0">
+                      {facility.facilityName && (
+                        <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                      )}
+                      {facility.address && (
+                        <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 bg-obsidian-700 border border-ash-700 rounded-pixel px-2 py-1">
+                      <Layers className="h-3 w-3 text-ember-400" />
+                      <span className="heading-fantasy text-ash-100 text-sm">{leagues.length}</span>
+                      <span className="text-ash-500 text-[10px]">{leagues.length === 1 ? "league" : "leagues"}</span>
+                    </div>
+                  </div>
                   <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
                     {(facility.pickleballCourts ?? 0) > 0 && (
                       <span>{facility.pickleballCourts} Pickleball Courts</span>
