@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Building2, CalendarDays, Users, Layers } from "lucide-react";
+import { Building2, CalendarDays, Eye, Layers, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
@@ -11,6 +11,7 @@ interface ActiveClubCardProps {
 
 export function ActiveClubCard({ club }: ActiveClubCardProps) {
   const manageBase = `/clubs/manage/${club.id}`;
+  const publicBase = `/clubs/${club.id}`;
 
   return (
     <Panel variant="hud" padding="lg" className="space-y-4">
@@ -51,11 +52,18 @@ export function ActiveClubCard({ club }: ActiveClubCardProps) {
         </Link>
       </div>
 
-      <Link href={manageBase}>
-        <Button size="sm" variant="outline" className="w-full border-ember-500/40 text-ember-400 hover:bg-ember-500/10 hover:text-ember-300">
-          Manage Club
-        </Button>
-      </Link>
+      <div className="grid grid-cols-2 gap-2">
+        <Link href={publicBase}>
+          <Button size="sm" variant="ghost" className="w-full border border-ash-700 text-ash-300 hover:text-ash-100">
+            <Eye className="h-3.5 w-3.5" /> View Page
+          </Button>
+        </Link>
+        <Link href={manageBase}>
+          <Button size="sm" className="w-full">
+            <Settings className="h-3.5 w-3.5" /> Manage Club
+          </Button>
+        </Link>
+      </div>
     </Panel>
   );
 }

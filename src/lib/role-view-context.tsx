@@ -30,7 +30,7 @@ const Ctx = createContext<RoleViewCtx>({
 });
 
 export function RoleViewProvider({ children }: { children: ReactNode }) {
-  const { isSiteAdmin, clubDirectorFor, leagueCoordinatorFor, loading } = usePermissions();
+  const { isSiteAdmin, clubDirectorFor, leagueCoordinatorFor, coordinatorClubIds, loading } = usePermissions();
   const [activeId, setActiveId] = useState<RoleViewId>("Player");
 
   const options: RoleViewOption[] = [
@@ -40,7 +40,7 @@ export function RoleViewProvider({ children }: { children: ReactNode }) {
     ...(clubDirectorFor.length > 0
       ? [{ id: "ClubAdmin" as RoleViewId, label: "Club Director", tone: "gold" as const }]
       : []),
-    ...(leagueCoordinatorFor.length > 0
+    ...(leagueCoordinatorFor.length > 0 || coordinatorClubIds.length > 0
       ? [{ id: "LeagueCoordinator" as RoleViewId, label: "Coordinator", tone: "spectral" as const }]
       : []),
     { id: "Player", label: "Player", tone: "neutral" },
@@ -59,7 +59,7 @@ export function RoleViewProvider({ children }: { children: ReactNode }) {
     const highestRole = options.find((o) => o.id !== "Player") ?? options[0];
     setActiveId(restorable ? (stored as RoleViewId) : (highestRole?.id ?? "Player"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, isSiteAdmin, clubDirectorFor.length, leagueCoordinatorFor.length]);
+  }, [loading, isSiteAdmin, clubDirectorFor.length, leagueCoordinatorFor.length, coordinatorClubIds.length]);
 
   function setActiveRole(id: RoleViewId) {
     setActiveId(id);
