@@ -234,14 +234,16 @@ function OverviewSection({
 }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
+  const [facility, setFacility] = useState<ClubFacility | null | undefined>(undefined);
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([listClubLeagues(clubId), listClubCoordinators(clubId)])
-      .then(async ([l, c]) => {
+    Promise.all([listClubLeagues(clubId), listClubCoordinators(clubId), getClubFacility(clubId)])
+      .then(async ([l, c, f]) => {
         setLeagues(l);
         setCoordinators(c);
+        setFacility(f);
         const count = await countClubPlayers(l.map((x) => x.id));
         setPlayerCount(count);
       })
@@ -344,6 +346,94 @@ function OverviewSection({
               </Panel>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Facilities */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Facilities</h2>
+          <button
+            type="button"
+            onClick={() => onNavigate("facilities")}
+            className="text-ember-400 hover:text-ember-300 text-xs flex items-center gap-0.5 transition-colors"
+          >
+            Edit <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <Panel variant="base" padding="md" className="flex justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
+          </Panel>
+        ) : !facility ? (
+          <Panel variant="base" padding="md" className="text-center space-y-2">
+            <MapPin className="h-6 w-6 text-ash-600 mx-auto" />
+            <p className="text-ash-500 text-sm">No facility info added yet.</p>
+            <button
+              type="button"
+              onClick={() => onNavigate("facilities")}
+              className="text-ember-400 hover:text-ember-300 text-xs transition-colors"
+            >
+              Add facility info →
+            </button>
+          </Panel>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onNavigate("facilities")}
+            className="w-full text-left"
+          >
+            <Panel variant="inventory" padding="md" className="space-y-3 hover:border-ember-500/40 transition-colors cursor-pointer">
+              {/* Name + address */}
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                  <MapPin className="h-4 w-4 text-ember-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  {facility.facilityName && (
+                    <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                  )}
+                  {facility.address && (
+                    <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
+                  )}
+                  <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
+                    {(facility.pickleballCourts ?? 0) > 0 && (
+                      <span>{facility.pickleballCourts} Pickleball Courts</span>
+                    )}
+                    {(facility.tennisConversionCourts ?? 0) > 0 && (
+                      <span>{facility.tennisConversionCourts} Tennis Conversion</span>
+                    )}
+                    {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
+                    {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
+                  </div>
+                  {(facility.amenities?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {facility.amenities!.slice(0, 4).map((a) => (
+                        <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
+                      ))}
+                      {facility.amenities!.length > 4 && (
+                        <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Map embed */}
+              {facility.address && (
+                <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
+                  <iframe
+                    title="Facility location"
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+              )}
+            </Panel>
+          </button>
         )}
       </div>
 
