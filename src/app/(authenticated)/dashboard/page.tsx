@@ -49,6 +49,7 @@ export default function DashboardPage() {
   const [scoreModal, setScoreModal] = useState<{
     match: any;
     action: "submit" | "verify";
+    targetPoints: number;
   } | null>(null);
   const [leaderboardRank, setLeaderboardRank] = useState<number | undefined>(undefined);
   const [totalPlayers, setTotalPlayers] = useState<number | undefined>(undefined);
@@ -124,18 +125,20 @@ export default function DashboardPage() {
           sitOutMatch={playerSessionData.sitOutMatch}
           playerId={user?.uid || ""}
           onEnterScore={() => {
-            if (playerSessionData.currentMatch) {
+            if (playerSessionData.currentMatch && playerSessionData.currentSession) {
               setScoreModal({
                 match: playerSessionData.currentMatch,
                 action: "submit",
+                targetPoints: playerSessionData.currentSession.targetPoints
               });
             }
           }}
           onVerifyScore={() => {
-            if (playerSessionData.currentMatch) {
+            if (playerSessionData.currentMatch && playerSessionData.currentSession) {
               setScoreModal({
                 match: playerSessionData.currentMatch,
                 action: "verify",
+                targetPoints: playerSessionData.currentSession.targetPoints
               });
             }
           }}
@@ -150,6 +153,7 @@ export default function DashboardPage() {
           <ScoreModal
             match={scoreModal.match}
             action={scoreModal.action}
+            targetPoints={scoreModal.targetPoints}
             onClose={() => setScoreModal(null)}
             onSuccess={() => {
               setScoreModal(null);

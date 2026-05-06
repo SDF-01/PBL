@@ -73,6 +73,7 @@ function PlayerSessionContent() {
   const [scoreModal, setScoreModal] = useState<{
     match: any;
     action: "submit" | "verify";
+    targetPoints: number;
   } | null>(null);
 
   useEffect(() => {
