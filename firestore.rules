@@ -146,9 +146,21 @@ service cloud.firestore {
     match /divisions/{doc=**}     { allow read: if true; allow write: if isStaff(); }
 
     // Club facility information managed by Club Directors.
-    match /clubFacilities/{clubId} {
+    match /clubFacilities/{facilityId} {
       allow read: if true;
-      allow write: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff();
+      allow delete: if isStaff();
+    }
+
+    // Club followers — any signed-in player can follow/unfollow; anyone can read.
+    match /clubFollowers/{followId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+      allow update: if false;
     }
 
     match /tournaments/{id} {
@@ -336,18 +348,29 @@ service cloud.firestore {
     }
 
     match /userRoles/{roleDocId} {
-      // Users can read their own roles; staff can read all (needed for coordinator listings).
-      allow read: if isSignedIn()
-        && (resource.data.userId == request.auth.uid || isStaff());
-      // Only admins can create/modify role assignments.
+      // Any signed-in user can list role docs (needed for coordinator listings on public
+      // club pages). The data contains only userId + roleId — not sensitive.
+      allow read: if isSignedIn();
+      // Only admins / club directors can create/modify role assignments.
       allow create, update, delete: if isAdmin()
         || isClubDirector();
     }
 
     match /leagueMemberships/{id} {
-      allow read: if isSignedIn()
-        && (resource.data.userId == request.auth.uid || isStaff());
+      // Any signed-in user can read (needed for player-count aggregation on public pages).
+      allow read: if isSignedIn();
       allow create, update, delete: if isStaff();
+    }
+
+    match /clubPosts/{postId} {
+      allow read: if true;
+      // Directors post on behalf of their clubs; authorId must match the caller.
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.authorId == request.auth.uid;
+      allow delete: if isAdmin()
+        || (isSignedIn() && resource.data.authorId == request.auth.uid);
     }
 
     match /roleEvents/{id} {

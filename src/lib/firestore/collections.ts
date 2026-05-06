@@ -36,6 +36,7 @@ export const COLLECTIONS = {
   clubs: "clubs",
   clubFacilities: "clubFacilities",
   clubFollowers: "clubFollowers",
+  clubPosts: "clubPosts",
   userRoles: "userRoles",
   leagueMemberships: "leagueMemberships",
   roleEvents: "roleEvents",

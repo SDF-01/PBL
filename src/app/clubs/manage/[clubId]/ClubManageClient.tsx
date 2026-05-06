@@ -12,6 +12,7 @@ import {
   CheckCircle,
   Copy,
   Edit2,
+  FileText,
   Layers,
   Lightbulb,
   Link as LinkIcon,
@@ -27,6 +28,7 @@ import {
   UserPlus,
   Users,
   Wrench,
+  X,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
@@ -37,12 +39,20 @@ import { useToast } from "@/lib/toast-context";
 import {
   countClubPlayers,
   getClubById,
-  getClubFacility,
+  listClubFacilities,
   listClubLeagues,
   listClubCoordinators,
+  listClubPosts,
   getUserByEmail,
 } from "@/lib/clubs/repo";
-import { upsertClubFacility, deleteClubFacility, updateClubLogo } from "@/lib/clubs/write";
+import {
+  addClubFacility,
+  updateClubFacility,
+  removeClubFacility,
+  updateClubLogo,
+  createClubPost,
+  deleteClubPost,
+} from "@/lib/clubs/write";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { uploadClubLogo } from "@/lib/storage";
 import { createLeague, leaveLeague } from "@/lib/leagues/write";
@@ -53,11 +63,11 @@ import { assignRole, deactivateUserRole } from "@/lib/permissions/write";
 import { listVenues } from "@/lib/ladder/repo";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
+import type { ClubDoc, ClubFacility, ClubPost } from "@/lib/permissions/types";
 import type { LeagueDoc, VenueDoc } from "@/lib/firestore/types";
 import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
-type Section = "overview" | "leagues" | "facilities" | "coordinators" | "members";
+type Section = "overview" | "leagues" | "facilities" | "coordinators" | "members" | "posts";
 
 const AMENITY_OPTIONS = [
   "Restrooms",
@@ -146,6 +156,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
     { id: "overview",     label: "Overview",     Icon: Building2 },
     { id: "leagues",      label: "Leagues",      Icon: Layers },
     { id: "facilities",   label: "Facilities",   Icon: Wrench },
+    { id: "posts",        label: "Posts",        Icon: FileText },
     { id: "members",      label: "Members",      Icon: Users },
     { id: "coordinators", label: "Coordinators", Icon: UserPlus },
   ];
@@ -184,6 +195,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
         {section === "overview"     && <OverviewSection club={club} clubId={clubId} onNavigate={setSection} />}
         {section === "leagues"      && <LeaguesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "facilities"   && <FacilitiesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
+        {section === "posts"        && <PostsSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
         {section === "members"      && <MembersSection clubId={clubId} toast={toast} />}
         {section === "coordinators" && <CoordinatorsSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
       </main>
@@ -249,17 +261,17 @@ function OverviewSection({
   const { toast } = useToast();
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
-  const [facility, setFacility] = useState<ClubFacility | null | undefined>(undefined);
+  const [facilities, setFacilities] = useState<ClubFacility[]>([]);
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [logoUrl, setLogoUrl] = useState<string | null>(club.logoUrl ?? null);
 
   useEffect(() => {
-    Promise.all([listClubLeagues(clubId), listClubCoordinators(clubId), getClubFacility(clubId)])
+    Promise.all([listClubLeagues(clubId), listClubCoordinators(clubId), listClubFacilities(clubId)])
       .then(async ([l, c, f]) => {
         setLeagues(l);
         setCoordinators(c);
-        setFacility(f);
+        setFacilities(f);
         const count = await countClubPlayers(l.map((x) => x.id));
         setPlayerCount(count);
       })
@@ -400,95 +412,47 @@ function OverviewSection({
           <Panel variant="base" padding="md" className="flex justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-ember-400" />
           </Panel>
-        ) : !facility ? (
+        ) : facilities.length === 0 ? (
           <Panel variant="base" padding="md" className="text-center space-y-2">
             <MapPin className="h-6 w-6 text-ash-600 mx-auto" />
-            <p className="text-ash-500 text-sm">No facility info added yet.</p>
+            <p className="text-ash-500 text-sm">No facilities added yet.</p>
             <button
               type="button"
               onClick={() => onNavigate("facilities")}
               className="text-ember-400 hover:text-ember-300 text-xs transition-colors"
             >
-              Add facility info →
+              Add first facility →
             </button>
           </Panel>
         ) : (
-          <Panel variant="inventory" padding="md" className="space-y-3">
-            {/* Name + address */}
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
-                <MapPin className="h-4 w-4 text-ember-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div className="min-w-0">
-                    {facility.facilityName && (
-                      <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
-                    )}
-                    {facility.address && (
-                      <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="bg-obsidian-700 border border-ash-700 rounded-pixel px-2 py-1 flex items-center gap-1.5">
-                      <Layers className="h-3 w-3 text-ember-400" />
-                      <span className="heading-fantasy text-ash-100 text-sm">{leagues.length}</span>
-                      <span className="text-ash-500 text-[10px]">{leagues.length === 1 ? "league" : "leagues"}</span>
+          <div className="space-y-2">
+            {facilities.map((f) => (
+              <Panel key={f.id} variant="inventory" padding="md">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <MapPin className="h-4 w-4 text-ember-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      {f.facilityName && <p className="heading-fantasy text-ash-100 text-sm">{f.facilityName}</p>}
+                      {f.address && <p className="text-ash-400 text-xs mt-0.5 truncate">{f.address}</p>}
+                      <div className="flex flex-wrap gap-3 mt-1 text-ash-500 text-xs">
+                        {(f.pickleballCourts ?? 0) > 0 && <span>{f.pickleballCourts} PB courts</span>}
+                        {f.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
+                        {f.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate("facilities")}
-                      className="p-1.5 rounded text-ash-500 hover:text-ember-400 transition-colors"
-                      title="Edit facility"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" />
-                    </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate("facilities")}
+                    className="p-1.5 rounded text-ash-500 hover:text-ember-400 transition-colors shrink-0"
+                    title="Edit facilities"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {facility.isIndoor && (
-                    <RuneChip tone="rune" className="text-[10px]">Indoor</RuneChip>
-                  )}
-                  {facility.surfaceType && (
-                    <RuneChip tone="neutral" className="text-[10px] capitalize">{facility.surfaceType}</RuneChip>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
-                  {(facility.pickleballCourts ?? 0) > 0 && (
-                    <span>{facility.pickleballCourts} Pickleball Courts</span>
-                  )}
-                  {(facility.tennisConversionCourts ?? 0) > 0 && (
-                    <span>{facility.tennisConversionCourts} Tennis Conversion</span>
-                  )}
-                  {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
-                  {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
-                </div>
-                {(facility.amenities?.length ?? 0) > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {facility.amenities!.slice(0, 4).map((a) => (
-                      <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
-                    ))}
-                    {facility.amenities!.length > 4 && (
-                      <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Map embed */}
-            {facility.address && (
-              <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
-                <iframe
-                  title="Facility location"
-                  src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
-                  className="w-full h-full border-0"
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                />
-              </div>
-            )}
-          </Panel>
+              </Panel>
+            ))}
+          </div>
         )}
       </div>
 
@@ -634,7 +598,7 @@ function UserLookup({
 function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
-  const [facility, setFacility] = useState<ClubFacility | null>(null);
+  const [facilities, setFacilities] = useState<ClubFacility[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -662,8 +626,8 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
   const [coordinatorName, setCoordinatorName] = useState("");
 
   useEffect(() => {
-    Promise.all([listClubLeagues(clubId), listVenues(clubId), getClubFacility(clubId)])
-      .then(([l, v, f]) => { setLeagues(l); setVenues(v); setFacility(f); setLoading(false); })
+    Promise.all([listClubLeagues(clubId), listVenues(clubId), listClubFacilities(clubId)])
+      .then(([l, v, f]) => { setLeagues(l); setVenues(v); setFacilities(f); setLoading(false); })
       .catch(() => setLoading(false));
   }, [clubId]);
 
@@ -683,14 +647,13 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
     }
   }
 
-  function fillFromFacility() {
-    if (!facility) return;
-    if (facility.address) {
-      const parts = facility.address.split(",");
-      if (parts.length >= 2) {
-        setCity(parts[parts.length - 2]?.trim() ?? "");
-        setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
-      }
+  function fillFromFacility(facilityId: string) {
+    const f = facilities.find((x) => x.id === facilityId);
+    if (!f?.address) return;
+    const parts = f.address.split(",");
+    if (parts.length >= 2) {
+      setCity(parts[parts.length - 2]?.trim() ?? "");
+      setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
     }
   }
 
@@ -775,16 +738,17 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-ash-800 pb-1">
               <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium">Location</p>
-              {facility && (
-                <button
-                  type="button"
-                  onClick={fillFromFacility}
-                  className="text-[10px] text-spectral-400 hover:text-spectral-300 transition-colors flex items-center gap-1"
+              {facilities.length > 0 && (
+                <select
+                  className="text-[10px] text-spectral-400 bg-transparent border-none outline-none cursor-pointer"
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) fillFromFacility(e.target.value); e.target.value = ""; }}
                 >
-                  <MapPin className="h-3 w-3" />
-                  Use club facility
-                  {facility.facilityName && <span className="text-ash-500">({facility.facilityName})</span>}
-                </button>
+                  <option value="">↗ Fill from facility…</option>
+                  {facilities.map((f) => (
+                    <option key={f.id} value={f.id}>{f.facilityName || f.address || "Facility"}</option>
+                  ))}
+                </select>
               )}
             </div>
             {venues.length > 0 && (
@@ -903,17 +867,28 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
 // FACILITIES + VENUE
 // ============================================================
 
+type EditingFacility = ClubFacility | "new" | null;
+
+function emptyFacilityState() {
+  return {
+    facilityName: "", address: "", pickleballCourts: 0, tennisConversionCourts: 0,
+    hasParking: false, hasLights: false, isIndoor: false, surfaceType: "" as "hard" | "clay" | "turf" | "indoor" | "",
+    selectedAmenities: [] as string[], notes: "",
+  };
+}
+
 function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [loading, setLoading] = useState(true);
+  const [facilities, setFacilities] = useState<ClubFacility[]>([]);
+  const [editing, setEditing] = useState<EditingFacility>(null);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [savingVenue, setSavingVenue] = useState(false);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [showVenueForm, setShowVenueForm] = useState(false);
-  const [hasFacility, setHasFacility] = useState(false);
 
-  // Facility fields
+  // Facility form state
   const [facilityName, setFacilityName] = useState("");
   const [address, setAddress] = useState("");
   const [pickleballCourts, setPickleballCourts] = useState<number>(0);
@@ -931,20 +906,8 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   const [venueRadius, setVenueRadius] = useState<number>(200);
 
   useEffect(() => {
-    Promise.all([getClubFacility(clubId), listVenues(clubId)]).then(([f, v]) => {
-      if (f) {
-        setHasFacility(true);
-        setFacilityName(f.facilityName ?? "");
-        setAddress(f.address ?? "");
-        setPickleballCourts(f.pickleballCourts ?? 0);
-        setTennisConversionCourts(f.tennisConversionCourts ?? 0);
-        setHasParking(f.hasParking ?? false);
-        setHasLights(f.hasLights ?? false);
-        setIsIndoor(f.isIndoor ?? false);
-        setSurfaceType(f.surfaceType ?? "");
-        setSelectedAmenities(f.amenities ?? []);
-        setNotes(f.notes ?? "");
-      }
+    Promise.all([listClubFacilities(clubId), listVenues(clubId)]).then(([f, v]) => {
+      setFacilities(f);
       setVenues(v);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -956,22 +919,57 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
     );
   }
 
+  function populateForm(f: ClubFacility) {
+    setFacilityName(f.facilityName ?? "");
+    setAddress(f.address ?? "");
+    setPickleballCourts(f.pickleballCourts ?? 0);
+    setTennisConversionCourts(f.tennisConversionCourts ?? 0);
+    setHasParking(f.hasParking ?? false);
+    setHasLights(f.hasLights ?? false);
+    setIsIndoor(f.isIndoor ?? false);
+    setSurfaceType(f.surfaceType ?? "");
+    setSelectedAmenities(f.amenities ?? []);
+    setNotes(f.notes ?? "");
+  }
+
+  function resetForm() {
+    const s = emptyFacilityState();
+    setFacilityName(s.facilityName); setAddress(s.address);
+    setPickleballCourts(s.pickleballCourts); setTennisConversionCourts(s.tennisConversionCourts);
+    setHasParking(s.hasParking); setHasLights(s.hasLights); setIsIndoor(s.isIndoor);
+    setSurfaceType(s.surfaceType); setSelectedAmenities(s.selectedAmenities); setNotes(s.notes);
+  }
+
+  function startAdd() { resetForm(); setEditing("new"); }
+  function startEdit(f: ClubFacility) { populateForm(f); setEditing(f); }
+  function cancelEdit() { setEditing(null); }
+
+  const facilityPayload = () => ({
+    facilityName: facilityName.trim() || undefined,
+    address: address.trim() || undefined,
+    pickleballCourts, tennisConversionCourts,
+    hasParking, hasLights, isIndoor,
+    surfaceType: surfaceType || undefined,
+    amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+    notes: notes.trim() || undefined,
+  });
+
   async function handleSave() {
     setSaving(true);
     try {
-      await upsertClubFacility(clubId, {
-        facilityName: facilityName.trim() || undefined,
-        address: address.trim() || undefined,
-        pickleballCourts,
-        tennisConversionCourts,
-        hasParking, hasLights,
-        isIndoor,
-        surfaceType: surfaceType || undefined,
-        amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
-        notes: notes.trim() || undefined,
-      }, userId);
-      setHasFacility(true);
-      toast("Facility information saved.", "success");
+      if (editing === "new") {
+        const id = await addClubFacility(clubId, facilityPayload(), userId);
+        const newF: ClubFacility = { id, clubId, ...facilityPayload() };
+        setFacilities((prev) => [...prev, newF]);
+        toast("Facility added.", "success");
+      } else if (editing) {
+        await updateClubFacility(editing.id, facilityPayload(), userId);
+        setFacilities((prev) =>
+          prev.map((f) => f.id === editing.id ? { ...f, ...facilityPayload() } : f),
+        );
+        toast("Facility updated.", "success");
+      }
+      setEditing(null);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save.", "error");
     } finally {
@@ -979,20 +977,17 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
     }
   }
 
-  async function handleDelete() {
-    setDeleting(true);
+  async function handleDelete(facilityId: string) {
+    setDeletingId(facilityId);
     try {
-      await deleteClubFacility(clubId);
-      setHasFacility(false);
-      setFacilityName(""); setAddress(""); setPickleballCourts(0); setTennisConversionCourts(0);
-      setHasParking(false); setHasLights(false); setIsIndoor(false); setSurfaceType("");
-      setSelectedAmenities([]); setNotes("");
-      setConfirmDelete(false);
-      toast("Facility information removed.", "success");
+      await removeClubFacility(facilityId);
+      setFacilities((prev) => prev.filter((f) => f.id !== facilityId));
+      setConfirmDeleteId(null);
+      toast("Facility removed.", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete.", "error");
+      toast(err instanceof Error ? err.message : "Failed to remove.", "error");
     } finally {
-      setDeleting(false);
+      setDeletingId(null);
     }
   }
 
@@ -1003,11 +998,9 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
       const id = await createVenue({
         name: venueName.trim(),
         address: venueAddress.trim() || undefined,
-        lat: 0,
-        lng: 0,
+        lat: 0, lng: 0,
         radiusMeters: venueRadius,
-        createdBy: userId,
-        clubId,
+        createdBy: userId, clubId,
       });
       const newVenue: VenueDoc = { id, name: venueName.trim(), address: venueAddress.trim() || undefined, lat: 0, lng: 0, radiusMeters: venueRadius, createdBy: userId, createdAt: new Date().toISOString() };
       setVenues((prev) => [newVenue, ...prev]);
@@ -1025,109 +1018,64 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
     return <Panel variant="base" padding="lg" className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></Panel>;
   }
 
+  const inputCls = "w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500";
+
   return (
     <div className="space-y-6">
 
-      {/* Court Facilities */}
+      {/* Facilities list or form */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Court Facilities</h2>
-          <div className="flex items-center gap-2">
-            {hasFacility && !confirmDelete && (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-pixel text-xs text-ash-500 hover:text-crimson-400 border border-transparent hover:border-crimson-500/40 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Delete
-              </button>
-            )}
-            {confirmDelete && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-crimson-400">Remove all facility info?</span>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="px-2.5 py-1.5 rounded-pixel text-xs bg-crimson-500/20 text-crimson-400 border border-crimson-500/40 hover:bg-crimson-500/30 transition-colors disabled:opacity-50"
-                >
-                  {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin inline" /> : "Confirm"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="px-2.5 py-1.5 rounded-pixel text-xs text-ash-400 border border-ash-700 hover:text-ash-100 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-            <Button size="sm" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-              Save
+          {editing === null && (
+            <Button size="sm" onClick={startAdd}>
+              <Plus className="h-3.5 w-3.5" /> Add Facility
             </Button>
-          </div>
+          )}
         </div>
 
-        <Panel variant="quest" padding="lg" className="space-y-4">
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-ember-400" /> Facility Name
-            </label>
-            <input
-              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-              placeholder="e.g. Coon Rapids Community Center"
-              value={facilityName}
-              onChange={(e) => setFacilityName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
-            </label>
-            <input
-              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-              placeholder="123 Court Ave, City, State 55555"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-1.5 block">Court Count</label>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-ash-500 text-xs mb-1 block">Dedicated Pickleball</label>
-                <input type="number" min={0} max={99}
-                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                  value={pickleballCourts}
-                  onChange={(e) => setPickleballCourts(parseInt(e.target.value, 10) || 0)}
-                />
-              </div>
-              <div>
-                <label className="text-ash-500 text-xs mb-1 block">Tennis Conversion</label>
-                <input type="number" min={0} max={99}
-                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                  value={tennisConversionCourts}
-                  onChange={(e) => setTennisConversionCourts(parseInt(e.target.value, 10) || 0)}
-                />
-              </div>
+        {editing !== null ? (
+          /* ── Facility form ── */
+          <Panel variant="quest" padding="lg" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="heading-fantasy text-ash-100">{editing === "new" ? "New Facility" : "Edit Facility"}</h3>
+              <button type="button" onClick={cancelEdit} className="text-ash-500 hover:text-ash-100 transition-colors"><X className="h-4 w-4" /></button>
             </div>
-          </div>
 
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-2 block">Court Type &amp; Surface</label>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <ToggleRow icon={<Building2 className="h-4 w-4" />} label="Indoor Facility" value={isIndoor} onChange={setIsIndoor} />
-            </div>
             <div>
-              <label className="text-ash-500 text-xs mb-1 block">Surface Type</label>
-              <select
-                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                value={surfaceType}
-                onChange={(e) => setSurfaceType(e.target.value as typeof surfaceType)}
-              >
+              <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-ember-400" /> Facility Name
+              </label>
+              <input className={inputCls} placeholder="e.g. Coon Rapids Community Center" value={facilityName} onChange={(e) => setFacilityName(e.target.value)} />
+            </div>
+
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-1.5 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
+              </label>
+              <input className={inputCls} placeholder="123 Court Ave, City, State 55555" value={address} onChange={(e) => setAddress(e.target.value)} />
+            </div>
+
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-1.5 block">Court Count</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-ash-500 text-xs mb-1 block">Dedicated Pickleball</label>
+                  <input type="number" min={0} max={99} className={inputCls} value={pickleballCourts} onChange={(e) => setPickleballCourts(parseInt(e.target.value, 10) || 0)} />
+                </div>
+                <div>
+                  <label className="text-ash-500 text-xs mb-1 block">Tennis Conversion</label>
+                  <input type="number" min={0} max={99} className={inputCls} value={tennisConversionCourts} onChange={(e) => setTennisConversionCourts(parseInt(e.target.value, 10) || 0)} />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-2 block">Court Type &amp; Surface</label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <ToggleRow icon={<Building2 className="h-4 w-4" />} label="Indoor Facility" value={isIndoor} onChange={setIsIndoor} />
+              </div>
+              <select className={inputCls} value={surfaceType} onChange={(e) => setSurfaceType(e.target.value as typeof surfaceType)}>
                 <option value="">— Not specified —</option>
                 <option value="hard">Hard (Concrete / Asphalt)</option>
                 <option value="clay">Clay</option>
@@ -1135,46 +1083,95 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
                 <option value="indoor">Indoor (Gymnasium / Sport Court)</option>
               </select>
             </div>
-          </div>
 
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-2 block">Infrastructure</label>
-            <div className="grid grid-cols-2 gap-2">
-              <ToggleRow icon={<Car className="h-4 w-4" />} label="On-Site Parking" value={hasParking} onChange={setHasParking} />
-              <ToggleRow icon={<Lightbulb className="h-4 w-4" />} label="Court Lights" value={hasLights} onChange={setHasLights} />
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-2 block">Infrastructure</label>
+              <div className="grid grid-cols-2 gap-2">
+                <ToggleRow icon={<Car className="h-4 w-4" />} label="On-Site Parking" value={hasParking} onChange={setHasParking} />
+                <ToggleRow icon={<Lightbulb className="h-4 w-4" />} label="Court Lights" value={hasLights} onChange={setHasLights} />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-2 block">Amenities</label>
-            <div className="flex flex-wrap gap-2">
-              {AMENITY_OPTIONS.map((amenity) => {
-                const active = selectedAmenities.includes(amenity);
-                return (
-                  <button key={amenity} type="button" onClick={() => toggleAmenity(amenity)}
-                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                      active
-                        ? "bg-ember-500/20 border-ember-500/60 text-ember-300"
-                        : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500 hover:text-ash-200"
-                    }`}
-                  >
-                    {active && "✓ "}{amenity}
-                  </button>
-                );
-              })}
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-2 block">Amenities</label>
+              <div className="flex flex-wrap gap-2">
+                {AMENITY_OPTIONS.map((amenity) => {
+                  const active = selectedAmenities.includes(amenity);
+                  return (
+                    <button key={amenity} type="button" onClick={() => toggleAmenity(amenity)}
+                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${active ? "bg-ember-500/20 border-ember-500/60 text-ember-300" : "bg-obsidian-700 border-ash-700 text-ash-400 hover:border-ash-500 hover:text-ash-200"}`}
+                    >
+                      {active && "✓ "}{amenity}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="text-ash-300 text-xs font-medium mb-1.5 block">Additional Notes</label>
-            <textarea
-              className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
-              placeholder="Any other details players should know…"
-              rows={3} value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-1.5 block">Additional Notes</label>
+              <textarea className={`${inputCls} resize-none`} placeholder="Any other details players should know…" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {editing === "new" ? "Add Facility" : "Save Changes"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={cancelEdit}>Cancel</Button>
+            </div>
+          </Panel>
+        ) : facilities.length === 0 ? (
+          <Panel variant="base" padding="lg" className="text-center space-y-2">
+            <MapPin className="h-8 w-8 text-ash-600 mx-auto" />
+            <p className="text-ash-400 text-sm">No facilities yet. Add your first court location.</p>
+          </Panel>
+        ) : (
+          <div className="space-y-2">
+            {facilities.map((f) => (
+              <Panel key={f.id} variant="inventory" padding="md">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <MapPin className="h-4 w-4 text-ember-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      {f.facilityName && <p className="heading-fantasy text-ash-100 text-sm">{f.facilityName}</p>}
+                      {f.address && <p className="text-ash-400 text-xs mt-0.5 truncate">{f.address}</p>}
+                      <div className="flex flex-wrap gap-2 mt-1 text-ash-500 text-xs">
+                        {(f.pickleballCourts ?? 0) > 0 && <span>{f.pickleballCourts} PB courts</span>}
+                        {(f.tennisConversionCourts ?? 0) > 0 && <span>{f.tennisConversionCourts} Tennis conv.</span>}
+                        {f.isIndoor && <span>Indoor</span>}
+                        {f.hasParking && <span className="flex items-center gap-0.5"><Car className="h-3 w-3" /> Parking</span>}
+                        {f.hasLights && <span className="flex items-center gap-0.5"><Lightbulb className="h-3 w-3" /> Lights</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onClick={() => startEdit(f)}
+                      className="p-1.5 rounded text-ash-500 hover:text-ember-400 transition-colors" title="Edit">
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    {confirmDeleteId === f.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-crimson-400">Remove?</span>
+                        <button type="button" onClick={() => handleDelete(f.id)} disabled={deletingId === f.id}
+                          className="px-2 py-1 rounded-pixel text-[10px] bg-crimson-500/20 text-crimson-400 border border-crimson-500/40 hover:bg-crimson-500/30 disabled:opacity-50">
+                          {deletingId === f.id ? <Loader2 className="h-3 w-3 animate-spin inline" /> : "Yes"}
+                        </button>
+                        <button type="button" onClick={() => setConfirmDeleteId(null)}
+                          className="px-2 py-1 rounded-pixel text-[10px] text-ash-400 border border-ash-700">No</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setConfirmDeleteId(f.id)}
+                        className="p-1.5 rounded text-ash-500 hover:text-crimson-400 transition-colors" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </Panel>
+            ))}
           </div>
-        </Panel>
+        )}
       </div>
 
       {/* Venues */}
@@ -1191,23 +1188,11 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
           <Panel variant="quest" padding="lg" className="space-y-3">
             <h3 className="heading-fantasy text-ash-100 text-sm">Create Venue</h3>
             <div className="space-y-2">
-              <input
-                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                placeholder="Venue name *"
-                value={venueName} onChange={(e) => setVenueName(e.target.value)}
-              />
-              <input
-                className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                placeholder="Address (optional)"
-                value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)}
-              />
+              <input className={inputCls} placeholder="Venue name *" value={venueName} onChange={(e) => setVenueName(e.target.value)} />
+              <input className={inputCls} placeholder="Address (optional)" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} />
               <div>
                 <label className="text-ash-500 text-xs mb-1 block">Check-in radius (meters)</label>
-                <input
-                  type="number" min={50} max={2000}
-                  className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500"
-                  value={venueRadius} onChange={(e) => setVenueRadius(Number(e.target.value))}
-                />
+                <input type="number" min={50} max={2000} className={inputCls} value={venueRadius} onChange={(e) => setVenueRadius(Number(e.target.value))} />
               </div>
             </div>
             <div className="flex gap-2">
@@ -1604,6 +1589,117 @@ function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId
                 className="text-ash-500 hover:text-rose-400 transition-colors disabled:opacity-50">
                 {removing === entry.userRoleId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </button>
+            </Panel>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// POSTS
+// ============================================================
+
+function PostsSection({
+  clubId, clubName, userId, userDisplayName, toast,
+}: { clubId: string; clubName: string; userId: string; userDisplayName: string; toast: ToastFn }) {
+  const [posts, setPosts] = useState<ClubPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [content, setContent] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    listClubPosts(clubId).then((p) => { setPosts(p); setLoading(false); }).catch(() => setLoading(false));
+  }, [clubId]);
+
+  async function handlePost() {
+    if (!content.trim()) return;
+    setPosting(true);
+    try {
+      const id = await createClubPost({
+        clubId, clubName, authorId: userId, authorName: userDisplayName, content: content.trim(),
+      });
+      const newPost: ClubPost = {
+        id, clubId, clubName, authorId: userId, authorName: userDisplayName,
+        content: content.trim(), createdAt: new Date().toISOString(),
+      };
+      setPosts((prev) => [newPost, ...prev]);
+      setContent("");
+      toast("Post published.", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to post.", "error");
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function handleDelete(postId: string) {
+    setDeletingId(postId);
+    try {
+      await deleteClubPost(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      toast("Post deleted.", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Delete failed.", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Club Posts</h2>
+      <p className="text-ash-500 text-xs -mt-2">Posts appear on your club&apos;s public page and in the feed for followers and members.</p>
+
+      {/* Composer */}
+      <Panel variant="quest" padding="lg" className="space-y-3">
+        <textarea
+          className="w-full rounded-pixel bg-obsidian-700 border border-ash-700 text-ash-100 px-3 py-2 text-sm focus:outline-none focus:border-ember-500 resize-none"
+          placeholder="Share an update, schedule change, registration announcement…"
+          rows={4}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+        />
+        <div className="flex items-center justify-between">
+          <span className="text-ash-600 text-xs">{content.length} / 1000</span>
+          <Button size="sm" onClick={handlePost} disabled={posting || !content.trim() || content.length > 1000}>
+            {posting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+            Publish
+          </Button>
+        </div>
+      </Panel>
+
+      {/* Feed */}
+      {loading ? (
+        <Panel variant="base" padding="lg" className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></Panel>
+      ) : posts.length === 0 ? (
+        <Panel variant="base" padding="lg" className="text-center">
+          <FileText className="h-8 w-8 text-ash-600 mx-auto mb-2" />
+          <p className="text-ash-400 text-sm">No posts yet. Publish your first update above.</p>
+        </Panel>
+      ) : (
+        <div className="space-y-3">
+          {posts.map((post) => (
+            <Panel key={post.id} variant="inventory" padding="md" className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-ash-200 text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(post.id)}
+                  disabled={deletingId === post.id}
+                  className="text-ash-500 hover:text-crimson-400 transition-colors shrink-0 disabled:opacity-50"
+                  title="Delete post"
+                >
+                  {deletingId === post.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+              <p className="text-ash-600 text-[10px]">
+                {post.authorName} · {new Date(post.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </p>
             </Panel>
           ))}
         </div>

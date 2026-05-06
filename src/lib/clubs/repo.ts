@@ -1,7 +1,7 @@
 import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
-import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
+import type { ClubDoc, ClubFacility, ClubPost } from "@/lib/permissions/types";
 import type { LeagueDoc } from "@/lib/firestore/types";
 
 export async function getClubById(clubId: string): Promise<ClubDoc | null> {
@@ -78,10 +78,53 @@ export async function countClubPlayers(leagueIds: string[]): Promise<number> {
   return unique.size;
 }
 
+/** List all facilities for a club (multi-facility model). */
+export async function listClubFacilities(clubId: string): Promise<ClubFacility[]> {
+  if (!isFirebaseConfigured()) return [];
+  const snap = await getDocs(
+    query(collection(db(), COLLECTIONS.clubFacilities), where("clubId", "==", clubId)),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubFacility);
+}
+
+/** @deprecated Use listClubFacilities. Kept for backward compat with single-facility reads. */
 export async function getClubFacility(clubId: string): Promise<ClubFacility | null> {
   if (!isFirebaseConfigured()) return null;
-  const snap = await getDoc(doc(db(), COLLECTIONS.clubFacilities, clubId));
-  return snap.exists() ? (snap.data() as ClubFacility) : null;
+  const facilities = await listClubFacilities(clubId);
+  return facilities[0] ?? null;
+}
+
+// ── Club posts ─────────────────────────────────────────────────────────────
+
+/** List recent posts for a single club, newest first. */
+export async function listClubPosts(clubId: string, limitN = 20): Promise<ClubPost[]> {
+  if (!isFirebaseConfigured()) return [];
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.clubPosts),
+      where("clubId", "==", clubId),
+      orderBy("createdAt", "desc"),
+      limit(limitN),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubPost);
+}
+
+/** List recent posts for a set of clubs (player feed). Up to 10 club IDs. */
+export async function listFeedPosts(clubIds: string[], limitN = 20): Promise<ClubPost[]> {
+  if (!isFirebaseConfigured() || clubIds.length === 0) return [];
+  const ids = clubIds.slice(0, 10);
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.clubPosts),
+      where("clubId", "in", ids),
+      limit(limitN),
+    ),
+  );
+  const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubPost);
+  // Sort newest first client-side (avoids composite index requirement).
+  posts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return posts;
 }
 
 export async function getUserByEmail(

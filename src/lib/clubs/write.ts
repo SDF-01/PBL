@@ -1,9 +1,20 @@
 "use client";
 
-import { deleteDoc, deleteField, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubFacility } from "@/lib/permissions/types";
+
+// ── Club followers ─────────────────────────────────────────────────────────
 
 /** Follow a club. Doc ID is deterministic so re-following is idempotent. */
 export async function followClub(userId: string, clubId: string): Promise<void> {
@@ -18,6 +29,8 @@ export async function unfollowClub(userId: string, clubId: string): Promise<void
   await deleteDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`));
 }
 
+// ── Club logo ──────────────────────────────────────────────────────────────
+
 export async function updateClubLogo(clubId: string, logoUrl: string | null): Promise<void> {
   await updateDoc(doc(db(), COLLECTIONS.clubs, clubId), {
     logoUrl: logoUrl ?? null,
@@ -25,24 +38,70 @@ export async function updateClubLogo(clubId: string, logoUrl: string | null): Pr
   });
 }
 
-export async function upsertClubFacility(
-  clubId: string,
-  data: Omit<ClubFacility, "clubId" | "updatedAt" | "updatedBy">,
-  updatedBy: string,
-): Promise<void> {
-  // Firestore rejects undefined values — replace them with deleteField() so
-  // clearing an optional field removes it from the document instead of crashing.
-  const cleaned = Object.fromEntries(
-    Object.entries(data).map(([k, v]) => [k, v === undefined ? deleteField() : v]),
-  );
+// ── Club facilities (multi-facility) ──────────────────────────────────────
 
-  await setDoc(
-    doc(db(), COLLECTIONS.clubFacilities, clubId),
-    { ...cleaned, clubId, updatedBy, updatedAt: serverTimestamp() },
-    { merge: true },
+type FacilityInput = Omit<ClubFacility, "id" | "clubId" | "createdAt" | "updatedAt" | "updatedBy">;
+
+function cleanFacilityInput(data: FacilityInput) {
+  return Object.fromEntries(
+    Object.entries(data).map(([k, v]) => [k, v === undefined ? deleteField() : v]),
   );
 }
 
-export async function deleteClubFacility(clubId: string): Promise<void> {
-  await deleteDoc(doc(db(), COLLECTIONS.clubFacilities, clubId));
+/** Add a new facility for a club — returns the new document ID. */
+export async function addClubFacility(
+  clubId: string,
+  data: FacilityInput,
+  updatedBy: string,
+): Promise<string> {
+  const ref = await addDoc(collection(db(), COLLECTIONS.clubFacilities), {
+    ...cleanFacilityInput(data),
+    clubId,
+    updatedBy,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+/** Update an existing facility document. */
+export async function updateClubFacility(
+  facilityId: string,
+  data: FacilityInput,
+  updatedBy: string,
+): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.clubFacilities, facilityId), {
+    ...cleanFacilityInput(data),
+    updatedBy,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Delete a facility document. */
+export async function removeClubFacility(facilityId: string): Promise<void> {
+  await deleteDoc(doc(db(), COLLECTIONS.clubFacilities, facilityId));
+}
+
+// ── Club posts ─────────────────────────────────────────────────────────────
+
+export interface CreatePostInput {
+  clubId: string;
+  clubName: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  imageUrl?: string;
+}
+
+/** Create a club post — returns the new document ID. */
+export async function createClubPost(input: CreatePostInput): Promise<string> {
+  const ref = await addDoc(collection(db(), COLLECTIONS.clubPosts), {
+    ...input,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function deleteClubPost(postId: string): Promise<void> {
+  await deleteDoc(doc(db(), COLLECTIONS.clubPosts, postId));
 }

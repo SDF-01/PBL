@@ -28,16 +28,17 @@ import {
   countClubPlayers,
   getClubById,
   getClubBySlug,
-  getClubFacility,
   getClubFollowerCount,
   isFollowingClub,
   listClubCoordinators,
+  listClubFacilities,
   listClubLeagues,
+  listClubPosts,
 } from "@/lib/clubs/repo";
 import { followClub, unfollowClub } from "@/lib/clubs/write";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
+import type { ClubDoc, ClubFacility, ClubPost } from "@/lib/permissions/types";
 import type { LeagueDoc } from "@/lib/firestore/types";
 import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
@@ -60,7 +61,8 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const [club, setClub] = useState<ClubDoc | null>(null);
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
-  const [facility, setFacility] = useState<ClubFacility | null>(null);
+  const [facilities, setFacilities] = useState<ClubFacility[]>([]);
+  const [posts, setPosts] = useState<ClubPost[]>([]);
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [followerCount, setFollowerCount] = useState<number>(0);
   const [following, setFollowing] = useState(false);
@@ -79,16 +81,18 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
 
       setClub(c);
       const realId = c.id;
-      const [l, coords, f, fCount] = await Promise.all([
+      const [l, coords, facilityList, fCount, recentPosts] = await Promise.all([
         listClubLeagues(realId),
         listClubCoordinators(realId),
-        getClubFacility(realId),
+        listClubFacilities(realId),
         getClubFollowerCount(realId),
+        listClubPosts(realId, 10),
       ]);
       setLeagues(l);
       setCoordinators(coords);
-      setFacility(f);
+      setFacilities(facilityList);
       setFollowerCount(fCount);
+      setPosts(recentPosts);
       const count = await countClubPlayers(l.map((x) => x.id));
       setPlayerCount(count);
       if (user) {
@@ -327,7 +331,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
             </section>
 
             {/* Facilities */}
-            {(facility || isDirector) && (
+            {(facilities.length > 0 || isDirector) && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest flex items-center gap-2">
@@ -335,75 +339,14 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                   </h2>
                   {isDirector && (
                     <Link href={`/clubs/manage/${realClubId}?section=facilities`}>
-                      <Button size="sm" variant="ghost" className="text-ember-400">Edit</Button>
+                      <Button size="sm" variant="ghost" className="text-ember-400">
+                        {facilities.length === 0 ? "Add" : "Edit"}
+                      </Button>
                     </Link>
                   )}
                 </div>
 
-                {facility ? (
-                  <Panel variant="inventory" padding="md" className="space-y-3">
-                    {/* Name + address + league count badge */}
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
-                        <MapPin className="h-4 w-4 text-ember-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 flex-wrap">
-                          <div className="min-w-0">
-                            {facility.facilityName && (
-                              <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
-                            )}
-                            {facility.address && (
-                              <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0 bg-obsidian-700 border border-ash-700 rounded-pixel px-2 py-1">
-                            <Layers className="h-3 w-3 text-ember-400" />
-                            <span className="heading-fantasy text-ash-100 text-sm">{leagues.length}</span>
-                            <span className="text-ash-500 text-[10px]">{leagues.length === 1 ? "league" : "leagues"}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
-                          {(facility.pickleballCourts ?? 0) > 0 && (
-                            <span>{facility.pickleballCourts} Pickleball Courts</span>
-                          )}
-                          {(facility.tennisConversionCourts ?? 0) > 0 && (
-                            <span>{facility.tennisConversionCourts} Tennis Conversion</span>
-                          )}
-                          {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
-                          {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
-                        </div>
-                        {(facility.amenities?.length ?? 0) > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {facility.amenities!.slice(0, 4).map((a) => (
-                              <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
-                            ))}
-                            {facility.amenities!.length > 4 && (
-                              <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Map embed */}
-                    {facility.address && (
-                      <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
-                        <iframe
-                          title="Facility location"
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
-                          className="w-full h-full border-0"
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                        />
-                      </div>
-                    )}
-
-                    {facility.notes && (
-                      <p className="text-ash-500 text-xs leading-relaxed pt-2 border-t border-ash-800">{facility.notes}</p>
-                    )}
-                  </Panel>
-                ) : (
+                {facilities.length === 0 ? (
                   <Panel variant="base" padding="md" className="text-center">
                     <p className="text-ash-500 text-sm">No facility info added yet.</p>
                     {isDirector && (
@@ -412,6 +355,92 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                       </Link>
                     )}
                   </Panel>
+                ) : (
+                  <div className="space-y-3">
+                    {facilities.map((facility) => (
+                      <Panel key={facility.id} variant="inventory" padding="md" className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                            <MapPin className="h-4 w-4 text-ember-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {facility.facilityName && (
+                              <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                            )}
+                            {facility.address && (
+                              <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
+                            )}
+                            <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
+                              {(facility.pickleballCourts ?? 0) > 0 && (
+                                <span>{facility.pickleballCourts} Pickleball Courts</span>
+                              )}
+                              {(facility.tennisConversionCourts ?? 0) > 0 && (
+                                <span>{facility.tennisConversionCourts} Tennis Conversion</span>
+                              )}
+                              {facility.hasParking && <span className="flex items-center gap-1"><Car className="h-3 w-3" /> Parking</span>}
+                              {facility.hasLights && <span className="flex items-center gap-1"><Lightbulb className="h-3 w-3" /> Lights</span>}
+                            </div>
+                            {(facility.amenities?.length ?? 0) > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {facility.amenities!.slice(0, 4).map((a) => (
+                                  <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
+                                ))}
+                                {facility.amenities!.length > 4 && (
+                                  <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {facility.address && (
+                          <div className="rounded-pixel overflow-hidden border border-ash-700 h-40 w-full">
+                            <iframe
+                              title={`${facility.facilityName ?? "Facility"} location`}
+                              src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
+                              className="w-full h-full border-0"
+                              loading="lazy"
+                              referrerPolicy="no-referrer-when-downgrade"
+                            />
+                          </div>
+                        )}
+                        {facility.notes && (
+                          <p className="text-ash-500 text-xs leading-relaxed pt-2 border-t border-ash-800">{facility.notes}</p>
+                        )}
+                      </Panel>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Posts feed */}
+            {(posts.length > 0 || isDirector) && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-ember-400" /> Updates
+                  </h2>
+                  {isDirector && (
+                    <Link href={`/clubs/manage/${realClubId}?section=posts`}>
+                      <Button size="sm" variant="ghost" className="text-ember-400">Post Update</Button>
+                    </Link>
+                  )}
+                </div>
+                {posts.length === 0 ? (
+                  <Panel variant="base" padding="md" className="text-center">
+                    <p className="text-ash-500 text-sm">No posts yet.</p>
+                  </Panel>
+                ) : (
+                  <div className="space-y-3">
+                    {posts.map((post) => (
+                      <Panel key={post.id} variant="base" padding="md" className="space-y-1.5">
+                        <p className="text-ash-200 text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                        <p className="text-ash-600 text-[10px]">
+                          {post.authorName} · {new Date(post.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </p>
+                      </Panel>
+                    ))}
+                  </div>
                 )}
               </section>
             )}

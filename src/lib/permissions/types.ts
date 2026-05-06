@@ -76,6 +76,8 @@ export interface CreateClubInput {
 }
 
 export interface ClubFacility {
+  /** Firestore document ID — populated by repo, not stored in the document itself. */
+  id: string;
   clubId: string;
   facilityName?: string;
   address?: string;
@@ -87,6 +89,18 @@ export interface ClubFacility {
   surfaceType?: "hard" | "clay" | "turf" | "indoor";
   amenities?: string[];
   notes?: string;
+  createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
+}
+
+export interface ClubPost {
+  id: string;
+  clubId: string;
+  clubName: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: string;
 }

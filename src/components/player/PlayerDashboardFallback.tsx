@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Bell,
+  Building2,
   CalendarDays,
   MapPin,
   Trophy,
@@ -20,9 +22,12 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { getPlayerProfile } from "@/lib/players/repo";
 import { listPlayDates } from "@/lib/ladder/repo";
 import { listPlayerRecentMatches } from "@/lib/ladder/repo";
+import { listFollowedClubs } from "@/lib/clubs/repo";
+import { listFeedPosts } from "@/lib/clubs/repo";
 import { skillBand } from "@/lib/players/elo";
 import { formatDistanceToNow, parseISO } from "date-fns";
 import type { PlayerProfileDoc, PlayDateDoc, LadderMatchDoc } from "@/lib/firestore/types";
+import type { ClubPost } from "@/lib/permissions/types";
 
 interface Props {
   userId: string;
@@ -34,6 +39,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
   const [profile, setProfile] = useState<PlayerProfileDoc | null>(null);
   const [upcomingDates, setUpcomingDates] = useState<PlayDateDoc[]>([]);
   const [recentMatches, setRecentMatches] = useState<LadderMatchDoc[]>([]);
+  const [feedPosts, setFeedPosts] = useState<ClubPost[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,7 +47,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
     (async () => {
       try {
         const today = new Date().toISOString().split("T")[0]!;
-        const [p, pd, rm] = await Promise.all([
+        const [p, pd, rm, followedClubs] = await Promise.all([
           getPlayerProfile(userId),
           listPlayDates().then((dates) =>
             dates
@@ -50,10 +56,15 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
               .slice(0, 3),
           ),
           listPlayerRecentMatches(userId, 5).catch(() => [] as LadderMatchDoc[]),
+          listFollowedClubs(userId).catch(() => []),
         ]);
         setProfile(p);
         setUpcomingDates(pd);
         setRecentMatches(rm);
+        if (followedClubs.length > 0) {
+          const posts = await listFeedPosts(followedClubs.map((c) => c.id)).catch(() => []);
+          setFeedPosts(posts);
+        }
       } finally {
         setLoading(false);
       }
@@ -186,6 +197,38 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
           </ul>
         )}
       </Panel>
+
+      {/* Club feed */}
+      {feedPosts.length > 0 && (
+        <Panel variant="base" padding="md">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="heading-fantasy text-ash-100 text-base flex items-center gap-2">
+              <Bell className="h-4 w-4 text-ember-400" /> Club Updates
+            </h2>
+            <Link href="/clubs/my">
+              <Button size="sm" variant="ghost" className="gap-1">
+                My Clubs <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {feedPosts.map((post) => (
+              <div key={post.id} className="space-y-1 py-2 border-b border-obsidian-700 last:border-0 last:pb-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="h-3 w-3 text-ember-400 shrink-0" />
+                  <Link href={`/clubs/${post.clubId}`}>
+                    <span className="text-ember-400 text-xs font-medium hover:text-ember-300 transition-colors">{post.clubName}</span>
+                  </Link>
+                </div>
+                <p className="text-ash-200 text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                <p className="text-ash-600 text-[10px]">
+                  {new Date(post.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }
