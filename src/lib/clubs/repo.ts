@@ -149,12 +149,13 @@ export async function getUserByEmail(
 
 export async function listUserClubs(userId: string): Promise<ClubDoc[]> {
   if (!isFirebaseConfigured()) return [];
-  const q = query(
-    collection(db(), COLLECTIONS.clubs),
-    where("createdBy", "==", userId),
-    orderBy("createdAt", "desc"),
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.clubs),
+      where("memberIds", "array-contains", userId),
+      orderBy("createdAt", "desc"),
+    ),
   );
-  const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
 }
 
@@ -210,15 +211,12 @@ export async function getClubFollowerCount(clubId: string): Promise<number> {
 /** All clubs a user is following, ordered by follow date descending. */
 export async function listFollowedClubs(userId: string): Promise<ClubDoc[]> {
   if (!isFirebaseConfigured()) return [];
-  const followSnap = await getDocs(
+  const snap = await getDocs(
     query(
-      collection(db(), COLLECTIONS.clubFollowers),
-      where("userId", "==", userId),
-      orderBy("followedAt", "desc"),
+      collection(db(), COLLECTIONS.clubs),
+      where("followerIds", "array-contains", userId),
+      orderBy("createdAt", "desc"),
     ),
   );
-  if (followSnap.empty) return [];
-  const clubIds = followSnap.docs.map((d) => d.data().clubId as string);
-  const clubs = await Promise.all(clubIds.map((id) => getClubById(id)));
-  return clubs.filter((c): c is ClubDoc => c !== null);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
 }

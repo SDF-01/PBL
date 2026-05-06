@@ -10,47 +10,36 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
-import { getClubById, listFollowedClubs, listUserClubs } from "@/lib/clubs/repo";
 import { unfollowClub } from "@/lib/clubs/write";
 import { updateClubSubmission } from "@/lib/permissions/write";
 import { useAuth } from "@/lib/auth-context";
-import { usePermissions } from "@/lib/permissions/usePermissions";
+import { listFollowedClubs, listUserClubs } from "@/lib/clubs/repo";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type { ClubDoc, CreateClubInput } from "@/lib/permissions/types";
 
 export default function MyClubsPage() {
   const { user } = useAuth();
-  const { clubDirectorFor, loading: permLoading } = usePermissions();
   const [clubs, setClubs] = useState<ClubDoc[]>([]);
   const [followedClubs, setFollowedClubs] = useState<ClubDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClub, setEditingClub] = useState<ClubDoc | null>(null);
 
   useEffect(() => {
-    if (permLoading) return;
-    if (!user || !isFirebaseConfigured()) {
-      setLoading(false);
-      return;
-    }
-    // Load clubs the user created + directed + following.
-    Promise.all([
-      listUserClubs(user.uid),
-      Promise.all(clubDirectorFor.map((id) => getClubById(id))),
-      listFollowedClubs(user.uid),
-    ])
-      .then(([created, directed, followed]) => {
-        const seen = new Set<string>();
-        const merged: ClubDoc[] = [];
-        for (const club of [...created, ...directed.filter((c): c is ClubDoc => c !== null)]) {
-          if (!seen.has(club.id)) { seen.add(club.id); merged.push(club); }
-        }
-        setClubs(merged);
-        // Exclude clubs user is already a director of from the following list.
-        const directedSet = new Set(merged.map((c) => c.id));
-        setFollowedClubs(followed.filter((c) => !directedSet.has(c.id)));
-      })
-      .finally(() => setLoading(false));
-  }, [user, permLoading, clubDirectorFor]);
+  if (!user || !isFirebaseConfigured()) {
+    setLoading(false);
+    return;
+  }
+  Promise.all([
+    listUserClubs(user.uid),
+    listFollowedClubs(user.uid),
+  ])
+    .then(([member, followed]) => {
+      setClubs(member);
+      const memberSet = new Set(member.map((c) => c.id));
+      setFollowedClubs(followed.filter((c) => !memberSet.has(c.id)));
+    })
+    .finally(() => setLoading(false));
+}, [user]);
 
   async function handleUnfollow(clubId: string) {
     if (!user) return;

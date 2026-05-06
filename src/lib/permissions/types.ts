@@ -38,6 +38,8 @@ export interface ClubDoc {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  memberIds: string[];
+  followerIds: string[]; 
 }
 
 export interface RoleEventDoc {

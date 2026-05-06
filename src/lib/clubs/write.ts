@@ -2,6 +2,8 @@
 
 import {
   addDoc,
+  arrayUnion,
+  arrayRemove,
   collection,
   deleteDoc,
   deleteField,
@@ -18,15 +20,23 @@ import type { ClubFacility } from "@/lib/permissions/types";
 
 /** Follow a club. Doc ID is deterministic so re-following is idempotent. */
 export async function followClub(userId: string, clubId: string): Promise<void> {
-  await setDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`), {
-    userId,
-    clubId,
-    followedAt: serverTimestamp(),
-  });
+  await Promise.all([
+    setDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`), {
+      userId, clubId, followedAt: serverTimestamp(),
+    }),
+    updateDoc(doc(db(), COLLECTIONS.clubs, clubId), {
+      followerIds: arrayUnion(userId),
+    }),
+  ]);
 }
 
 export async function unfollowClub(userId: string, clubId: string): Promise<void> {
-  await deleteDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`));
+  await Promise.all([
+    deleteDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`)),
+    updateDoc(doc(db(), COLLECTIONS.clubs, clubId), {
+      followerIds: arrayRemove(userId),
+    }),
+  ]);
 }
 
 // ── Club logo ──────────────────────────────────────────────────────────────
@@ -105,3 +115,4 @@ export async function createClubPost(input: CreatePostInput): Promise<string> {
 export async function deleteClubPost(postId: string): Promise<void> {
   await deleteDoc(doc(db(), COLLECTIONS.clubPosts, postId));
 }
+

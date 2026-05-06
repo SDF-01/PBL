@@ -14,10 +14,13 @@ import {
   updateDoc,
   where,
   writeBatch,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { CreateClubInput, RoleKey } from "./types";
+
 
 export function toSlug(name: string): string {
   return name
@@ -64,6 +67,8 @@ export async function submitClubCreation(
     logoUrl: input.logoUrl ?? null,
     status: "pending",
     createdBy: userId,
+    memberIds: [userId],
+    followerIds: [], 
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -260,6 +265,13 @@ export async function assignRole(
     active: true,
   });
 
+  //Add memberIds to ClubDoc when assigning a club-scoped role
+  if (clubId) {
+    batch.update(doc(database, COLLECTIONS.clubs, clubId), {
+      memberIds: arrayUnion(userId),
+    });
+  }
+
   // Only update users/{uid}.role if the new role outranks the current one.
   if (legacyRole && outranks(legacyRole, currentRole)) {
     batch.update(doc(database, COLLECTIONS.users, userId), {
@@ -271,6 +283,13 @@ export async function assignRole(
   await batch.commit();
 }
 
-export async function deactivateUserRole(userRoleId: string): Promise<void> {
-  await updateDoc(doc(db(), COLLECTIONS.userRoles, userRoleId), { active: false });
+export async function deactivateUserRole(userRoleId: string, clubId?: string, userId?: string): Promise<void> {
+  const batch = writeBatch(db());
+  batch.update(doc(db(), COLLECTIONS.userRoles, userRoleId), { active: false });
+  if (clubId && userId) {
+    batch.update(doc(db(), COLLECTIONS.clubs, clubId), {
+      memberIds: arrayRemove(userId),
+    });
+  }
+  await batch.commit();
 }
