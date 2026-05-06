@@ -1,4 +1,4 @@
-import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, documentId, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubDoc, ClubFacility, ClubPost } from "@/lib/permissions/types";
@@ -145,6 +145,57 @@ export async function getUserByEmail(
     displayName: (d.data().displayName ?? d.data().email ?? d.id) as string,
     email: d.data().email as string,
   };
+}
+
+/**
+ * Clubs where the user has an active league membership (joined via joinLeague).
+ * These are distinct from role-based memberIds — a regular player who joins a league
+ * lands here but not in listUserClubs.
+ */
+export async function listClubsByLeagueMembership(userId: string): Promise<ClubDoc[]> {
+  if (!isFirebaseConfigured()) return [];
+
+  // Step 1: all memberships for this user (filter active/waitlisted client-side)
+  const memberSnap = await getDocs(
+    query(collection(db(), COLLECTIONS.leagueMemberships), where("userId", "==", userId)),
+  );
+  const activeLeagueIds = [
+    ...new Set(
+      memberSnap.docs
+        .filter((d) => {
+          const s = d.data().status as string;
+          return s === "active" || s === "waitlisted";
+        })
+        .map((d) => d.data().leagueId as string),
+    ),
+  ];
+  if (activeLeagueIds.length === 0) return [];
+
+  // Step 2: fetch leagues in chunks of 10 to collect clubIds
+  const clubIds = new Set<string>();
+  for (let i = 0; i < activeLeagueIds.length; i += 10) {
+    const batch = activeLeagueIds.slice(i, i + 10);
+    const leagueSnap = await getDocs(
+      query(collection(db(), COLLECTIONS.leagues), where(documentId(), "in", batch)),
+    );
+    leagueSnap.docs.forEach((d) => {
+      const cId = d.data().clubId as string | undefined;
+      if (cId) clubIds.add(cId);
+    });
+  }
+  if (clubIds.size === 0) return [];
+
+  // Step 3: fetch clubs in chunks of 10
+  const clubs: ClubDoc[] = [];
+  const clubIdArr = [...clubIds];
+  for (let i = 0; i < clubIdArr.length; i += 10) {
+    const batch = clubIdArr.slice(i, i + 10);
+    const clubSnap = await getDocs(
+      query(collection(db(), COLLECTIONS.clubs), where(documentId(), "in", batch)),
+    );
+    clubSnap.docs.forEach((d) => clubs.push({ id: d.id, ...d.data() } as ClubDoc));
+  }
+  return clubs;
 }
 
 export async function listUserClubs(userId: string): Promise<ClubDoc[]> {

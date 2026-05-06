@@ -322,7 +322,8 @@ service cloud.firestore {
     }
 
     match /players/{uid} {
-      allow read: if true;
+      // Player profiles are private — require authentication to view.
+      allow read: if isSignedIn();
       allow create: if isSafePlayerCreate(uid) || isAdmin();
       allow update: if isSafePlayerUpdate(uid) || isAdmin();
       allow delete: if isAdmin();
@@ -348,18 +349,29 @@ service cloud.firestore {
     }
 
     match /userRoles/{roleDocId} {
-      // Any signed-in user can list role docs (needed for coordinator listings on public
-      // club pages). The data contains only userId + roleId — not sensitive.
-      allow read: if isSignedIn();
+      // Public read — coordinator listings appear on public club pages; data contains
+      // only userId + roleId, not sensitive.
+      allow read: if true;
       // Only admins / club directors can create/modify role assignments.
       allow create, update, delete: if isAdmin()
         || isClubDirector();
     }
 
     match /leagueMemberships/{id} {
-      // Any signed-in user can read (needed for player-count aggregation on public pages).
-      allow read: if isSignedIn();
-      allow create, update, delete: if isStaff();
+      // Public read — player-count aggregation appears on public league/club pages.
+      allow read: if true;
+      // Signed-in user can join their own league (userId must be their uid, status active or waitlisted).
+      allow create: if isStaff()
+        || (isSignedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.status in ["active", "waitlisted"]);
+      // Signed-in user can leave a league they belong to (only status field, only to "inactive").
+      allow update: if isStaff()
+        || (isSignedIn()
+          && resource.data.userId == request.auth.uid
+          && hasOnlyChanged(["status"])
+          && request.resource.data.status == "inactive");
+      allow delete: if isStaff();
     }
 
     match /clubPosts/{postId} {

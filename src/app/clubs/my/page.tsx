@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, Building2, MapPin, Plus, ShieldCheck } from "lucide-react";
+import { Bell, Building2, Layers, MapPin, Plus, ShieldCheck } from "lucide-react";
 import { ActiveClubCard } from "@/components/clubs/ActiveClubCard";
 import { ClubCreateForm } from "@/components/clubs/ClubCreateForm";
 import { PendingClubCard } from "@/components/clubs/PendingClubCard";
@@ -13,33 +13,40 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { unfollowClub } from "@/lib/clubs/write";
 import { updateClubSubmission } from "@/lib/permissions/write";
 import { useAuth } from "@/lib/auth-context";
-import { listFollowedClubs, listUserClubs } from "@/lib/clubs/repo";
+import { listClubsByLeagueMembership, listFollowedClubs, listUserClubs } from "@/lib/clubs/repo";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type { ClubDoc, CreateClubInput } from "@/lib/permissions/types";
 
 export default function MyClubsPage() {
   const { user } = useAuth();
   const [clubs, setClubs] = useState<ClubDoc[]>([]);
+  const [leagueMemberClubs, setLeagueMemberClubs] = useState<ClubDoc[]>([]);
   const [followedClubs, setFollowedClubs] = useState<ClubDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClub, setEditingClub] = useState<ClubDoc | null>(null);
 
   useEffect(() => {
-  if (!user || !isFirebaseConfigured()) {
-    setLoading(false);
-    return;
-  }
-  Promise.all([
-    listUserClubs(user.uid),
-    listFollowedClubs(user.uid),
-  ])
-    .then(([member, followed]) => {
-      setClubs(member);
-      const memberSet = new Set(member.map((c) => c.id));
-      setFollowedClubs(followed.filter((c) => !memberSet.has(c.id)));
-    })
-    .finally(() => setLoading(false));
-}, [user]);
+    if (!user || !isFirebaseConfigured()) {
+      setLoading(false);
+      return;
+    }
+    Promise.all([
+      listUserClubs(user.uid),
+      listClubsByLeagueMembership(user.uid),
+      listFollowedClubs(user.uid),
+    ])
+      .then(([member, leagueMember, followed]) => {
+        setClubs(member);
+        const memberSet = new Set(member.map((c) => c.id));
+        const uniqueLeagueMember = leagueMember.filter((c) => !memberSet.has(c.id));
+        setLeagueMemberClubs(uniqueLeagueMember);
+        const leagueSet = new Set(uniqueLeagueMember.map((c) => c.id));
+        setFollowedClubs(
+          followed.filter((c) => !memberSet.has(c.id) && !leagueSet.has(c.id)),
+        );
+      })
+      .finally(() => setLoading(false));
+  }, [user]);
 
   async function handleUnfollow(clubId: string) {
     if (!user) return;
@@ -67,7 +74,7 @@ export default function MyClubsPage() {
             <RuneChip tone="rune" className="mb-2">My Clubs</RuneChip>
             <h1 className="heading-fantasy text-display-md text-ash-100">Your Clubs</h1>
             <p className="text-ash-400 text-sm mt-1">
-              Track your club submissions and directorships.
+              Your clubs, leagues, and directorships.
             </p>
           </div>
           <Link href="/clubs/create">
@@ -84,10 +91,10 @@ export default function MyClubsPage() {
           </Panel>
         )}
 
-        {!loading && clubs.length === 0 && (
+        {!loading && clubs.length === 0 && leagueMemberClubs.length === 0 && (
           <Panel variant="quest" padding="lg" className="text-center space-y-3">
             <Building2 className="h-8 w-8 text-ash-600 mx-auto" />
-            <p className="text-ash-400 text-sm">You haven&apos;t created any clubs yet.</p>
+            <p className="text-ash-400 text-sm">You haven&apos;t joined any clubs yet.</p>
             <Link href="/clubs/create">
               <Button size="sm">Create Your First Club</Button>
             </Link>
@@ -138,6 +145,44 @@ export default function MyClubsPage() {
             )}
           </section>
         )}
+        {!loading && leagueMemberClubs.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-ember-400" />
+              <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Member Clubs</h2>
+              <RuneChip tone="gold" className="text-[10px]">{leagueMemberClubs.length}</RuneChip>
+            </div>
+            <p className="text-ash-500 text-xs -mt-1">
+              Clubs where you&apos;re enrolled in a league.
+            </p>
+            <div className="space-y-2">
+              {leagueMemberClubs.map((club) => (
+                <Panel key={club.id} variant="inventory" padding="md" className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {club.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={club.logoUrl} alt="" className="h-10 w-10 rounded-pixel object-cover border border-obsidian-400 shrink-0" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-pixel bg-obsidian-700 border border-obsidian-400 flex items-center justify-center shrink-0">
+                        <Building2 className="h-4 w-4 text-ember-400" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="heading-fantasy text-ash-100 text-sm truncate">{club.clubName}</p>
+                      <p className="text-ash-500 text-xs flex items-center gap-1 truncate">
+                        <MapPin className="h-3 w-3 shrink-0" />{club.location}
+                      </p>
+                    </div>
+                  </div>
+                  <Link href={`/clubs/${club.slug ?? club.id}`}>
+                    <Button size="sm" variant="outline">View</Button>
+                  </Link>
+                </Panel>
+              ))}
+            </div>
+          </section>
+        )}
+
         {!loading && followedClubs.length > 0 && (
           <section className="space-y-3">
             <div className="flex items-center gap-2">

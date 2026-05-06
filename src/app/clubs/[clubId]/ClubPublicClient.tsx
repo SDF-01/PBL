@@ -63,7 +63,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
   const [facilities, setFacilities] = useState<ClubFacility[]>([]);
   const [posts, setPosts] = useState<ClubPost[]>([]);
-  const [playerCount, setPlayerCount] = useState<number | null>(null);
+  const [playerCount, setPlayerCount] = useState<number>(0);
   const [followerCount, setFollowerCount] = useState<number>(0);
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
@@ -81,22 +81,23 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
 
       setClub(c);
       const realId = c.id;
-      const [l, coords, facilityList, fCount, recentPosts] = await Promise.all([
+      const [leagueRes, coordRes, facilityRes, fCountRes, postsRes] = await Promise.allSettled([
         listClubLeagues(realId),
         listClubCoordinators(realId),
         listClubFacilities(realId),
         getClubFollowerCount(realId),
         listClubPosts(realId, 10),
       ]);
+      const l = leagueRes.status === "fulfilled" ? leagueRes.value : [];
       setLeagues(l);
-      setCoordinators(coords);
-      setFacilities(facilityList);
-      setFollowerCount(fCount);
-      setPosts(recentPosts);
-      const count = await countClubPlayers(l.map((x) => x.id));
+      if (coordRes.status === "fulfilled") setCoordinators(coordRes.value);
+      if (facilityRes.status === "fulfilled") setFacilities(facilityRes.value);
+      if (fCountRes.status === "fulfilled") setFollowerCount(fCountRes.value);
+      if (postsRes.status === "fulfilled") setPosts(postsRes.value);
+      const count = await countClubPlayers(l.map((x) => x.id)).catch(() => 0);
       setPlayerCount(count);
       if (user) {
-        const alreadyFollowing = await isFollowingClub(user.uid, realId);
+        const alreadyFollowing = await isFollowingClub(user.uid, realId).catch(() => false);
         setFollowing(alreadyFollowing);
       }
       setLoading(false);
@@ -232,7 +233,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
           <Panel variant="hud" padding="md" className="text-center space-y-1">
             <Trophy className="h-5 w-5 text-ember-400 mx-auto" />
             <p className="heading-fantasy text-ash-100 text-2xl">
-              {playerCount === null ? "—" : playerCount}
+              {loading ? "—" : playerCount}
             </p>
             <p className="text-ash-500 text-[10px] uppercase tracking-wider">Players</p>
           </Panel>

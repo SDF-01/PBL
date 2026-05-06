@@ -109,8 +109,7 @@ export async function joinLeague(userId: string, leagueId: string): Promise<void
 
 export async function leaveLeague(userId: string, leagueId: string): Promise<void> {
   await updateDoc(doc(db(), COLLECTIONS.leagueMemberships, `${leagueId}__${userId}`), {
-    status: "left",
-    leftAt: serverTimestamp(),
+    status: "inactive",
   });
 }
 
