@@ -35,6 +35,7 @@ export const COLLECTIONS = {
   // ==== Permissions / Roles (schema v1) ====
   clubs: "clubs",
   clubFacilities: "clubFacilities",
+  clubFollowers: "clubFollowers",
   userRoles: "userRoles",
   leagueMemberships: "leagueMemberships",
   roleEvents: "roleEvents",

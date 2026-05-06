@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Plus, ShieldCheck } from "lucide-react";
+import { Bell, Building2, MapPin, Plus, ShieldCheck } from "lucide-react";
 import { ActiveClubCard } from "@/components/clubs/ActiveClubCard";
 import { ClubCreateForm } from "@/components/clubs/ClubCreateForm";
 import { PendingClubCard } from "@/components/clubs/PendingClubCard";
@@ -10,7 +10,8 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
-import { getClubById, listUserClubs } from "@/lib/clubs/repo";
+import { getClubById, listFollowedClubs, listUserClubs } from "@/lib/clubs/repo";
+import { unfollowClub } from "@/lib/clubs/write";
 import { updateClubSubmission } from "@/lib/permissions/write";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
@@ -21,6 +22,7 @@ export default function MyClubsPage() {
   const { user } = useAuth();
   const { clubDirectorFor, loading: permLoading } = usePermissions();
   const [clubs, setClubs] = useState<ClubDoc[]>([]);
+  const [followedClubs, setFollowedClubs] = useState<ClubDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingClub, setEditingClub] = useState<ClubDoc | null>(null);
 
@@ -30,21 +32,31 @@ export default function MyClubsPage() {
       setLoading(false);
       return;
     }
-    // Load clubs the user created plus clubs where they were assigned as director.
+    // Load clubs the user created + directed + following.
     Promise.all([
       listUserClubs(user.uid),
       Promise.all(clubDirectorFor.map((id) => getClubById(id))),
+      listFollowedClubs(user.uid),
     ])
-      .then(([created, directed]) => {
+      .then(([created, directed, followed]) => {
         const seen = new Set<string>();
         const merged: ClubDoc[] = [];
         for (const club of [...created, ...directed.filter((c): c is ClubDoc => c !== null)]) {
           if (!seen.has(club.id)) { seen.add(club.id); merged.push(club); }
         }
         setClubs(merged);
+        // Exclude clubs user is already a director of from the following list.
+        const directedSet = new Set(merged.map((c) => c.id));
+        setFollowedClubs(followed.filter((c) => !directedSet.has(c.id)));
       })
       .finally(() => setLoading(false));
   }, [user, permLoading, clubDirectorFor]);
+
+  async function handleUnfollow(clubId: string) {
+    if (!user) return;
+    await unfollowClub(user.uid, clubId);
+    setFollowedClubs((prev) => prev.filter((c) => c.id !== clubId));
+  }
 
   async function handleEdit(data: CreateClubInput) {
     if (!editingClub) return;
@@ -135,6 +147,53 @@ export default function MyClubsPage() {
                 />
               ))
             )}
+          </section>
+        )}
+        {!loading && followedClubs.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Bell className="h-4 w-4 text-spectral-400" />
+              <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">Following</h2>
+              <RuneChip tone="spectral" className="text-[10px]">{followedClubs.length}</RuneChip>
+            </div>
+            <p className="text-ash-500 text-xs -mt-1">
+              Clubs you&apos;re following. You can view their leagues and facilities.
+            </p>
+            <div className="space-y-2">
+              {followedClubs.map((club) => (
+                <Panel key={club.id} variant="inventory" padding="md" className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {club.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={club.logoUrl} alt="" className="h-10 w-10 rounded-pixel object-cover border border-obsidian-400 shrink-0" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-pixel bg-obsidian-700 border border-obsidian-400 flex items-center justify-center shrink-0">
+                        <Building2 className="h-4 w-4 text-ember-400" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="heading-fantasy text-ash-100 text-sm truncate">{club.clubName}</p>
+                      <p className="text-ash-500 text-xs flex items-center gap-1 truncate">
+                        <MapPin className="h-3 w-3 shrink-0" />{club.location}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Link href={`/clubs/${club.slug ?? club.id}`}>
+                      <Button size="sm" variant="outline">View</Button>
+                    </Link>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-ash-500 hover:text-crimson-400"
+                      onClick={() => handleUnfollow(club.id)}
+                    >
+                      Unfollow
+                    </Button>
+                  </div>
+                </Panel>
+              ))}
+            </div>
           </section>
         )}
       </main>

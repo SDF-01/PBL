@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import {
   ArrowLeft,
+  Bell,
+  BellOff,
   Building2,
   CalendarDays,
   Car,
@@ -27,9 +29,12 @@ import {
   getClubById,
   getClubBySlug,
   getClubFacility,
+  getClubFollowerCount,
+  isFollowingClub,
   listClubCoordinators,
   listClubLeagues,
 } from "@/lib/clubs/repo";
+import { followClub, unfollowClub } from "@/lib/clubs/write";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
@@ -57,6 +62,9 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
   const [facility, setFacility] = useState<ClubFacility | null>(null);
   const [playerCount, setPlayerCount] = useState<number | null>(null);
+  const [followerCount, setFollowerCount] = useState<number>(0);
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -71,16 +79,22 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
 
       setClub(c);
       const realId = c.id;
-      const [l, coords, f] = await Promise.all([
+      const [l, coords, f, fCount] = await Promise.all([
         listClubLeagues(realId),
         listClubCoordinators(realId),
         getClubFacility(realId),
+        getClubFollowerCount(realId),
       ]);
       setLeagues(l);
       setCoordinators(coords);
       setFacility(f);
+      setFollowerCount(fCount);
       const count = await countClubPlayers(l.map((x) => x.id));
       setPlayerCount(count);
+      if (user) {
+        const alreadyFollowing = await isFollowingClub(user.uid, realId);
+        setFollowing(alreadyFollowing);
+      }
       setLoading(false);
     })().catch((e) => { console.error(e); setLoading(false); });
   }, [slugOrId]);
@@ -88,6 +102,24 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
   // Always use the real Firestore doc ID for permission checks and manage links
   const realClubId = club?.id ?? slugOrId;
   const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(realClubId));
+
+  async function handleFollowToggle() {
+    if (!user || !club) return;
+    setFollowBusy(true);
+    try {
+      if (following) {
+        await unfollowClub(user.uid, club.id);
+        setFollowing(false);
+        setFollowerCount((n) => Math.max(0, n - 1));
+      } else {
+        await followClub(user.uid, club.id);
+        setFollowing(true);
+        setFollowerCount((n) => n + 1);
+      }
+    } finally {
+      setFollowBusy(false);
+    }
+  }
 
   if (loading || (slugOrId === "__fallback" && !club)) {
     return (
@@ -150,27 +182,44 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
             </div>
           </div>
 
-          {/* Director actions */}
-          {isDirector && (
-            <div className="flex flex-col gap-2 shrink-0">
-              <Link href={`/clubs/manage/${realClubId}`}>
-                <Button size="sm" className="w-full sm:w-auto">
-                  <Settings className="h-3.5 w-3.5" /> Manage Club
-                </Button>
-              </Link>
-              {isSiteAdmin && (
-                <Link href="/admin/clubs">
-                  <Button size="sm" variant="outline" className="w-full sm:w-auto border-ember-500/40 text-ember-400 hover:bg-ember-500/10">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Admin Console
+          <div className="flex flex-col gap-2 shrink-0">
+            {/* Follow button — shown for signed-in non-directors */}
+            {user && !isDirector && (
+              <Button
+                size="sm"
+                variant={following ? "outline" : "ghost"}
+                className={`w-full sm:w-auto ${following ? "border-spectral-500/40 text-spectral-400" : "text-ash-300 border-ash-700"}`}
+                onClick={handleFollowToggle}
+                disabled={followBusy}
+              >
+                {following
+                  ? <><BellOff className="h-3.5 w-3.5" /> Following</>
+                  : <><Bell className="h-3.5 w-3.5" /> Follow</>}
+              </Button>
+            )}
+
+            {/* Director actions */}
+            {isDirector && (
+              <>
+                <Link href={`/clubs/manage/${realClubId}`}>
+                  <Button size="sm" className="w-full sm:w-auto">
+                    <Settings className="h-3.5 w-3.5" /> Manage Club
                   </Button>
                 </Link>
-              )}
-            </div>
-          )}
+                {isSiteAdmin && (
+                  <Link href="/admin/clubs">
+                    <Button size="sm" variant="outline" className="w-full sm:w-auto border-ember-500/40 text-ember-400 hover:bg-ember-500/10">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Admin Console
+                    </Button>
+                  </Link>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── Stats row ── */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <Panel variant="hud" padding="md" className="text-center space-y-1">
             <Layers className="h-5 w-5 text-ember-400 mx-auto" />
             <p className="heading-fantasy text-ash-100 text-2xl">{loading ? "—" : leagues.length}</p>
@@ -187,6 +236,11 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
             <Users className="h-5 w-5 text-ember-400 mx-auto" />
             <p className="heading-fantasy text-ash-100 text-2xl">{loading ? "—" : coordinators.length}</p>
             <p className="text-ash-500 text-[10px] uppercase tracking-wider">Coordinators</p>
+          </Panel>
+          <Panel variant="hud" padding="md" className="text-center space-y-1">
+            <Bell className="h-5 w-5 text-spectral-400 mx-auto" />
+            <p className="heading-fantasy text-ash-100 text-2xl">{followerCount}</p>
+            <p className="text-ash-500 text-[10px] uppercase tracking-wider">Followers</p>
           </Panel>
         </div>
 

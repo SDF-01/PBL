@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
+import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubDoc, ClubFacility } from "@/lib/permissions/types";
@@ -146,4 +146,36 @@ export async function listArchivedClubs(): Promise<ClubDoc[]> {
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
+}
+
+/** Returns true if the given user is following the club. O(1) doc read. */
+export async function isFollowingClub(userId: string, clubId: string): Promise<boolean> {
+  if (!isFirebaseConfigured()) return false;
+  const snap = await getDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`));
+  return snap.exists();
+}
+
+/** Total follower count for a club. */
+export async function getClubFollowerCount(clubId: string): Promise<number> {
+  if (!isFirebaseConfigured()) return 0;
+  const snap = await getCountFromServer(
+    query(collection(db(), COLLECTIONS.clubFollowers), where("clubId", "==", clubId)),
+  );
+  return snap.data().count;
+}
+
+/** All clubs a user is following, ordered by follow date descending. */
+export async function listFollowedClubs(userId: string): Promise<ClubDoc[]> {
+  if (!isFirebaseConfigured()) return [];
+  const followSnap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.clubFollowers),
+      where("userId", "==", userId),
+      orderBy("followedAt", "desc"),
+    ),
+  );
+  if (followSnap.empty) return [];
+  const clubIds = followSnap.docs.map((d) => d.data().clubId as string);
+  const clubs = await Promise.all(clubIds.map((id) => getClubById(id)));
+  return clubs.filter((c): c is ClubDoc => c !== null);
 }

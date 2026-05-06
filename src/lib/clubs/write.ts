@@ -5,6 +5,19 @@ import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubFacility } from "@/lib/permissions/types";
 
+/** Follow a club. Doc ID is deterministic so re-following is idempotent. */
+export async function followClub(userId: string, clubId: string): Promise<void> {
+  await setDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`), {
+    userId,
+    clubId,
+    followedAt: serverTimestamp(),
+  });
+}
+
+export async function unfollowClub(userId: string, clubId: string): Promise<void> {
+  await deleteDoc(doc(db(), COLLECTIONS.clubFollowers, `${userId}_${clubId}`));
+}
+
 export async function updateClubLogo(clubId: string, logoUrl: string | null): Promise<void> {
   await updateDoc(doc(db(), COLLECTIONS.clubs, clubId), {
     logoUrl: logoUrl ?? null,

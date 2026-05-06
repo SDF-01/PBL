@@ -634,6 +634,7 @@ function UserLookup({
 function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
+  const [facility, setFacility] = useState<ClubFacility | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -661,8 +662,8 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
   const [coordinatorName, setCoordinatorName] = useState("");
 
   useEffect(() => {
-    Promise.all([listClubLeagues(clubId), listVenues(clubId)])
-      .then(([l, v]) => { setLeagues(l); setVenues(v); setLoading(false); })
+    Promise.all([listClubLeagues(clubId), listVenues(clubId), getClubFacility(clubId)])
+      .then(([l, v, f]) => { setLeagues(l); setVenues(v); setFacility(f); setLoading(false); })
       .catch(() => setLoading(false));
   }, [clubId]);
 
@@ -676,6 +677,17 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
     if (v?.address) {
       const parts = v.address.split(",");
       if (parts.length >= 3) {
+        setCity(parts[parts.length - 2]?.trim() ?? "");
+        setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
+      }
+    }
+  }
+
+  function fillFromFacility() {
+    if (!facility) return;
+    if (facility.address) {
+      const parts = facility.address.split(",");
+      if (parts.length >= 2) {
         setCity(parts[parts.length - 2]?.trim() ?? "");
         setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
       }
@@ -761,7 +773,20 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
 
           {/* Location */}
           <div className="space-y-3">
-            <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium border-b border-ash-800 pb-1">Location</p>
+            <div className="flex items-center justify-between border-b border-ash-800 pb-1">
+              <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium">Location</p>
+              {facility && (
+                <button
+                  type="button"
+                  onClick={fillFromFacility}
+                  className="text-[10px] text-spectral-400 hover:text-spectral-300 transition-colors flex items-center gap-1"
+                >
+                  <MapPin className="h-3 w-3" />
+                  Use club facility
+                  {facility.facilityName && <span className="text-ash-500">({facility.facilityName})</span>}
+                </button>
+              )}
+            </div>
             {venues.length > 0 && (
               <div>
                 <label className="text-ash-500 text-xs mb-1 block">Venue (court location)</label>

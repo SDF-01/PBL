@@ -60,6 +60,14 @@ export interface LeagueMembershipDoc {
   joinedAt: string;
 }
 
+export interface ClubFollowerDoc {
+  /** Document ID is `${userId}_${clubId}` for O(1) lookup. */
+  id: string;
+  userId: string;
+  clubId: string;
+  followedAt: string;
+}
+
 export interface CreateClubInput {
   clubName: string;
   location: string;
