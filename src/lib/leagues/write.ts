@@ -2,7 +2,7 @@
 
 "use client";
 
-import { collection, doc, serverTimestamp, setDoc, updateDoc, writeBatch } from "firebase/firestore";
+import { collection, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { RoleKey } from "@/lib/permissions/types";
@@ -99,12 +99,14 @@ export async function createLeague(
 }
 
 export async function joinLeague(userId: string, leagueId: string): Promise<void> {
-  await setDoc(doc(db(), COLLECTIONS.leagueMemberships, `${leagueId}__${userId}`), {
-    leagueId,
-    userId,
-    status: "active",
-    joinedAt: serverTimestamp(),
-  });
+  const docRef = doc(db(), COLLECTIONS.leagueMemberships, `${leagueId}__${userId}`);
+  const existing = await getDoc(docRef);
+  if (existing.exists()) {
+    // Re-join after leaving: update status and reset joinedAt.
+    await updateDoc(docRef, { status: "active", joinedAt: serverTimestamp() });
+  } else {
+    await setDoc(docRef, { leagueId, userId, status: "active", joinedAt: serverTimestamp() });
+  }
 }
 
 export async function leaveLeague(userId: string, leagueId: string): Promise<void> {

@@ -365,12 +365,18 @@ service cloud.firestore {
         || (isSignedIn()
           && request.resource.data.userId == request.auth.uid
           && request.resource.data.status in ["active", "waitlisted"]);
-      // Signed-in user can leave a league they belong to (only status field, only to "inactive").
+      // Signed-in user can leave (status → inactive) or rejoin (inactive → active, updating joinedAt).
       allow update: if isStaff()
         || (isSignedIn()
           && resource.data.userId == request.auth.uid
-          && hasOnlyChanged(["status"])
-          && request.resource.data.status == "inactive");
+          && (
+            // Leave: only status changes, must go to "inactive"
+            (hasOnlyChanged(["status"]) && request.resource.data.status == "inactive")
+            // Rejoin: status + joinedAt change, only from "inactive" → "active"
+            || (hasOnlyChanged(["status", "joinedAt"])
+                && resource.data.status == "inactive"
+                && request.resource.data.status == "active")
+          ));
       allow delete: if isStaff();
     }
 
