@@ -7,11 +7,14 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { AccountSecurityPanel } from "@/components/player/AccountSecurityPanel";
+import { ImageUpload } from "@/components/ui/ImageUpload";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { getPlayerProfile } from "@/lib/players/repo";
 import { listVenues } from "@/lib/ladder/repo";
 import { upsertPlayerProfile } from "@/lib/players/write";
+import { uploadPlayerPhoto } from "@/lib/storage";
 import type {
   PlayerProfileDoc,
   DominantHand,
@@ -28,6 +31,7 @@ export default function PlayerEditPage() {
   const [existing, setExisting] = useState<PlayerProfileDoc | null>(null);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
 
+  const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [city, setCity] = useState("");
   const [region, setRegion] = useState("");
@@ -58,6 +62,7 @@ export default function PlayerEditPage() {
         setVenues(vs);
         if (prof) {
           setExisting(prof);
+          setPhotoURL(prof.photoURL ?? null);
           setDisplayName(prof.displayName ?? "");
           setCity(prof.city ?? "");
           setRegion(prof.region ?? "");
@@ -99,7 +104,7 @@ export default function PlayerEditPage() {
       await upsertPlayerProfile({
         userId: user.uid,
         displayName: displayName.trim(),
-        photoURL: user.photoURL ?? undefined,
+        photoURL: photoURL ?? user.photoURL ?? undefined,
         city,
         region,
         country,
@@ -175,6 +180,22 @@ export default function PlayerEditPage() {
         ) : (
           <Panel variant="quest" padding="lg">
             <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-2">
+              <div className="md:col-span-2 flex items-center gap-4">
+                <ImageUpload
+                  currentUrl={photoURL}
+                  onUploaded={(url) => setPhotoURL(url || null)}
+                  upload={(file) => uploadPlayerPhoto(user!.uid, file)}
+                  shape="circle"
+                  size="lg"
+                  label="Profile photo"
+                  disabled={submitting}
+                />
+                <div className="text-xs text-ash-500 leading-relaxed">
+                  <p>Upload a profile photo.</p>
+                  <p className="mt-0.5">JPG, PNG or WEBP · max 5 MB</p>
+                </div>
+              </div>
+
               <Field label="Display name" required className="md:col-span-2">
                 <input
                   className={fieldCls}
@@ -326,6 +347,8 @@ export default function PlayerEditPage() {
             </form>
           </Panel>
         )}
+
+        {!loading && <AccountSecurityPanel />}
       </main>
     </ResponsiveShell>
   );

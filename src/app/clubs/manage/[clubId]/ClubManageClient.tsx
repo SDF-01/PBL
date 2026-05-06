@@ -42,7 +42,9 @@ import {
   listClubCoordinators,
   getUserByEmail,
 } from "@/lib/clubs/repo";
-import { upsertClubFacility, deleteClubFacility } from "@/lib/clubs/write";
+import { upsertClubFacility, deleteClubFacility, updateClubLogo } from "@/lib/clubs/write";
+import { ImageUpload } from "@/components/ui/ImageUpload";
+import { uploadClubLogo } from "@/lib/storage";
 import { createLeague, leaveLeague } from "@/lib/leagues/write";
 import { listLeagueMembers, type LeagueMemberEntry } from "@/lib/leagues/repo";
 import { getPlayerProfile } from "@/lib/players/repo";
@@ -244,11 +246,13 @@ function OverviewSection({
   clubId: string;
   onNavigate: (section: Section) => void;
 }) {
+  const { toast } = useToast();
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
   const [facility, setFacility] = useState<ClubFacility | null | undefined>(undefined);
   const [playerCount, setPlayerCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [logoUrl, setLogoUrl] = useState<string | null>(club.logoUrl ?? null);
 
   useEffect(() => {
     Promise.all([listClubLeagues(clubId), listClubCoordinators(clubId), getClubFacility(clubId)])
@@ -263,13 +267,31 @@ function OverviewSection({
       .finally(() => setLoading(false));
   }, [clubId]);
 
+  async function handleLogoUploaded(url: string) {
+    const newUrl = url || null;
+    setLogoUrl(newUrl);
+    try {
+      await updateClubLogo(clubId, newUrl);
+      toast("Logo updated", "success");
+    } catch {
+      toast("Failed to save logo", "error");
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Club info */}
       <Panel variant="quest" padding="lg" className="space-y-3">
         <div className="flex items-start gap-3">
-          <div className="p-2 rounded bg-ash-800 shrink-0">
-            <Building2 className="h-5 w-5 text-ember-400" />
+          <div className="shrink-0">
+            <ImageUpload
+              currentUrl={logoUrl}
+              onUploaded={handleLogoUploaded}
+              upload={(file) => uploadClubLogo(clubId, file)}
+              shape="square"
+              size="md"
+              label="Club logo"
+            />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

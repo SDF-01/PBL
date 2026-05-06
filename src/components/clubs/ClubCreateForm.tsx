@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ImageUpload } from "@/components/ui/ImageUpload";
 import type { CreateClubInput } from "@/lib/permissions/types";
 
 interface ClubCreateFormProps {
@@ -9,6 +10,7 @@ interface ClubCreateFormProps {
   onCancel?: () => void;
   initialData?: Partial<CreateClubInput>;
   isEditing?: boolean;
+  uploadLogo?: (file: File) => Promise<string>;
 }
 
 export function ClubCreateForm({
@@ -16,6 +18,7 @@ export function ClubCreateForm({
   onCancel,
   initialData,
   isEditing,
+  uploadLogo,
 }: ClubCreateFormProps) {
   const [clubName, setClubName] = useState(initialData?.clubName ?? "");
   const [location, setLocation] = useState(initialData?.location ?? "");
@@ -37,7 +40,7 @@ export function ClubCreateForm({
         clubName: clubName.trim(),
         location: location.trim(),
         description: description.trim(),
-        logoUrl: logoUrl.trim() || undefined,
+        logoUrl: logoUrl || undefined,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Submission failed.");
@@ -51,6 +54,24 @@ export function ClubCreateForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {uploadLogo && (
+        <div className="flex items-center gap-4">
+          <ImageUpload
+            currentUrl={logoUrl || null}
+            onUploaded={(url) => setLogoUrl(url)}
+            upload={uploadLogo}
+            shape="square"
+            size="lg"
+            label="Club logo"
+            disabled={submitting}
+          />
+          <div className="text-xs text-ash-500 leading-relaxed">
+            <p>Upload a club logo.</p>
+            <p className="mt-0.5">JPG, PNG or WEBP · max 5 MB</p>
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="block text-xs text-ash-400 mb-1 uppercase tracking-wider">
           Club Name *
@@ -87,18 +108,6 @@ export function ClubCreateForm({
           placeholder="Tell us about your club..."
           rows={3}
           className={`${inputClass} resize-none`}
-        />
-      </div>
-      <div>
-        <label className="block text-xs text-ash-400 mb-1 uppercase tracking-wider">
-          Logo URL (optional)
-        </label>
-        <input
-          type="url"
-          value={logoUrl}
-          onChange={(e) => setLogoUrl(e.target.value)}
-          placeholder="https://..."
-          className={inputClass}
         />
       </div>
       {error && <p className="text-danger text-sm">{error}</p>}

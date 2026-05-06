@@ -2,16 +2,23 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import {
+  EmailAuthProvider,
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
+  linkWithCredential,
+  linkWithPopup,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as fbSignOut,
+  unlink,
+  updatePassword,
   updateProfile,
   type User,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "./firebase";
 import { COLLECTIONS } from "./firestore/collections";
 import type { AccountStatus, UserRole } from "./firestore/types";
@@ -32,6 +39,9 @@ interface AuthCtx {
   signOut: () => Promise<void>;
   signUpWithEmail: (params: EmailSignUpParams) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
+  linkGoogle: () => Promise<void>;
+  unlinkGoogle: () => Promise<void>;
+  setOrUpdatePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx>({
@@ -41,6 +51,9 @@ const Ctx = createContext<AuthCtx>({
   signOut: async () => {},
   signUpWithEmail: async () => {},
   signInWithEmail: async () => {},
+  linkGoogle: async () => {},
+  unlinkGoogle: async () => {},
+  setOrUpdatePassword: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -57,18 +70,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(u);
       setReady(true);
       if (u) {
-        // Upsert user profile (fire-and-forget; rules allow self-write).
         try {
-          await setDoc(
-            doc(db(), COLLECTIONS.users, u.uid),
-            {
+          const userRef = doc(db(), COLLECTIONS.users, u.uid);
+          const snap = await getDoc(userRef);
+          if (!snap.exists()) {
+            // First sign-in (Google or any provider) — write the full initial document.
+            const role: UserRole = "PLAYER";
+            const accountStatus: AccountStatus = "ACTIVE";
+            await setDoc(userRef, {
+              uid: u.uid,
+              email: u.email ?? "",
+              firstName: "",
+              lastName: "",
+              displayName: u.displayName ?? u.email ?? "Player",
+              phoneNumber: null,
+              photoURL: u.photoURL ?? null,
+              role,
+              accountStatus,
+              clubId: null,
+              leagueIds: [],
+              startingSkillRating: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          } else {
+            const data = snap.data() as Record<string, unknown>;
+            // Always refresh mutable auth fields.
+            const patch: Record<string, unknown> = {
               email: u.email ?? "",
               displayName: u.displayName ?? u.email ?? "Player",
               photoURL: u.photoURL ?? null,
               updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          );
+            };
+            // Backfill schema fields that older / Google-auth documents may be missing.
+            if (data.uid === undefined) patch.uid = u.uid;
+            if (data.accountStatus === undefined) {
+              patch.accountStatus = "ACTIVE" as AccountStatus;
+            }
+            if (data.clubId === undefined) patch.clubId = null;
+            if (data.leagueIds === undefined) patch.leagueIds = [];
+            if (data.phoneNumber === undefined) patch.phoneNumber = null;
+            if (data.startingSkillRating === undefined) patch.startingSkillRating = null;
+            if (data.createdAt === undefined) patch.createdAt = serverTimestamp();
+            if (data.firstName === undefined || data.lastName === undefined) {
+              const parts = (u.displayName ?? "").trim().split(/\s+/);
+              if (data.firstName === undefined) patch.firstName = parts[0] ?? "";
+              if (data.lastName === undefined) patch.lastName = parts.slice(1).join(" ");
+            }
+            await setDoc(userRef, patch, { merge: true });
+          }
         } catch {
           // Non-fatal: profile may not be writable yet.
         }
@@ -126,6 +176,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     signInWithEmail: async (email: string, password: string) => {
       await signInWithEmailAndPassword(auth(), email, password);
+    },
+    linkGoogle: async () => {
+      const current = auth().currentUser;
+      if (!current) throw new Error("You must be signed in to link Google.");
+      await linkWithPopup(current, new GoogleAuthProvider());
+      // Refresh local user reference so UI reflects new providerData.
+      setUser(auth().currentUser);
+    },
+    unlinkGoogle: async () => {
+      const current = auth().currentUser;
+      if (!current) throw new Error("You must be signed in.");
+      const hasPassword = current.providerData.some(
+        (p) => p.providerId === "password",
+      );
+      if (!hasPassword) {
+        throw new Error(
+          "Set a password before unlinking Google so you can still sign in.",
+        );
+      }
+      await unlink(current, GoogleAuthProvider.PROVIDER_ID);
+      setUser(auth().currentUser);
+    },
+    setOrUpdatePassword: async (newPassword: string, currentPassword?: string) => {
+      const current = auth().currentUser;
+      if (!current) throw new Error("You must be signed in.");
+      const email = current.email;
+      const hasPassword = current.providerData.some(
+        (p) => p.providerId === "password",
+      );
+
+      if (!hasPassword) {
+        if (!email) {
+          throw new Error(
+            "Your account has no email address; cannot add a password sign-in.",
+          );
+        }
+        const credential = EmailAuthProvider.credential(email, newPassword);
+        await linkWithCredential(current, credential);
+      } else {
+        // Reauthenticate before updating password (Firebase requires recent login).
+        if (currentPassword && email) {
+          const credential = EmailAuthProvider.credential(email, currentPassword);
+          await reauthenticateWithCredential(current, credential);
+        } else {
+          // Fall back to Google reauth if no current password was provided.
+          const hasGoogle = current.providerData.some(
+            (p) => p.providerId === GoogleAuthProvider.PROVIDER_ID,
+          );
+          if (!hasGoogle) {
+            throw new Error("Current password is required.");
+          }
+          await reauthenticateWithPopup(current, new GoogleAuthProvider());
+        }
+        await updatePassword(current, newPassword);
+      }
+      setUser(auth().currentUser);
     },
   };
 

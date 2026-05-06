@@ -50,7 +50,7 @@ export default function AdminUsersPage() {
       setLoading(false);
       return;
     }
-    listAllUsers(500)
+    listAllUsers()
       .then(setUsers)
       .catch((e) => toast(e instanceof Error ? e.message : "Failed to load users.", "error"))
       .finally(() => setLoading(false));

@@ -1,9 +1,16 @@
 "use client";
 
-import { deleteDoc, deleteField, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { deleteDoc, deleteField, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubFacility } from "@/lib/permissions/types";
+
+export async function updateClubLogo(clubId: string, logoUrl: string | null): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.clubs, clubId), {
+    logoUrl: logoUrl ?? null,
+    updatedAt: serverTimestamp(),
+  });
+}
 
 export async function upsertClubFacility(
   clubId: string,

@@ -9,6 +9,7 @@ import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { submitClubCreation } from "@/lib/permissions/write";
 import { useAuth } from "@/lib/auth-context";
+import { uploadPendingClubLogo } from "@/lib/storage";
 import type { CreateClubInput } from "@/lib/permissions/types";
 
 export default function ClubCreatePage() {
@@ -51,7 +52,11 @@ export default function ClubCreatePage() {
           </p>
         </div>
         <Panel variant="quest" padding="lg">
-          <ClubCreateForm onSubmit={handleSubmit} onCancel={() => router.back()} />
+          <ClubCreateForm
+            onSubmit={handleSubmit}
+            onCancel={() => router.back()}
+            uploadLogo={user ? (file) => uploadPendingClubLogo(user.uid, file) : undefined}
+          />
         </Panel>
       </main>
     </ResponsiveShell>
