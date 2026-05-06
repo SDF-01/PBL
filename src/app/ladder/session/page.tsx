@@ -159,18 +159,20 @@ function PlayerSessionContent() {
           sitOutMatch={sessionData.sitOutMatch}
           playerId={user?.uid || ""}
           onEnterScore={() => {
-            if (sessionData.currentMatch) {
+            if (sessionData.currentMatch && sessionData.currentSession) {
               setScoreModal({
                 match: sessionData.currentMatch,
                 action: "submit",
+                targetPoints: sessionData.currentSession.targetPoints,
               });
             }
           }}
           onVerifyScore={() => {
-            if (sessionData.currentMatch) {
+            if (sessionData.currentMatch && sessionData.currentSession) {
               setScoreModal({
                 match: sessionData.currentMatch,
                 action: "verify",
+                targetPoints: sessionData.currentSession.targetPoints,
               });
             }
           }}
@@ -210,6 +212,7 @@ function PlayerSessionContent() {
           <ScoreModal
             match={scoreModal.match}
             action={scoreModal.action}
+            targetPoints={scoreModal.targetPoints}
             onClose={() => setScoreModal(null)}
             onSuccess={() => {
               setScoreModal(null);

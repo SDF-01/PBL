@@ -540,10 +540,20 @@ export async function generateSessionB(
   const sessionBData = generateSessionBFromSessionA(sessionA, courtsA, matchesA, playDate, season);
 
   // Persist Session B
+  const mappedMatches = sessionBData.matches.map((match) => ({
+    id: match.id,
+    courtId: match.courtId,
+    gameNumber: match.gameNumber,
+    sequenceInCourt: match.sequenceInCourt ?? 0,
+    sideA: match.sideA,
+    sideB: match.sideB,
+    sitOutPlayer: match.sittingOut ?? undefined,
+  }));
+
   await persistGeneratedSession({
     sessionDoc: sessionBData.session,
     courts: sessionBData.courts,
-    matches: sessionBData.matches,
+    matches: mappedMatches,
     generatedBy,
   });
 

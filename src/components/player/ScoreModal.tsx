@@ -17,6 +17,7 @@ interface ScoreModalProps {
   action: "submit" | "verify";
   onClose: () => void;
   onSuccess: () => void;
+  targetPoints: number;
 }
 
 interface DisputeState {
@@ -26,7 +27,7 @@ interface DisputeState {
   error: string | null;
 }
 
-export function ScoreModal({ match, action, onClose, onSuccess }: ScoreModalProps) {
+export function ScoreModal({ match, action, onClose, onSuccess, targetPoints }: ScoreModalProps) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,8 @@ export function ScoreModal({ match, action, onClose, onSuccess }: ScoreModalProp
     saving: false,
     error: null,
   });
+
+  const playerTeam = match.sideA.includes(user?.uid || "") ? "sideA" : "sideB";
 
   const handleSubmitScore = async (scoreA: number, scoreB: number) => {
     if (!user) return;
@@ -138,12 +141,15 @@ export function ScoreModal({ match, action, onClose, onSuccess }: ScoreModalProp
         {action === "submit" ? (
           <ScoreSubmission
             match={match}
+            playerTeam={playerTeam}
+            targetPoints={targetPoints}
             onSubmit={handleSubmitScore}
             onCancel={onClose}
           />
         ) : (
           <ScoreVerification
             match={match}
+            playerTeam={playerTeam}
             onVerify={handleVerifyScore}
             onDispute={handleDisputeScore}
             onCancel={onClose}
