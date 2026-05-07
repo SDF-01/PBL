@@ -30,8 +30,10 @@ import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
+import { listClubFacilities } from "@/lib/clubs/repo";
 import { getLeague, getUserLeagueMembership } from "@/lib/leagues/repo";
 import { joinLeague, leaveLeague, updateLeagueSettings, type UpdateLeagueInput } from "@/lib/leagues/write";
+import type { ClubFacility } from "@/lib/permissions/types";
 import { resolveSelectedLeagueId, storeSelectedLeagueId } from "@/lib/selectedLeague";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
@@ -315,6 +317,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   const [leaving, setLeaving] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [facilities, setFacilities] = useState<ClubFacility[]>([]);
   const [weather, setWeather] = useState<WeatherDay[] | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(false);
@@ -348,10 +351,17 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
       .catch(() => setMembership(null));
   }, [user, league, leagueId, permLoading]);
 
+  // Fetch facilities for the club that owns this league.
+  useEffect(() => {
+    const cId = league?.clubId ?? league?.orgId;
+    if (!cId) return;
+    listClubFacilities(cId).then(setFacilities).catch(() => setFacilities([]));
+  }, [league]);
+
   // Fetch 5-day weather forecast via Open-Meteo (no API key required).
   useEffect(() => {
     if (!league) return;
-    const hasLocation = league.venueAddress || league.city;
+    const hasLocation = facilities[0]?.address || league.venueAddress || league.city;
     if (!hasLocation) return;
     setWeatherLoading(true);
     setWeatherError(false);
@@ -360,8 +370,8 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
         let lat = league.latitude;
         let lng = league.longitude;
         if (!lat || !lng) {
-          // Use just the city name for geocoding — more reliable than full address.
-          const cityName = league.city ?? league.venueAddress ?? "";
+          // Prefer facility address for geocoding; fall back to league city.
+          const cityName = league.city ?? facilities[0]?.address ?? league.venueAddress ?? "";
           const geoRes = await fetch(
             `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json&country_code=US`,
           );
@@ -397,7 +407,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
         setWeatherLoading(false);
       }
     })();
-  }, [league]);
+  }, [league, facilities]);
 
   const clubId = league?.clubId ?? league?.orgId ?? "";
   const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(clubId));
@@ -556,41 +566,64 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                   )}
                 </Panel>
 
-                {/* Venue + map */}
-                {(league.venueName || league.venueAddress || league.city) && (() => {
-                  const mapQuery = league.venueAddress ?? (league.city ? `${league.city}${league.state ? `, ${league.state}` : ""}` : null);
-                  return (
-                    <Panel variant="inventory" padding="lg" className="space-y-3">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Venue</p>
-                      <div className="flex items-start gap-3">
-                        <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
-                          <MapPin className="h-4 w-4 text-ember-400" />
+                {/* Facility cards */}
+                {facilities.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 px-1">Facility</p>
+                    {facilities.map((facility) => (
+                      <Panel key={facility.id} variant="inventory" padding="lg" className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                            <MapPin className="h-4 w-4 text-ember-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {facility.facilityName && (
+                              <p className="heading-fantasy text-ash-100 text-sm">{facility.facilityName}</p>
+                            )}
+                            {facility.address && (
+                              <p className="text-ash-400 text-xs mt-0.5">{facility.address}</p>
+                            )}
+                            <div className="flex flex-wrap gap-3 mt-1.5 text-ash-500 text-xs">
+                              {(facility.pickleballCourts ?? 0) > 0 && (
+                                <span>{facility.pickleballCourts} Pickleball Court{facility.pickleballCourts !== 1 ? "s" : ""}</span>
+                              )}
+                              {(facility.tennisConversionCourts ?? 0) > 0 && (
+                                <span>{facility.tennisConversionCourts} Tennis Conversion</span>
+                              )}
+                              {facility.hasParking && <span>Parking</span>}
+                              {facility.hasLights && <span>Lights</span>}
+                              {facility.isIndoor && <span>Indoor</span>}
+                            </div>
+                            {(facility.amenities?.length ?? 0) > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {facility.amenities!.slice(0, 4).map((a) => (
+                                  <span key={a} className="px-1.5 py-0.5 rounded-full text-[10px] bg-obsidian-700 border border-ash-700 text-ash-400">{a}</span>
+                                ))}
+                                {facility.amenities!.length > 4 && (
+                                  <span className="px-1.5 py-0.5 text-[10px] text-ash-500">+{facility.amenities!.length - 4} more</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          {league.venueName && (
-                            <p className="heading-fantasy text-ash-100 text-sm">{league.venueName}</p>
-                          )}
-                          {league.venueAddress ? (
-                            <p className="text-ash-400 text-xs mt-0.5">{league.venueAddress}</p>
-                          ) : league.city ? (
-                            <p className="text-ash-400 text-xs mt-0.5">{league.city}{league.state ? `, ${league.state}` : ""}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                      {mapQuery && (
-                        <div className="rounded-pixel overflow-hidden border border-ash-700 h-48 w-full">
-                          <iframe
-                            title={`${league.venueName ?? league.city ?? "Venue"} location`}
-                            src={`https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`}
-                            className="w-full h-full border-0"
-                            loading="lazy"
-                            referrerPolicy="no-referrer-when-downgrade"
-                          />
-                        </div>
-                      )}
-                    </Panel>
-                  );
-                })()}
+                        {facility.address && (
+                          <div className="rounded-pixel overflow-hidden border border-ash-700 h-48 w-full">
+                            <iframe
+                              title={`${facility.facilityName ?? "Facility"} location`}
+                              src={`https://maps.google.com/maps?q=${encodeURIComponent(facility.address)}&output=embed`}
+                              className="w-full h-full border-0"
+                              loading="lazy"
+                              referrerPolicy="no-referrer-when-downgrade"
+                            />
+                          </div>
+                        )}
+                        {facility.notes && (
+                          <p className="text-ash-500 text-xs leading-relaxed pt-2 border-t border-ash-800">{facility.notes}</p>
+                        )}
+                      </Panel>
+                    ))}
+                  </div>
+                )}
 
                 <Panel variant="inventory" padding="lg" className="space-y-2">
                   <h3 className="heading-fantasy text-xl text-ash-100">About this league</h3>
@@ -604,7 +637,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
               <div className="space-y-4">
 
                 {/* ── Weather forecast ── */}
-                {(league.venueAddress || league.city) && (
+                {(facilities[0]?.address || league.venueAddress || league.city) && (
                   <Panel variant="base" padding="lg" className="space-y-3">
                     <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Weather Forecast</p>
                     {weatherLoading ? (
