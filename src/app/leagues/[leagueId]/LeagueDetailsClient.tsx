@@ -317,6 +317,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [weather, setWeather] = useState<WeatherDay[] | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState(false);
 
   useEffect(() => {
     const preserved = resolveSelectedLeagueId(searchParams) ?? leagueId;
@@ -350,22 +351,25 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   // Fetch 5-day weather forecast via Open-Meteo (no API key required).
   useEffect(() => {
     if (!league) return;
-    const geoQuery = league.venueAddress ?? (league.city ? `${league.city}${league.state ? `, ${league.state}` : ""}` : null);
-    if (!geoQuery) return;
+    const hasLocation = league.venueAddress || league.city;
+    if (!hasLocation) return;
     setWeatherLoading(true);
+    setWeatherError(false);
     (async () => {
       try {
         let lat = league.latitude;
         let lng = league.longitude;
         if (!lat || !lng) {
+          // Use just the city name for geocoding — more reliable than full address.
+          const cityName = league.city ?? league.venueAddress ?? "";
           const geoRes = await fetch(
-            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(geoQuery)}&count=1&language=en&format=json`,
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json&country_code=US`,
           );
           const geoData = await geoRes.json() as { results?: { latitude: number; longitude: number }[] };
           lat = geoData.results?.[0]?.latitude;
           lng = geoData.results?.[0]?.longitude;
         }
-        if (!lat || !lng) return;
+        if (!lat || !lng) { setWeatherError(true); return; }
         const wxRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=5`,
         );
@@ -388,7 +392,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
           })),
         );
       } catch {
-        // Weather is non-critical; fail silently.
+        setWeatherError(true);
       } finally {
         setWeatherLoading(false);
       }
@@ -553,35 +557,40 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                 </Panel>
 
                 {/* Venue + map */}
-                {(league.venueName || league.venueAddress) && (
-                  <Panel variant="inventory" padding="lg" className="space-y-3">
-                    <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Venue</p>
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
-                        <MapPin className="h-4 w-4 text-ember-400" />
+                {(league.venueName || league.venueAddress || league.city) && (() => {
+                  const mapQuery = league.venueAddress ?? (league.city ? `${league.city}${league.state ? `, ${league.state}` : ""}` : null);
+                  return (
+                    <Panel variant="inventory" padding="lg" className="space-y-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Venue</p>
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                          <MapPin className="h-4 w-4 text-ember-400" />
+                        </div>
+                        <div>
+                          {league.venueName && (
+                            <p className="heading-fantasy text-ash-100 text-sm">{league.venueName}</p>
+                          )}
+                          {league.venueAddress ? (
+                            <p className="text-ash-400 text-xs mt-0.5">{league.venueAddress}</p>
+                          ) : league.city ? (
+                            <p className="text-ash-400 text-xs mt-0.5">{league.city}{league.state ? `, ${league.state}` : ""}</p>
+                          ) : null}
+                        </div>
                       </div>
-                      <div>
-                        {league.venueName && (
-                          <p className="heading-fantasy text-ash-100 text-sm">{league.venueName}</p>
-                        )}
-                        {league.venueAddress && (
-                          <p className="text-ash-400 text-xs mt-0.5">{league.venueAddress}</p>
-                        )}
-                      </div>
-                    </div>
-                    {league.venueAddress && (
-                      <div className="rounded-pixel overflow-hidden border border-ash-700 h-48 w-full">
-                        <iframe
-                          title={`${league.venueName ?? "Venue"} location`}
-                          src={`https://maps.google.com/maps?q=${encodeURIComponent(league.venueAddress)}&output=embed`}
-                          className="w-full h-full border-0"
-                          loading="lazy"
-                          referrerPolicy="no-referrer-when-downgrade"
-                        />
-                      </div>
-                    )}
-                  </Panel>
-                )}
+                      {mapQuery && (
+                        <div className="rounded-pixel overflow-hidden border border-ash-700 h-48 w-full">
+                          <iframe
+                            title={`${league.venueName ?? league.city ?? "Venue"} location`}
+                            src={`https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`}
+                            className="w-full h-full border-0"
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                        </div>
+                      )}
+                    </Panel>
+                  );
+                })()}
 
                 <Panel variant="inventory" padding="lg" className="space-y-2">
                   <h3 className="heading-fantasy text-xl text-ash-100">About this league</h3>
@@ -595,7 +604,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
               <div className="space-y-4">
 
                 {/* ── Weather forecast ── */}
-                {(weatherLoading || weather) && (
+                {(league.venueAddress || league.city) && (
                   <Panel variant="base" padding="lg" className="space-y-3">
                     <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Weather Forecast</p>
                     {weatherLoading ? (
@@ -603,6 +612,8 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                         <Loader2 className="h-3.5 w-3.5 animate-spin text-ash-500" />
                         <p className="text-ash-500 text-xs">Loading forecast…</p>
                       </div>
+                    ) : weatherError ? (
+                      <p className="text-ash-500 text-xs">Forecast unavailable for this location.</p>
                     ) : weather ? (
                       <div className="space-y-2.5">
                         {weather.map((day) => (
