@@ -207,7 +207,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                 disabled={followBusy}
               >
                 {following
-                  ? <><BellOff className="h-3.5 w-3.5" /> Following</>
+                  ? <><Bell className="h-3.5 w-3.5 fill-current" /> Following</>
                   : <><Bell className="h-3.5 w-3.5" /> Follow</>}
               </Button>
             )}
