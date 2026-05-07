@@ -6,6 +6,14 @@ import { usePathname, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   CheckCircle2,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  Droplets,
   Layers,
   Loader2,
   LogIn,
@@ -13,6 +21,7 @@ import {
   Save,
   Settings,
   ShieldCheck,
+  Sun,
   UserCheck,
   UserX,
   Users,
@@ -212,6 +221,42 @@ function LeagueSettingsEditor({
   );
 }
 
+interface WeatherDay {
+  date: string;
+  maxTemp: number;
+  minTemp: number;
+  precipProb: number;
+  code: number;
+}
+
+function weatherIcon(code: number) {
+  if (code === 0) return <Sun className="h-4 w-4 text-amber-400" />;
+  if (code <= 2) return <CloudSun className="h-4 w-4 text-amber-300" />;
+  if (code === 3) return <Cloud className="h-4 w-4 text-ash-400" />;
+  if (code <= 48) return <CloudFog className="h-4 w-4 text-ash-400" />;
+  if (code <= 55) return <CloudDrizzle className="h-4 w-4 text-spectral-400" />;
+  if (code <= 65) return <CloudRain className="h-4 w-4 text-spectral-400" />;
+  if (code <= 77) return <CloudSnow className="h-4 w-4 text-ash-300" />;
+  if (code <= 82) return <CloudRain className="h-4 w-4 text-spectral-400" />;
+  return <CloudLightning className="h-4 w-4 text-amber-400" />;
+}
+
+function weatherLabel(code: number): string {
+  if (code === 0) return "Clear";
+  if (code <= 2) return "Mostly clear";
+  if (code === 3) return "Overcast";
+  if (code <= 48) return "Foggy";
+  if (code <= 55) return "Drizzle";
+  if (code <= 65) return "Rain";
+  if (code <= 77) return "Snow";
+  if (code <= 82) return "Showers";
+  return "Thunderstorm";
+}
+
+function shortDay(dateStr: string): string {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="text-xs text-ash-400 space-y-1 block">
@@ -270,6 +315,8 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   const [leaving, setLeaving] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [weather, setWeather] = useState<WeatherDay[] | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
 
   useEffect(() => {
     const preserved = resolveSelectedLeagueId(searchParams) ?? leagueId;
@@ -299,6 +346,54 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
       .then(setMembership)
       .catch(() => setMembership(null));
   }, [user, league, leagueId, permLoading]);
+
+  // Fetch 5-day weather forecast via Open-Meteo (no API key required).
+  useEffect(() => {
+    if (!league) return;
+    const geoQuery = league.venueAddress ?? (league.city ? `${league.city}${league.state ? `, ${league.state}` : ""}` : null);
+    if (!geoQuery) return;
+    setWeatherLoading(true);
+    (async () => {
+      try {
+        let lat = league.latitude;
+        let lng = league.longitude;
+        if (!lat || !lng) {
+          const geoRes = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(geoQuery)}&count=1&language=en&format=json`,
+          );
+          const geoData = await geoRes.json() as { results?: { latitude: number; longitude: number }[] };
+          lat = geoData.results?.[0]?.latitude;
+          lng = geoData.results?.[0]?.longitude;
+        }
+        if (!lat || !lng) return;
+        const wxRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=5`,
+        );
+        const wxData = await wxRes.json() as {
+          daily: {
+            time: string[];
+            temperature_2m_max: number[];
+            temperature_2m_min: number[];
+            precipitation_probability_max: number[];
+            weathercode: number[];
+          };
+        };
+        setWeather(
+          wxData.daily.time.map((date, i) => ({
+            date,
+            maxTemp: Math.round(wxData.daily.temperature_2m_max[i]!),
+            minTemp: Math.round(wxData.daily.temperature_2m_min[i]!),
+            precipProb: wxData.daily.precipitation_probability_max[i]!,
+            code: wxData.daily.weathercode[i]!,
+          })),
+        );
+      } catch {
+        // Weather is non-critical; fail silently.
+      } finally {
+        setWeatherLoading(false);
+      }
+    })();
+  }, [league]);
 
   const clubId = league?.clubId ?? league?.orgId ?? "";
   const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(clubId));
@@ -392,20 +487,6 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                     )}
                   </div>
 
-                  {/* Venue */}
-                  {(league.venueName || league.venueAddress) && (
-                    <div className="pt-3 border-t border-obsidian-600">
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500 mb-1.5">Venue</p>
-                      <div className="flex items-start gap-2 text-sm text-ash-300">
-                        <MapPin className="h-3.5 w-3.5 text-ember-400 mt-0.5 shrink-0" />
-                        <div>
-                          {league.venueName && <p className="text-ash-100">{league.venueName}</p>}
-                          {league.venueAddress && <p className="text-ash-500 text-xs">{league.venueAddress}</p>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Schedule */}
                   {(league.firstSessionDate || league.registrationOpenDate) && (
                     <div className="pt-3 border-t border-obsidian-600">
@@ -471,6 +552,37 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                   )}
                 </Panel>
 
+                {/* Venue + map */}
+                {(league.venueName || league.venueAddress) && (
+                  <Panel variant="inventory" padding="lg" className="space-y-3">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Venue</p>
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded bg-ash-800 shrink-0 mt-0.5">
+                        <MapPin className="h-4 w-4 text-ember-400" />
+                      </div>
+                      <div>
+                        {league.venueName && (
+                          <p className="heading-fantasy text-ash-100 text-sm">{league.venueName}</p>
+                        )}
+                        {league.venueAddress && (
+                          <p className="text-ash-400 text-xs mt-0.5">{league.venueAddress}</p>
+                        )}
+                      </div>
+                    </div>
+                    {league.venueAddress && (
+                      <div className="rounded-pixel overflow-hidden border border-ash-700 h-48 w-full">
+                        <iframe
+                          title={`${league.venueName ?? "Venue"} location`}
+                          src={`https://maps.google.com/maps?q=${encodeURIComponent(league.venueAddress)}&output=embed`}
+                          className="w-full h-full border-0"
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                      </div>
+                    )}
+                  </Panel>
+                )}
+
                 <Panel variant="inventory" padding="lg" className="space-y-2">
                   <h3 className="heading-fantasy text-xl text-ash-100">About this league</h3>
                   <p className="text-ash-300 text-sm leading-relaxed">
@@ -479,8 +591,46 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                 </Panel>
               </div>
 
-              {/* Right: role-aware action panel */}
+              {/* Right: sidebar */}
               <div className="space-y-4">
+
+                {/* ── Weather forecast ── */}
+                {(weatherLoading || weather) && (
+                  <Panel variant="base" padding="lg" className="space-y-3">
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Weather Forecast</p>
+                    {weatherLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-ash-500" />
+                        <p className="text-ash-500 text-xs">Loading forecast…</p>
+                      </div>
+                    ) : weather ? (
+                      <div className="space-y-2.5">
+                        {weather.map((day) => (
+                          <div key={day.date} className="flex items-center gap-2 text-xs">
+                            <span className="text-ash-500 w-24 shrink-0">{shortDay(day.date)}</span>
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              {weatherIcon(day.code)}
+                              <span className="text-ash-400 truncate">{weatherLabel(day.code)}</span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {day.precipProb > 0 && (
+                                <span className="flex items-center gap-0.5 text-spectral-400">
+                                  <Droplets className="h-3 w-3" />{day.precipProb}%
+                                </span>
+                              )}
+                              <span className="text-ash-200 font-medium w-8 text-right">{day.maxTemp}°</span>
+                              <span className="text-ash-500 w-8 text-right">{day.minTemp}°</span>
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-ash-600 text-[10px] pt-1 border-t border-ash-800">
+                          {league.city && league.state ? `${league.city}, ${league.state}` : league.venueName ?? ""}
+                          {" · "}Powered by Open-Meteo
+                        </p>
+                      </div>
+                    ) : null}
+                  </Panel>
+                )}
 
                 {/* ── Staff: Club Director or Coordinator ── */}
                 {isStaff && (
