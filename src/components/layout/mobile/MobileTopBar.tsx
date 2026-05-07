@@ -27,7 +27,7 @@ export function MobileTopBar() {
   }, [user]);
 
   return (
-    <header className="sticky top-0 z-40 bg-obsidian-900/90 backdrop-blur-md ember-divider">
+    <header className="fixed top-0 inset-x-0 z-40 bg-obsidian-900/90 backdrop-blur-md ember-divider">
       <div className="flex items-center justify-between px-4 h-14">
         <Link href="/" className="flex items-center gap-2">
           <CrestLogo className="w-7 h-7 text-ember-500" />

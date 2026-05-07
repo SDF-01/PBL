@@ -35,8 +35,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="min-h-screen flex flex-col">
         <MobileTopBar />
-        <BackToHome />
-        <main className="flex-1 px-4 py-4 pb-20">{children}</main>
+        <div className="pt-14 flex-1 flex flex-col pb-20">
+          <BackToHome />
+          <main className="flex-1 px-4 py-4">{children}</main>
+        </div>
         <MobileTabBar />
       </div>
     );

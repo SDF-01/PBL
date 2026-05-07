@@ -46,8 +46,10 @@ export function ResponsiveShell({
     return (
       <div className="min-h-screen flex flex-col">
         <MobileTopBar />
-        <BackToHome />
-        <div className={mobilePadForTabBar ? "pb-20 flex-1" : "flex-1"}>{children}</div>
+        <div className={mobilePadForTabBar ? "pt-14 pb-20 flex-1" : "pt-14 flex-1"}>
+          <BackToHome />
+          {children}
+        </div>
         <MobileTabBar />
       </div>
     );
