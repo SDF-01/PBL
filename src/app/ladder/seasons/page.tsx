@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
+import { usePermissions } from "@/lib/permissions/usePermissions";
 import { listLadderSeasons } from "@/lib/ladder/repo";
 import {
   createLadderSeason,
@@ -23,6 +24,12 @@ import type {
 
 export default function SeasonsPage() {
   const { user, ready, signIn } = useAuth();
+  const { isSiteAdmin, clubDirectorFor, leagueCoordinatorFor, coordinatorClubIds } = usePermissions();
+  const isStaff =
+    isSiteAdmin ||
+    clubDirectorFor.length > 0 ||
+    leagueCoordinatorFor.length > 0 ||
+    coordinatorClubIds.length > 0;
   const [seasons, setSeasons] = useState<LadderSeasonDoc[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -60,7 +67,7 @@ export default function SeasonsPage() {
               Long-running containers for many play dates.
             </p>
           </div>
-          {ready && user && (
+          {ready && user && isStaff && (
             <Button size="sm" onClick={() => setShowForm((v) => !v)}>
               <Plus className="h-3.5 w-3.5" />
               {showForm ? "Close" : "New Season"}
@@ -74,7 +81,7 @@ export default function SeasonsPage() {
               Sign-in required
             </RuneChip>
             <p className="text-ash-300 text-sm mb-3">
-              Admins must sign in to create a season.
+              Sign in to view and manage league seasons.
             </p>
             <Button size="sm" onClick={() => signIn().catch(() => {})}>
               Sign in with Google
@@ -82,7 +89,7 @@ export default function SeasonsPage() {
           </Panel>
         )}
 
-        {showForm && user && (
+        {showForm && user && isStaff && (
           <NewSeasonForm
             createdBy={user.uid}
             onCreated={() => {
@@ -113,7 +120,7 @@ export default function SeasonsPage() {
           </Panel>
         ) : (
           <>
-            {copyTarget && user && (
+            {copyTarget && user && isStaff && (
               <CopySeasonForm
                 source={copyTarget}
                 createdBy={user.uid}
@@ -140,7 +147,7 @@ export default function SeasonsPage() {
                         <RuneChip tone="rune">
                           {s.movementPattern.replace(/_/g, " ").toLowerCase()}
                         </RuneChip>
-                        {user && (
+                        {user && isStaff && (
                           <button
                             title="Copy season"
                             onClick={() => { setCopyTarget(s); setShowForm(false); }}

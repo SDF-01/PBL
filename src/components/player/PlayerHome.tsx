@@ -1,9 +1,3 @@
-/**
- * Player Home Screen (Court-Centric)
- * Primary heart of the player experience
- * Shows assigned court, current match, next match, and actions
- */
-
 "use client";
 
 import React from "react";
@@ -14,6 +8,7 @@ import {
 } from "@/lib/firestore/types";
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
+import { RuneChip } from "../ui/RuneChip";
 import {
   Activity,
   ChevronRight,
@@ -21,6 +16,9 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  LayoutGrid,
+  Trophy,
+  Swords,
 } from "lucide-react";
 
 interface PlayerHomeProps {
@@ -50,20 +48,21 @@ export function PlayerHome({
 }: PlayerHomeProps) {
   if (!currentSession) {
     return (
-      <div className="space-y-6">
-        <Panel className="bg-amber-50 border-2 border-amber-200 p-6 text-center">
-          <AlertCircle className="w-12 h-12 text-amber-600 mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-amber-900 mb-2">
-            Awaiting Session Generation
+      <Panel variant="quest" padding="lg" className="text-center space-y-4">
+        <AlertCircle className="h-10 w-10 text-ember-400 mx-auto" />
+        <div>
+          <RuneChip tone="warning" className="mb-2">Awaiting Session</RuneChip>
+          <h2 className="heading-fantasy text-ash-100 text-lg">
+            Session Not Started
           </h2>
-          <p className="text-amber-800 mb-4">
-            The admin will generate the session shortly. Check back soon!
+          <p className="text-ash-400 text-sm mt-1">
+            The coordinator will generate the session shortly.
           </p>
-          <Button onClick={onViewCourts} variant="outline">
-            View Play Dates
-          </Button>
-        </Panel>
-      </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={onViewCourts}>
+          Browse Play Dates
+        </Button>
+      </Panel>
     );
   }
 
@@ -71,33 +70,36 @@ export function PlayerHome({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">On Court</h1>
-        <div className="text-sm text-slate-600">
-          Session <span className="font-semibold">{currentSession.kind}</span>
+        <div>
+          <RuneChip tone="rune" className="mb-1">On Court</RuneChip>
+          <h1 className="heading-fantasy text-display-md text-ash-100">Session {currentSession.kind}</h1>
+        </div>
+        <div className="text-right">
+          <p className="text-ash-500 text-xs uppercase tracking-widest">Status</p>
+          <p className="text-ash-200 text-sm font-medium capitalize">
+            {currentSession.status.replace(/_/g, " ").toLowerCase()}
+          </p>
         </div>
       </div>
 
-      {/* Court Assignment */}
+      {/* Court assignment */}
       {assignedCourt && (
-        <Panel className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 p-6">
+        <Panel variant="hud" padding="lg">
           <div className="text-center mb-4">
-            <div className="text-sm text-slate-600 mb-1">Your Court</div>
-            <div className="text-5xl font-bold text-blue-600">
-              COURT {assignedCourt.courtNumber}
+            <p className="text-ash-500 text-xs uppercase tracking-[0.2em] mb-1">Your Court</p>
+            <div className="heading-fantasy text-6xl text-ember-400 mb-1">
+              {assignedCourt.courtNumber}
             </div>
-            <div className="text-sm text-slate-600 mt-2">
-              {assignedCourt.size} Players
-            </div>
+            <p className="text-ash-400 text-sm">{assignedCourt.size} players assigned</p>
           </div>
-
-          <div className="flex gap-2 flex-wrap justify-center">
+          <div className="flex flex-wrap gap-2 justify-center">
             {assignedCourt.playerIds.map((pid) => (
               <span
                 key={pid}
-                className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                className={`px-3 py-1 rounded-pixel text-xs font-medium border ${
                   pid === playerId
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-blue-600 border border-blue-300"
+                    ? "bg-ember-500/20 border-ember-400 text-ember-300"
+                    : "bg-obsidian-700 border-obsidian-500 text-ash-300"
                 }`}
               >
                 {pid === playerId ? "You" : pid.substring(0, 8)}
@@ -107,162 +109,127 @@ export function PlayerHome({
         </Panel>
       )}
 
-      {/* Current/Next Match Display */}
+      {/* Sitting out */}
       {sitOutMatch ? (
-        <Panel className="bg-slate-50 border-2 border-amber-300 p-6">
-          <div className="text-center">
-            <Activity className="w-12 h-12 text-amber-600 mx-auto mb-3" />
-            <h2 className="text-2xl font-bold mb-1">Sitting Out</h2>
-            <p className="text-slate-600">
-              Game {sitOutMatch.gameNumber}: Next up is on court
-            </p>
-          </div>
+        <Panel variant="inventory" padding="lg" className="text-center space-y-2">
+          <Activity className="h-8 w-8 text-gold-400 mx-auto" />
+          <RuneChip tone="gold">Sitting Out</RuneChip>
+          <p className="text-ash-400 text-sm">
+            Game {sitOutMatch.gameNumber} — rest up, you&apos;re next.
+          </p>
         </Panel>
       ) : currentMatch ? (
-        <Panel className="border-2 border-green-500 p-6">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-green-600" />
-              Current Match — Game {currentMatch.gameNumber}
+        <Panel variant="quest" padding="lg" className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Swords className="h-4 w-4 text-ember-400" />
+            <h2 className="heading-fantasy text-ash-100 text-base">
+              Game {currentMatch.gameNumber} — Current Match
             </h2>
+          </div>
 
-            {/* Score Display */}
-            <div className="grid grid-cols-3 gap-3 my-4">
-              {/* Side A */}
-              <div>
-                <div className="text-xs font-semibold text-slate-600 mb-1">
-                  Your Team
-                </div>
-                <div className="bg-blue-50 border-2 border-blue-300 rounded p-3">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600">
-                      {currentMatch.scoreA ?? "—"}
-                    </div>
-                    <div className="text-xs text-slate-600 mt-1">
-                      {currentMatch.sideA.length} players
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* VS */}
-              <div className="flex items-center justify-center">
-                <span className="text-2xl font-bold text-slate-400">vs</span>
-              </div>
-
-              {/* Side B */}
-              <div>
-                <div className="text-xs font-semibold text-slate-600 mb-1">
-                  Other Team
-                </div>
-                <div className="bg-slate-100 border-2 border-slate-300 rounded p-3">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-slate-700">
-                      {currentMatch.scoreB ?? "—"}
-                    </div>
-                    <div className="text-xs text-slate-600 mt-1">
-                      {currentMatch.sideB.length} players
-                    </div>
-                  </div>
+          {/* Score display */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <p className="text-ash-500 text-[10px] uppercase tracking-widest mb-1">Your Side</p>
+              <div className="bg-obsidian-800 border border-ember-500/40 rounded-pixel py-3">
+                <div className="heading-fantasy text-4xl text-ember-400">
+                  {currentMatch.scoreA ?? "—"}
                 </div>
               </div>
             </div>
-
-            {/* Match Status */}
-            <div className="flex items-center gap-2 p-3 bg-slate-50 rounded mb-4">
-              {currentMatch.status === "SCHEDULED" && (
-                <>
-                  <Clock className="w-4 h-4 text-amber-600" />
-                  <span className="text-sm">Ready to play</span>
-                </>
-              )}
-              {currentMatch.status === "SUBMITTED" && (
-                <>
-                  <Clock className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm">Awaiting verification</span>
-                </>
-              )}
-              {currentMatch.status === "VERIFIED" && (
-                <>
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span className="text-sm">Score verified ✓</span>
-                </>
-              )}
+            <div className="flex items-center justify-center">
+              <span className="heading-fantasy text-xl text-ash-500">vs</span>
             </div>
+            <div className="text-center">
+              <p className="text-ash-500 text-[10px] uppercase tracking-widest mb-1">Opponents</p>
+              <div className="bg-obsidian-800 border border-obsidian-500 rounded-pixel py-3">
+                <div className="heading-fantasy text-4xl text-ash-300">
+                  {currentMatch.scoreB ?? "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Match status */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-pixel bg-obsidian-800 border border-obsidian-600">
+            {currentMatch.status === "SCHEDULED" && (
+              <>
+                <Clock className="h-4 w-4 text-gold-400 shrink-0" />
+                <span className="text-ash-300 text-sm">Ready to play</span>
+              </>
+            )}
+            {currentMatch.status === "SUBMITTED" && (
+              <>
+                <Clock className="h-4 w-4 text-spectral-400 shrink-0" />
+                <span className="text-ash-300 text-sm">Awaiting verification</span>
+              </>
+            )}
+            {currentMatch.status === "VERIFIED" && (
+              <>
+                <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0" />
+                <span className="text-ash-300 text-sm">Score verified</span>
+              </>
+            )}
           </div>
 
           {/* Actions */}
           <div className="grid grid-cols-2 gap-3">
             <Button
               onClick={onEnterScore}
-              className="gap-2"
+              size="sm"
               disabled={currentMatch.status !== "SCHEDULED"}
             >
-              <Activity className="w-4 h-4" />
-              Enter Score
+              <Activity className="h-3.5 w-3.5" /> Enter Score
             </Button>
             <Button
               onClick={onVerifyScore}
               variant="outline"
-              className="gap-2"
+              size="sm"
               disabled={currentMatch.status !== "SUBMITTED"}
             >
-              <CheckCircle className="w-4 h-4" />
-              Verify
+              <CheckCircle className="h-3.5 w-3.5" /> Verify
             </Button>
           </div>
         </Panel>
       ) : (
-        <Panel className="bg-slate-50 border-2 border-slate-300 p-6 text-center">
-          <Users className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <p className="text-slate-600 mb-4">All matches complete</p>
-          <Button onClick={onViewStandings}>View Standings</Button>
+        <Panel variant="inventory" padding="lg" className="text-center space-y-3">
+          <Users className="h-8 w-8 text-spectral-400 mx-auto" />
+          <p className="text-ash-300 text-sm">All matches complete for this session.</p>
+          <Button onClick={onViewStandings} size="sm">
+            <Trophy className="h-3.5 w-3.5" /> View Standings
+          </Button>
         </Panel>
       )}
 
-      {/* Next Match Preview */}
+      {/* Next match preview */}
       {nextMatch && !sitOutMatch && (
-        <Panel className="bg-blue-50 border border-blue-200 p-4">
-          <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
-            <ChevronRight className="w-4 h-4" />
-            Next Match — Game {nextMatch.gameNumber}
-          </h3>
-          <div className="flex items-center justify-between">
-            <div className="text-sm">
-              <div className="font-semibold text-blue-600">
-                {nextMatch.sideA.includes(playerId) ? "Your Team" : "Opponents"}
-              </div>
-              <div className="text-xs text-slate-600">
-                {nextMatch.sideA.length} vs {nextMatch.sideB.length} players
-              </div>
-            </div>
-            <Button
-              onClick={onViewCourts}
-              variant="ghost"
-              size="sm"
-              className="gap-1"
-            >
-              View <ChevronRight className="w-3 h-3" />
-            </Button>
+        <Panel variant="base" padding="md" className="flex items-center gap-3">
+          <div className="p-1.5 rounded bg-obsidian-700 shrink-0">
+            <ChevronRight className="h-4 w-4 text-ash-400" />
           </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest">Up next</p>
+            <p className="text-ash-200 text-sm">
+              Game {nextMatch.gameNumber} —{" "}
+              {nextMatch.sideA.includes(playerId) ? nextMatch.sideA.length : nextMatch.sideB.length}{" "}
+              vs{" "}
+              {nextMatch.sideA.includes(playerId) ? nextMatch.sideB.length : nextMatch.sideA.length}{" "}
+              players
+            </p>
+          </div>
+          <Button onClick={onViewCourts} variant="ghost" size="sm" className="shrink-0">
+            <LayoutGrid className="h-3.5 w-3.5" /> Courts
+          </Button>
         </Panel>
       )}
 
-      {/* Quick Links */}
+      {/* Quick links */}
       <div className="grid grid-cols-2 gap-3">
-        <Button
-          onClick={onViewStandings}
-          variant="outline"
-          className="w-full"
-        >
-          View Standings
+        <Button onClick={onViewStandings} variant="outline" size="sm" className="w-full">
+          <Trophy className="h-3.5 w-3.5" /> Standings
         </Button>
-        <Button
-          onClick={onViewCourts}
-          variant="outline"
-          className="w-full"
-        >
-          View All Courts
+        <Button onClick={onViewCourts} variant="outline" size="sm" className="w-full">
+          <LayoutGrid className="h-3.5 w-3.5" /> All Courts
         </Button>
       </div>
     </div>

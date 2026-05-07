@@ -57,13 +57,18 @@ function SignupPageContent() {
 
   useEffect(() => {
     if (user) {
-      router.push(
-        selectedLeagueId
-          ? `/players/edit?leagueId=${selectedLeagueId}`
-          : `/players/view?uid=${user.uid}`,
-      );
+      const redirectTo = searchParams.get("redirect");
+      if (redirectTo && redirectTo.startsWith("/")) {
+        router.push(redirectTo);
+      } else {
+        router.push(
+          selectedLeagueId
+            ? `/players/edit?leagueId=${selectedLeagueId}`
+            : `/players/view?uid=${user.uid}`,
+        );
+      }
     }
-  }, [user, router, selectedLeagueId]);
+  }, [user, router, selectedLeagueId, searchParams]);
 
   function validate(): string | null {
     if (!firstName.trim()) return "First name is required.";

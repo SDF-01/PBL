@@ -30,13 +30,19 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (user) {
-      router.push(
-        selectedLeagueId
-          ? `/players/edit?leagueId=${selectedLeagueId}`
-          : `/players/view?uid=${user.uid}`,
-      );
+      // Honour the ?redirect= param set by the auth guard (e.g. /dashboard).
+      const redirectTo = searchParams.get("redirect");
+      if (redirectTo && redirectTo.startsWith("/")) {
+        router.push(redirectTo);
+      } else {
+        router.push(
+          selectedLeagueId
+            ? `/players/edit?leagueId=${selectedLeagueId}`
+            : `/players/view?uid=${user.uid}`,
+        );
+      }
     }
-  }, [user, router, selectedLeagueId]);
+  }, [user, router, selectedLeagueId, searchParams]);
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();

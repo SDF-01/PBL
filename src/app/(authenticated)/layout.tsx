@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useDevice } from "@/lib/device";
+import { useAuth } from "@/lib/auth-context";
 import { TopNav } from "@/components/layout/TopNav";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileTopBar } from "@/components/layout/mobile/MobileTopBar";
@@ -8,9 +11,23 @@ import { MobileTabBar } from "@/components/layout/mobile/MobileTabBar";
 import { BackToHome } from "@/components/layout/BackToHome";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isMobile, ready } = useDevice();
+  const { isMobile, ready: deviceReady } = useDevice();
+  const { user, ready: authReady } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
 
-  if (!ready) {
+  useEffect(() => {
+    if (authReady && !user) {
+      router.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
+    }
+  }, [authReady, user, router, pathname]);
+
+  // Hold while resolving auth to prevent flash of unauthenticated content.
+  if (!authReady || !user) {
+    return <div className="min-h-screen bg-obsidian-950" />;
+  }
+
+  if (!deviceReady) {
     return <div className="min-h-screen">{children}</div>;
   }
 

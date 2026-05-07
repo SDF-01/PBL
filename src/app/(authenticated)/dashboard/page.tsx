@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useDevice } from "@/lib/device";
 import { useAdminMode } from "@/lib/admin-context";
 import { Panel } from "@/components/ui/Panel";
@@ -38,6 +39,7 @@ export default function DashboardPage() {
   const { isAdminMode } = useAdminMode();
   const { isMobile } = useDevice();
   const { user } = useAuth();
+  const router = useRouter();
 
   // For admin mode
   const [currentSeason, setCurrentSeason] = useState<LadderSeasonDoc>();
@@ -142,11 +144,10 @@ export default function DashboardPage() {
               });
             }
           }}
-          onViewStandings={() => {
-            // TODO: Navigate to standings view
-          }}
+          onViewStandings={() => router.push("/ladder/standings")}
           onViewCourts={() => {
-            // TODO: Navigate to courts view
+            const pdId = playerSessionData?.currentSession?.playDateId;
+            router.push(pdId ? `/ladder/session?playDate=${pdId}` : "/ladder/play-dates");
           }}
         />
         {scoreModal && (

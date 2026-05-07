@@ -1,12 +1,8 @@
-/**
- * Live Standings Display
- * Shows current session standings organized by court
- */
-
 "use client";
 
 import React from "react";
 import { Panel } from "../ui/Panel";
+import { RuneChip } from "../ui/RuneChip";
 import { Trophy, TrendingUp } from "lucide-react";
 
 export interface StandingsRow {
@@ -32,138 +28,84 @@ interface LiveStandingsProps {
   currentPlayerId?: string;
 }
 
-export function LiveStandings({
-  sessionKind,
-  courtStandings,
-  currentPlayerId,
-}: LiveStandingsProps) {
+export function LiveStandings({ sessionKind, courtStandings, currentPlayerId }: LiveStandingsProps) {
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <Trophy className="w-6 h-6 text-amber-600" />
-        <h1 className="text-3xl font-bold">Session {sessionKind} Standings</h1>
+    <div className="space-y-5">
+      <div className="flex items-center gap-2">
+        <Trophy className="w-5 h-5 text-gold-400" />
+        <h2 className="heading-fantasy text-xl text-ash-100">Session {sessionKind} Standings</h2>
       </div>
 
-      {/* Courts */}
       {courtStandings.map((court) => (
-        <Panel key={court.courtNumber} className="overflow-hidden">
-          {/* Court Header */}
-          <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 border-b border-blue-200">
-            <div className="font-bold text-lg text-blue-900">
-              Court {court.courtNumber}
-              <span className="text-sm font-normal text-blue-700 ml-2">
-                ({court.courtSize} players)
-              </span>
-            </div>
+        <Panel key={court.courtNumber} variant="inventory" padding="none" className="overflow-hidden">
+          {/* Court header */}
+          <div className="bg-obsidian-800 border-b border-obsidian-600 px-4 py-3 flex items-center justify-between">
+            <h3 className="heading-fantasy text-ash-100 text-base">Court {court.courtNumber}</h3>
+            <RuneChip tone="neutral" className="text-[9px]">{court.courtSize} players</RuneChip>
           </div>
 
-          {/* Standings Table */}
+          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-slate-100 border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">
-                    Rank
-                  </th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">
-                    Player
-                  </th>
-                  <th className="px-4 py-2 text-center font-semibold text-slate-700">
-                    W—L
-                  </th>
-                  <th className="px-4 py-2 text-center font-semibold text-slate-700">
-                    Pts For
-                  </th>
-                  <th className="px-4 py-2 text-center font-semibold text-slate-700">
-                    Pts Ag
-                  </th>
-                  <th className="px-4 py-2 text-center font-semibold text-slate-700">
-                    Diff
-                  </th>
+              <thead>
+                <tr className="border-b border-obsidian-600 bg-obsidian-900/50">
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-ash-500">Rank</th>
+                  <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wider text-ash-500">Player</th>
+                  <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wider text-ash-500">W—L</th>
+                  <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wider text-ash-500">Pts For</th>
+                  <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wider text-ash-500">Pts Ag</th>
+                  <th className="px-4 py-2 text-center text-[10px] uppercase tracking-wider text-ash-500">Diff</th>
                 </tr>
               </thead>
               <tbody>
-                {court.players.map((player, index) => (
-                  <tr
-                    key={player.playerId}
-                    className={`border-b border-slate-100 transition ${
-                      player.rank === 1
-                        ? "bg-amber-50"
-                        : currentPlayerId === player.playerId
-                          ? "bg-blue-50"
-                          : index % 2 === 0
-                            ? "bg-white"
-                            : "bg-slate-50"
-                    } hover:bg-slate-100`}
-                  >
-                    {/* Rank */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {player.rank === 1 && (
-                          <Trophy className="w-4 h-4 text-amber-600" />
-                        )}
-                        <span className="font-bold text-lg">
-                          {player.rank}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Player Name */}
-                    <td className="px-4 py-3">
-                      <div
-                        className={`font-semibold ${
-                          currentPlayerId === player.playerId
-                            ? "text-blue-700"
-                            : "text-slate-900"
-                        }`}
-                      >
-                        {player.displayName || player.playerId.substring(0, 8)}
-                        {currentPlayerId === player.playerId && (
-                          <span className="text-xs ml-2 px-2 py-1 bg-blue-200 text-blue-700 rounded">
-                            You
+                {court.players.map((player) => {
+                  const isMe = currentPlayerId === player.playerId;
+                  const isLeader = player.rank === 1;
+                  return (
+                    <tr
+                      key={player.playerId}
+                      className={`border-b border-obsidian-700/50 transition-colors hover:bg-obsidian-700/40 ${
+                        isLeader ? "bg-gold-900/15" : isMe ? "bg-ember-900/15" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {isLeader && <Trophy className="w-3.5 h-3.5 text-gold-400" />}
+                          <span className="font-mono text-ash-200 font-semibold">{player.rank}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium ${isMe ? "text-ember-300" : "text-ash-100"}`}>
+                            {player.displayName || player.playerId.slice(0, 8)}
                           </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Win-Loss Record */}
-                    <td className="px-4 py-3 text-center">
-                      <span className="font-semibold">
+                          {isMe && (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-ember-900/50 text-ember-300 rounded-pixel">
+                              You
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center font-mono text-ash-200">
                         {player.wins}—{player.losses}
-                      </span>
-                    </td>
-
-                    {/* Points For */}
-                    <td className="px-4 py-3 text-center">
-                      <span className="font-medium">{player.pointsFor}</span>
-                    </td>
-
-                    {/* Points Against */}
-                    <td className="px-4 py-3 text-center">
-                      <span className="font-medium">{player.pointsAgainst}</span>
-                    </td>
-
-                    {/* Differential */}
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`font-bold flex items-center justify-center gap-1 ${
+                      </td>
+                      <td className="px-4 py-3 text-center font-mono text-ash-300">{player.pointsFor}</td>
+                      <td className="px-4 py-3 text-center font-mono text-ash-300">{player.pointsAgainst}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`font-mono font-semibold flex items-center justify-center gap-1 ${
                           player.pointDifferential > 0
-                            ? "text-green-700"
+                            ? "text-spectral-400"
                             : player.pointDifferential < 0
-                              ? "text-red-600"
-                              : "text-slate-600"
-                        }`}
-                      >
-                        {player.pointDifferential > 0 && (
-                          <TrendingUp className="w-3 h-3" />
-                        )}
-                        {player.pointDifferential > 0 ? "+" : ""}
-                        {player.pointDifferential}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                              ? "text-crimson-400"
+                              : "text-ash-500"
+                        }`}>
+                          {player.pointDifferential > 0 && <TrendingUp className="w-3 h-3" />}
+                          {player.pointDifferential > 0 ? "+" : ""}{player.pointDifferential}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -171,19 +113,24 @@ export function LiveStandings({
       ))}
 
       {/* Legend */}
-      <Panel className="bg-slate-50 p-4">
-        <h3 className="font-semibold mb-2 text-sm">Legend</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-slate-600">
+      <Panel variant="base" padding="md">
+        <p className="text-[10px] text-ash-500 uppercase tracking-wider mb-2">Legend</p>
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-ash-400">
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-amber-100 border border-amber-300 rounded"></div>
+            <div className="w-3.5 h-3.5 rounded-pixel bg-gold-900/30 border border-gold-700/50" />
             <span>Court Leader</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
+            <div className="w-3.5 h-3.5 rounded-pixel bg-ember-900/30 border border-ember-700/50" />
             <span>Your Ranking</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs">W—L = Wins and Losses</span>
+            <span className="text-spectral-400 font-semibold">+</span>
+            <span>Positive diff</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-crimson-400 font-semibold">−</span>
+            <span>Negative diff</span>
           </div>
         </div>
       </Panel>

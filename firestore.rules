@@ -263,7 +263,11 @@ service cloud.firestore {
     match /notifications/{id} {
       allow read, update, delete: if isSignedIn()
         && resource.data.userId == request.auth.uid;
-      allow create: if isStaff();
+      allow create: if isStaff()
+        // Players can notify other players of score events they triggered
+        || (isSignedIn()
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.kind in ["SCORE_SUBMITTED", "SCORE_DISPUTED"]);
     }
 
     match /playerAchievements/{id} {
@@ -299,7 +303,23 @@ service cloud.firestore {
 
     match /ladderMatches/{id} {
       allow read: if true;
-      allow write: if isStaff();
+      allow create: if isStaff();
+      allow delete: if isStaff();
+      allow update: if isStaff()
+        // Players can submit their own score as a match participant
+        || (isSignedIn()
+            && (request.auth.uid in resource.data.sideA || request.auth.uid in resource.data.sideB)
+            && hasOnlyChanged(["scoreA", "scoreB", "submittedBy", "submittedAt"]))
+        // Players can verify an opposing team's submission
+        || (isSignedIn()
+            && (request.auth.uid in resource.data.sideA || request.auth.uid in resource.data.sideB)
+            && hasOnlyChanged(["verifiedBy", "verifiedAt", "status"])
+            && request.resource.data.status == "VERIFIED")
+        // Players can dispute a score as a match participant
+        || (isSignedIn()
+            && (request.auth.uid in resource.data.sideA || request.auth.uid in resource.data.sideB)
+            && hasOnlyChanged(["status", "disputedBy", "disputedAt", "disputeReason"])
+            && request.resource.data.status == "DISPUTED");
     }
 
     match /checkIns/{id} {
@@ -317,7 +337,9 @@ service cloud.firestore {
 
     match /audits/{id} {
       allow read: if isAdmin();
-      allow create: if isStaff();
+      allow create: if isStaff()
+        // Players can create audit entries for their own actions
+        || (isSignedIn() && request.resource.data.actorId == request.auth.uid);
       allow update, delete: if false;
     }
 

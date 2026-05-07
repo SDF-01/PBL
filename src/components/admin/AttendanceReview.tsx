@@ -1,22 +1,17 @@
-/**
- * Attendance Review Component
- * Allows admins to review check-ins and adjust fairness placement before session generation
- */
-
 "use client";
 
 import React, { useState } from "react";
 import { CheckInDoc, PlayDateDoc, PlayerStats } from "@/lib/firestore/types";
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
-import { X, Check, AlertCircle } from "lucide-react";
+import { RuneChip } from "../ui/RuneChip";
+import { X, CheckCircle, AlertCircle } from "lucide-react";
 
 interface AttendanceReviewProps {
   playDate: PlayDateDoc;
   checkIns: CheckInDoc[];
   playerStats?: Record<string, PlayerStats>;
   onConfirmAttendance: (confirmedPlayerIds: string[]) => void;
-  onExcludePlayer: (playerId: string) => void;
   onClose: () => void;
 }
 
@@ -25,168 +20,160 @@ export function AttendanceReview({
   checkIns,
   playerStats,
   onConfirmAttendance,
-  onExcludePlayer,
   onClose,
 }: AttendanceReviewProps) {
-  const [selectedPlayers, setSelectedPlayers] = useState(
+  const [selected, setSelected] = useState(
     new Set(
       checkIns
         .filter((ci) => ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED")
         .map((ci) => ci.userId)
     )
   );
+  const [error, setError] = useState<string | null>(null);
 
   const confirmed = checkIns.filter(
     (ci) => ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED"
   );
   const rejected = checkIns.filter((ci) => ci.status === "GEO_REJECTED");
 
-  const togglePlayer = (playerId: string) => {
-    const next = new Set(selectedPlayers);
-    if (next.has(playerId)) {
-      next.delete(playerId);
-    } else {
-      next.add(playerId);
-    }
-    setSelectedPlayers(next);
-  };
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
-  const handleConfirm = () => {
-    if (selectedPlayers.size < 4) {
-      alert("Minimum 4 players required for session generation");
+  function handleConfirm() {
+    if (selected.size < 4) {
+      setError("Minimum 4 players required for session generation.");
       return;
     }
-    onConfirmAttendance(Array.from(selectedPlayers));
-  };
+    onConfirmAttendance(Array.from(selected));
+  }
+
+  const courtCount = Math.ceil(selected.size / 4);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Panel className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">Attendance Review</h2>
-          <Button
-            onClick={onClose}
-            variant="ghost"
-            size="sm"
-          >
-            <X className="w-5 h-5" />
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Panel variant="quest" padding="lg" className="w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <h2 className="heading-fantasy text-xl text-ash-100">Attendance Review</h2>
+            <p className="text-xs text-ash-500 mt-0.5">Play date: {playDate.date}</p>
+          </div>
+          <Button onClick={onClose} variant="ghost" size="sm">
+            <X className="w-4 h-4" />
           </Button>
         </div>
 
-        <div className="text-sm text-slate-600 mb-4">
-          Play Date: <span className="font-semibold">{playDate.date}</span>
-        </div>
-
-        {/* Confirmed Check-ins */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-            <Check className="w-5 h-5 text-green-600" />
-            Confirmed Check-ins ({confirmed.length})
-          </h3>
-          <div className="space-y-2 bg-green-50 p-4 rounded">
+        {/* Confirmed check-ins */}
+        <div className="mt-4 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle className="w-4 h-4 text-spectral-400" />
+            <h3 className="heading-fantasy text-sm text-ash-100">Confirmed Check-ins</h3>
+            <RuneChip tone="success" className="text-[9px]">{confirmed.length}</RuneChip>
+          </div>
+          <div className="space-y-1.5">
             {confirmed.map((ci) => {
               const stats = playerStats?.[ci.userId];
-              const isSelected = selectedPlayers.has(ci.userId);
-
+              const isSelected = selected.has(ci.userId);
               return (
                 <div
                   key={ci.id}
-                  className={`flex items-center justify-between p-3 border-2 rounded transition cursor-pointer ${
-                    isSelected ? "border-blue-500 bg-white" : "border-slate-200"
+                  className={`flex items-center justify-between px-3 py-2 rounded-pixel border cursor-pointer transition-colors ${
+                    isSelected
+                      ? "border-ember-500 bg-obsidian-700"
+                      : "border-obsidian-500 bg-obsidian-800 opacity-60"
                   }`}
-                  onClick={() => togglePlayer(ci.userId)}
+                  onClick={() => toggle(ci.userId)}
                 >
                   <div>
-                    <div className="font-semibold">{ci.displayName || ci.userId}</div>
+                    <p className="text-sm text-ash-100">{ci.displayName || ci.userId.slice(0, 10)}</p>
                     {stats && (
-                      <div className="text-sm text-slate-600">
-                        Wins: {stats.totalWins || 0} | Games: {stats.sessionsPlayed || 0}
-                      </div>
+                      <p className="text-xs text-ash-500">
+                        {stats.totalWins ?? 0}W · {stats.sessionsPlayed ?? 0} sessions
+                      </p>
                     )}
                   </div>
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      togglePlayer(ci.userId);
-                    }}
-                    className="w-5 h-5"
+                    onChange={(e) => { e.stopPropagation(); toggle(ci.userId); }}
+                    className="accent-ember-500 w-4 h-4"
                   />
                 </div>
               );
             })}
+            {confirmed.length === 0 && (
+              <p className="text-sm text-ash-500 py-2">No confirmed check-ins yet.</p>
+            )}
           </div>
         </div>
 
-        {/* Admin-Confirmed Overrides */}
+        {/* Geofence-rejected players */}
         {rejected.length > 0 && (
-          <div className="mb-6">
-            <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              Geofence Rejected ({rejected.length})
-            </h3>
-            <div className="space-y-2 bg-amber-50 p-4 rounded">
-              {rejected.map((ci) => (
-                <div
-                  key={ci.id}
-                  className="flex items-center justify-between p-3 border-2 border-amber-200 rounded"
-                >
-                  <div>
-                    <div className="font-semibold">{ci.displayName || ci.userId}</div>
-                    <div className="text-sm text-slate-600">
-                      {ci.distanceMeters?.toFixed(1) || "?"} m from venue
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => togglePlayer(ci.userId)}
-                    className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertCircle className="w-4 h-4 text-gold-400" />
+              <h3 className="heading-fantasy text-sm text-ash-100">Geofence Rejected</h3>
+              <RuneChip tone="warning" className="text-[9px]">{rejected.length}</RuneChip>
+            </div>
+            <div className="space-y-1.5">
+              {rejected.map((ci) => {
+                const isSelected = selected.has(ci.userId);
+                return (
+                  <div
+                    key={ci.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-pixel border border-gold-700/40 bg-gold-900/10"
                   >
-                    Include
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <p className="text-sm text-ash-200">{ci.displayName || ci.userId.slice(0, 10)}</p>
+                      <p className="text-xs text-ash-500">
+                        {ci.distanceMeters != null ? `${ci.distanceMeters.toFixed(0)} m from venue` : "Distance unknown"}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={isSelected ? "outline" : "outline"}
+                      onClick={() => toggle(ci.userId)}
+                    >
+                      {isSelected ? "Exclude" : "Include"}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Summary & Actions */}
-        <Panel className="bg-slate-50 p-4 mb-4">
+        {/* Summary */}
+        <Panel variant="base" padding="md" className="mb-4">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-blue-600">
-                {selectedPlayers.size}
-              </div>
-              <div className="text-xs text-slate-600">Selected</div>
+              <p className="text-2xl heading-fantasy text-ember-400">{selected.size}</p>
+              <p className="text-[10px] text-ash-500 uppercase tracking-wider">Selected</p>
             </div>
             <div>
-              <div className="text-2xl font-bold text-slate-600">
-                {Math.ceil(selectedPlayers.size / 4)}
-              </div>
-              <div className="text-xs text-slate-600">Courts</div>
+              <p className="text-2xl heading-fantasy text-ash-300">{courtCount}</p>
+              <p className="text-[10px] text-ash-500 uppercase tracking-wider">Courts</p>
             </div>
             <div>
-              <div className="text-2xl font-bold text-green-600">
-                ✓
-              </div>
-              <div className="text-xs text-slate-600">
-                {selectedPlayers.size >= 4 ? "Ready" : "Min 4"}
-              </div>
+              <p className={`text-2xl heading-fantasy ${selected.size >= 4 ? "text-spectral-400" : "text-crimson-400"}`}>
+                {selected.size >= 4 ? "Ready" : "Min 4"}
+              </p>
+              <p className="text-[10px] text-ash-500 uppercase tracking-wider">Status</p>
             </div>
           </div>
         </Panel>
 
-        {/* Action Buttons */}
+        {error && <p className="text-sm text-crimson-500 mb-3">{error}</p>}
+
         <div className="flex gap-3 justify-end">
-          <Button onClick={onClose} variant="ghost">
-            Cancel
-          </Button>
-          <Button
-            onClick={handleConfirm}
-            disabled={selectedPlayers.size < 4}
-            className="gap-2"
-          >
-            <Check className="w-4 h-4" />
+          <Button onClick={onClose} variant="ghost">Cancel</Button>
+          <Button onClick={handleConfirm} disabled={selected.size < 4}>
+            <CheckCircle className="w-4 h-4 mr-1" />
             Confirm & Proceed
           </Button>
         </div>

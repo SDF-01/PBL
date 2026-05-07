@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { listClubFacilities } from "@/lib/clubs/repo";
@@ -311,15 +312,15 @@ interface WeatherDay {
 }
 
 function weatherIcon(code: number) {
-  if (code === 0) return <Sun className="h-4 w-4 text-amber-400" />;
-  if (code <= 2) return <CloudSun className="h-4 w-4 text-amber-300" />;
+  if (code === 0) return <Sun className="h-4 w-4 text-gold-400" />;
+  if (code <= 2) return <CloudSun className="h-4 w-4 text-gold-300" />;
   if (code === 3) return <Cloud className="h-4 w-4 text-ash-400" />;
   if (code <= 48) return <CloudFog className="h-4 w-4 text-ash-400" />;
   if (code <= 55) return <CloudDrizzle className="h-4 w-4 text-spectral-400" />;
   if (code <= 65) return <CloudRain className="h-4 w-4 text-spectral-400" />;
   if (code <= 77) return <CloudSnow className="h-4 w-4 text-ash-300" />;
   if (code <= 82) return <CloudRain className="h-4 w-4 text-spectral-400" />;
-  return <CloudLightning className="h-4 w-4 text-amber-400" />;
+  return <CloudLightning className="h-4 w-4 text-gold-400" />;
 }
 
 function weatherLabel(code: number): string {
@@ -394,6 +395,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   );
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [facilities, setFacilities] = useState<ClubFacility[]>([]);
@@ -853,7 +855,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                         size="sm"
                         variant="ghost"
                         className="w-full text-crimson-400 hover:text-crimson-300"
-                        onClick={handleLeave}
+                        onClick={() => setConfirmLeave(true)}
                         disabled={leaving}
                       >
                         <UserX className="h-3.5 w-3.5" />
@@ -934,6 +936,22 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
           ) : null}
         </div>
       </main>
+
+      {confirmLeave && (
+        <ConfirmDialog
+          title="Leave this league?"
+          description="Your membership will be removed. You can rejoin later if registration is still open."
+          confirmLabel="Leave League"
+          cancelLabel="Stay"
+          variant="danger"
+          submitting={leaving}
+          onConfirm={async () => {
+            await handleLeave();
+            setConfirmLeave(false);
+          }}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
     </ResponsiveShell>
   );
 }

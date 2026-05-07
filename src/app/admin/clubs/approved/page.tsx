@@ -180,7 +180,7 @@ export default function AdminApprovedClubsPage() {
                   variant="outline"
                   className={confirm.type === "delete"
                     ? "border-crimson-500/60 text-crimson-400 hover:bg-crimson-500/10"
-                    : "border-amber-500/60 text-amber-400 hover:bg-amber-500/10"}
+                    : "border-gold-500/60 text-gold-400 hover:bg-gold-500/10"}
                   onClick={handleConfirm}
                   disabled={working}
                 >
@@ -196,7 +196,7 @@ export default function AdminApprovedClubsPage() {
           <span className="text-ash-500 text-sm">
             {tab === "active" ? "Active clubs:" : "Archived clubs:"}
           </span>
-          <span className={`heading-fantasy text-lg ${tab === "active" ? "text-emerald-400" : "text-amber-400"}`}>
+          <span className={`heading-fantasy text-lg ${tab === "active" ? "text-emerald-400" : "text-gold-400"}`}>
             {displayList.length}
           </span>
         </Panel>
@@ -215,9 +215,9 @@ export default function AdminApprovedClubsPage() {
               <Panel key={club.id} variant="inventory" padding="lg">
                 <div className="flex items-start gap-3">
                   <div className={`p-2 rounded-pixel shrink-0 mt-0.5 ${
-                    tab === "active" ? "bg-emerald-500/15" : "bg-amber-500/15"
+                    tab === "active" ? "bg-emerald-500/15" : "bg-gold-500/15"
                   }`}>
-                    <Building2 className={`h-5 w-5 ${tab === "active" ? "text-emerald-400" : "text-amber-400"}`} />
+                    <Building2 className={`h-5 w-5 ${tab === "active" ? "text-emerald-400" : "text-gold-400"}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -260,7 +260,7 @@ export default function AdminApprovedClubsPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="w-full text-amber-400 hover:bg-amber-500/10"
+                        className="w-full text-gold-400 hover:bg-gold-500/10"
                         onClick={() => setConfirm({ type: "archive", clubId: club.id, clubName: club.clubName })}
                         disabled={confirm?.clubId === club.id}
                       >

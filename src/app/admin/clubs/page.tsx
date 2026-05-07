@@ -43,7 +43,7 @@ export default function AdminClubsPage() {
       <ResponsiveShell desktopChromeless>
         <main className="container py-10 max-w-2xl">
           <Panel variant="quest" padding="lg" className="text-center space-y-2">
-            <ShieldAlert className="h-8 w-8 text-danger mx-auto" />
+            <ShieldAlert className="h-8 w-8 text-crimson-500 mx-auto" />
             <h2 className="heading-fantasy text-ash-100 text-base">Access Denied</h2>
             <p className="text-ash-400 text-sm">
               This page requires Site Administrator privileges.

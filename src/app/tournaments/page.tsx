@@ -8,6 +8,7 @@ import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
 import { isFirebaseConfigured } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { listTournaments } from "@/lib/firestore/repo";
 import type { TournamentDoc, TournamentStatus } from "@/lib/firestore/types";
 
@@ -31,6 +32,7 @@ const STATUS_LABEL: Record<TournamentStatus, string> = {
 };
 
 export default function TournamentsPage() {
+  const { user } = useAuth();
   const [tournaments, setTournaments] = useState<TournamentDoc[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,11 +56,13 @@ export default function TournamentsPage() {
               Open registrations, live brackets, and resolved campaigns.
             </p>
           </div>
-          <Link href="/tournaments/new">
-            <Button size="sm">
-              <Plus className="h-3.5 w-3.5" /> New Tournament
-            </Button>
-          </Link>
+          {user && (
+            <Link href="/tournaments/new">
+              <Button size="sm">
+                <Plus className="h-3.5 w-3.5" /> New Tournament
+              </Button>
+            </Link>
+          )}
         </div>
 
         {error ? (
@@ -78,13 +82,15 @@ export default function TournamentsPage() {
               director creates an event, it will appear here with registration,
               brackets, and standings.
             </p>
-            <div className="mt-5">
-              <Link href="/tournaments/new">
-                <Button variant="outline" size="sm">
-                  <Plus className="h-3.5 w-3.5" /> Create First Tournament
-                </Button>
-              </Link>
-            </div>
+            {user && (
+              <div className="mt-5">
+                <Link href="/tournaments/new">
+                  <Button variant="outline" size="sm">
+                    <Plus className="h-3.5 w-3.5" /> Create First Tournament
+                  </Button>
+                </Link>
+              </div>
+            )}
           </Panel>
         ) : (
           <div className="grid md:grid-cols-2 gap-4">

@@ -1,8 +1,3 @@
-/**
- * Session Generation Dialog
- * Admin interface to configure and generate Session A or B
- */
-
 "use client";
 
 import React, { useState } from "react";
@@ -19,180 +14,147 @@ interface SessionGenerationDialogProps {
   onClose: () => void;
 }
 
+const DISTRIBUTION_LABELS: Record<CourtDistributionPlacement, { title: string; desc: string }> = {
+  TOP_HEAVY:    { title: "Top-Heavy",    desc: "Larger courts at top (stronger players)" },
+  MIDDLE:       { title: "Middle",       desc: "Larger courts in the middle" },
+  BOTTOM_HEAVY: { title: "Bottom-Heavy", desc: "Larger courts at bottom (balance weaker teams)" },
+};
+
+function computeCourtSizes(playerCount: number): number[] {
+  const rem = playerCount % 4;
+  if (rem === 0) return Array(playerCount / 4).fill(4);
+  if (rem === 1) return [5, ...Array((playerCount - 5) / 4).fill(4)];
+  if (rem === 2) return [5, 5, ...Array((playerCount - 10) / 4).fill(4)];
+  return [5, ...Array((playerCount - 5) / 4).fill(4)];
+}
+
 export function SessionGenerationDialog({
-  playDateId,
   season,
   playerCount,
   onGenerate,
   onClose,
 }: SessionGenerationDialogProps) {
-  const [distribution, setDistribution] =
-    useState<CourtDistributionPlacement>(
-      season.courtDistributionPlacement || "MIDDLE"
-    );
+  const [distribution, setDistribution] = useState<CourtDistributionPlacement>(
+    season.courtDistributionPlacement ?? "MIDDLE"
+  );
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Calculate court configuration
-  const remainder = playerCount % 4;
-  let courtSizes: number[] = [];
-  if (remainder === 0) {
-    courtSizes = Array(playerCount / 4).fill(4);
-  } else if (remainder === 1) {
-    courtSizes = [5, ...Array((playerCount - 5) / 4).fill(4)];
-  } else if (remainder === 2) {
-    courtSizes = [5, 5, ...Array((playerCount - 10) / 4).fill(4)];
-  } else {
-    courtSizes = [5, ...Array((playerCount - 5) / 4).fill(4)];
-  }
+  const courtSizes = computeCourtSizes(playerCount);
+  const courts5 = courtSizes.filter((s) => s === 5).length;
+  const courts4 = courtSizes.filter((s) => s === 4).length;
 
-  const handleGenerate = async () => {
+  async function handleGenerate() {
     setIsGenerating(true);
     setError(null);
     try {
       await onGenerate({ distribution });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Generation failed");
+      setError(err instanceof Error ? err.message : "Generation failed.");
     } finally {
       setIsGenerating(false);
     }
-  };
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Panel className="w-full max-w-md">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">Generate Session A</h2>
-          <Button onClick={onClose} variant="ghost" size="sm">
-            <X className="w-5 h-5" />
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Panel variant="quest" padding="lg" className="w-full max-w-md">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h2 className="heading-fantasy text-xl text-ash-100">Generate Session A</h2>
+            <p className="text-xs text-ash-500 mt-0.5">{playerCount} checked-in players</p>
+          </div>
+          <Button onClick={onClose} variant="ghost" size="sm" disabled={isGenerating}>
+            <X className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* Configuration */}
-        <div className="space-y-4 mb-6">
-          {/* Court Configuration Display */}
-          <Panel className="bg-blue-50 p-4">
-            <h3 className="font-semibold text-sm mb-3">Court Configuration</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Total Players:</span>
-                <span className="font-semibold text-lg">{playerCount}</span>
+        {/* Court configuration preview */}
+        <Panel variant="base" padding="md" className="mb-4">
+          <p className="text-xs text-ash-500 uppercase tracking-wider mb-3">Court Configuration</p>
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {courtSizes.map((size, i) => (
+              <div
+                key={i}
+                className="flex-1 min-w-[2.5rem] text-center bg-obsidian-950 border border-obsidian-400 rounded-pixel py-2 text-ash-100 font-mono text-lg"
+              >
+                {size}
               </div>
-              <div className="flex justify-between text-sm">
-                <span>Courts:</span>
-                <span className="font-semibold text-lg">{courtSizes.length}</span>
-              </div>
-              <div className="flex gap-2">
-                {courtSizes.map((size, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 text-center p-2 bg-white border-2 border-blue-300 rounded font-semibold"
-                  >
-                    {size}
-                  </div>
-                ))}
-              </div>
-              <div className="text-xs text-slate-600 mt-2">
-                {courtSizes.filter((s) => s === 5).length} courts of 5 players,{" "}
-                {courtSizes.filter((s) => s === 4).length} courts of 4 players
-              </div>
-            </div>
-          </Panel>
+            ))}
+          </div>
+          <p className="text-xs text-ash-500">
+            {courts5 > 0 && `${courts5} court${courts5 > 1 ? "s" : ""} of 5`}
+            {courts5 > 0 && courts4 > 0 && " · "}
+            {courts4 > 0 && `${courts4} court${courts4 > 1 ? "s" : ""} of 4`}
+          </p>
+        </Panel>
 
-          {/* Distribution Placement */}
-          <div>
-            <label className="block font-semibold text-sm mb-2">
-              Court Placement Strategy
-            </label>
-            <div className="space-y-2">
-              {(["TOP_HEAVY", "MIDDLE", "BOTTOM_HEAVY"] as const).map((option) => (
-                <label key={option} className="flex items-center gap-3 p-3 border-2 rounded cursor-pointer hover:bg-slate-50"
-                  style={{
-                    borderColor: distribution === option ? "#3b82f6" : "#e2e8f0",
-                    backgroundColor:
-                      distribution === option ? "#eff6ff" : undefined,
-                  }}>
+        {/* Distribution placement */}
+        <div className="mb-4">
+          <p className="text-xs text-ash-500 uppercase tracking-wider mb-2">Court Placement Strategy</p>
+          <div className="space-y-2">
+            {(["TOP_HEAVY", "MIDDLE", "BOTTOM_HEAVY"] as const).map((option) => {
+              const selected = distribution === option;
+              return (
+                <label
+                  key={option}
+                  className={`flex items-center gap-3 p-3 rounded-pixel border cursor-pointer transition-colors ${
+                    selected
+                      ? "border-ember-500 bg-ember-900/20"
+                      : "border-obsidian-500 bg-obsidian-800 hover:border-obsidian-400"
+                  }`}
+                >
                   <input
                     type="radio"
                     name="distribution"
                     value={option}
-                    checked={distribution === option}
-                    onChange={(e) =>
-                      setDistribution(e.target.value as CourtDistributionPlacement)
-                    }
-                    className="w-4 h-4"
+                    checked={selected}
+                    onChange={() => setDistribution(option)}
+                    className="accent-ember-500"
                   />
                   <div>
-                    <div className="font-semibold text-sm">
-                      {option === "TOP_HEAVY"
-                        ? "Top-Heavy"
-                        : option === "BOTTOM_HEAVY"
-                          ? "Bottom-Heavy"
-                          : "Middle"}
-                    </div>
-                    <div className="text-xs text-slate-600">
-                      {option === "TOP_HEAVY"
-                        ? "Larger courts at top (stronger players)"
-                        : option === "BOTTOM_HEAVY"
-                          ? "Larger courts at bottom (balance weaker teams)"
-                          : "Larger courts in middle"}
-                    </div>
+                    <p className={`text-sm font-semibold ${selected ? "text-ember-300" : "text-ash-200"}`}>
+                      {DISTRIBUTION_LABELS[option].title}
+                    </p>
+                    <p className="text-xs text-ash-500">{DISTRIBUTION_LABELS[option].desc}</p>
                   </div>
                 </label>
-              ))}
-            </div>
+              );
+            })}
           </div>
-
-          {/* Session Configuration Info */}
-          <Panel className="bg-slate-50 p-3 text-sm space-y-1">
-            <div>
-              <span className="text-slate-600">Points per game:</span>
-              <span className="font-semibold ml-2">{season.targetPoints || 11}</span>
-            </div>
-            <div>
-              <span className="text-slate-600">Movement pattern:</span>
-              <span className="font-semibold ml-2">{season.movementPattern || "ONE_UP_ONE_DOWN"}</span>
-            </div>
-          </Panel>
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-            {error}
+        {/* Season settings summary */}
+        <Panel variant="base" padding="sm" className="mb-4">
+          <div className="flex justify-between text-xs">
+            <span className="text-ash-500">Score to</span>
+            <span className="text-ash-200 font-mono">{season.targetPoints ?? 11}</span>
           </div>
-        )}
+          <div className="flex justify-between text-xs mt-1">
+            <span className="text-ash-500">Movement</span>
+            <span className="text-ash-200 font-mono">{(season.movementPattern ?? "ONE_UP_ONE_DOWN").replace(/_/g, " ").toLowerCase()}</span>
+          </div>
+        </Panel>
 
-        {/* Action Buttons */}
+        {error && <p className="text-sm text-crimson-500 mb-4">{error}</p>}
+
         <div className="flex gap-3 justify-end">
           <Button onClick={onClose} variant="ghost" disabled={isGenerating}>
             Cancel
           </Button>
-          <Button
-            onClick={handleGenerate}
-            disabled={isGenerating}
-            className="gap-2"
-          >
+          <Button onClick={handleGenerate} disabled={isGenerating}>
             {isGenerating ? (
-              <>
-                <Loader className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
+              <><Loader className="w-4 h-4 animate-spin mr-1" /> Generating…</>
             ) : (
-              <>
-                <Play className="w-4 h-4" />
-                Generate Session
-              </>
+              <><Play className="w-4 h-4 mr-1" /> Generate Session</>
             )}
           </Button>
         </div>
 
-        {/* Info Text */}
-        <div className="mt-4 text-xs text-slate-600 p-3 bg-slate-50 rounded">
-          ⚠️ Once generated, courts and rotations are locked. Admins can still assign
-          incomplete matches during finalization.
-        </div>
+        <p className="text-xs text-ash-600 mt-3">
+          Once generated, courts and rotations are locked. Admins can still assign incomplete matches during finalization.
+        </p>
       </Panel>
     </div>
   );

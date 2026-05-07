@@ -157,8 +157,8 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
 
         {/* ── Breadcrumb ── */}
         <div className="flex items-center gap-2 text-xs text-ash-500">
-          <Link href="/clubs/my" className="hover:text-ash-100 flex items-center gap-1 transition-colors">
-            <ArrowLeft className="h-3 w-3" /> My Clubs
+          <Link href={user ? "/clubs/my" : "/clubs"} className="hover:text-ash-100 flex items-center gap-1 transition-colors">
+            <ArrowLeft className="h-3 w-3" /> {user ? "My Clubs" : "Clubs"}
           </Link>
           <span>·</span>
           <span className="text-ash-300">{club.clubName}</span>
@@ -188,6 +188,15 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
           </div>
 
           <div className="flex flex-col gap-2 shrink-0">
+            {/* Guest sign-up CTA */}
+            {!user && !permLoading && (
+              <Link href={`/auth/signup?redirect=/clubs/${slugOrId}`}>
+                <Button size="sm" className="w-full sm:w-auto">
+                  Join / Sign Up
+                </Button>
+              </Link>
+            )}
+
             {/* Follow button — shown for signed-in non-directors */}
             {user && !isDirector && (
               <Button

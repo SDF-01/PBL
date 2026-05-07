@@ -1,21 +1,11 @@
-/**
- * Session Finalization Dialog
- * Admin interface for finalizing sessions and handling incomplete matches
- */
-
 "use client";
 
 import React, { useEffect, useState } from "react";
 import { LadderSessionDoc, LadderMatchDoc, LadderCourtDoc } from "@/lib/firestore/types";
 import { Panel } from "../ui/Panel";
 import { Button } from "../ui/Button";
-import {
-  CheckCircle,
-  AlertTriangle,
-  Users,
-  X,
-  Loader,
-} from "lucide-react";
+import { RuneChip } from "../ui/RuneChip";
+import { CheckCircle, AlertTriangle, X, Loader } from "lucide-react";
 import { subscribeLadderMatches, subscribeLadderCourts } from "@/lib/ladder/repo";
 import { finalizeSession, adminAssignMatchResult } from "@/lib/ladder/write";
 import { calculateSessionResults, isSessionReadyForFinalization } from "@/domain/ladder/finalization";
@@ -41,52 +31,36 @@ export function SessionFinalizationDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Subscribe to real-time updates
-    const unsubscribeMatches = subscribeLadderMatches(session.id, (newMatches) => {
+    const unsub1 = subscribeLadderMatches(session.id, (newMatches) => {
       setMatches(newMatches);
-      const { ready, incompleteMatches: incomplete } = isSessionReadyForFinalization(newMatches);
+      const { incompleteMatches: incomplete } = isSessionReadyForFinalization(newMatches);
       setIncompleteMatches(incomplete);
     });
-    const unsubscribeCourts = subscribeLadderCourts(session.id, setCourts);
-
-    return () => {
-      unsubscribeMatches();
-      unsubscribeCourts();
-    };
+    const unsub2 = subscribeLadderCourts(session.id, setCourts);
+    return () => { unsub1(); unsub2(); };
   }, [session.id]);
 
-  const handleAssignResult = async (matchId: string, scoreA: number, scoreB: number) => {
+  async function handleAssignResult(matchId: string, scoreA: number, scoreB: number) {
     if (!user) return;
-
     try {
       await adminAssignMatchResult(matchId, scoreA, scoreB, user.uid);
-      setAssignedResults((prev) => ({
-        ...prev,
-        [matchId]: { scoreA, scoreB },
-      }));
+      setAssignedResults((prev) => ({ ...prev, [matchId]: { scoreA, scoreB } }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to assign result");
+      setError(err instanceof Error ? err.message : "Failed to assign result.");
     }
-  };
+  }
 
-  const handleFinalize = async () => {
+  async function handleFinalize() {
     if (!user) return;
-
-    // Check if all matches are now complete
     const { ready, incompleteMatches: stillIncomplete } = isSessionReadyForFinalization(matches);
     if (!ready) {
-      setError(`Still ${stillIncomplete.length} incomplete matches`);
+      setError(`${stillIncomplete.length} incomplete matches remain.`);
       return;
     }
-
     setIsFinalizing(true);
     setError(null);
-
     try {
-      // Calculate final results
       const results = calculateSessionResults(courts, matches);
-
-      // Create standings snapshot
       const standingsSnapshot = {
         id: `${session.id}_final_standings`,
         sessionId: session.id,
@@ -101,119 +75,103 @@ export function SessionFinalizationDialog({
         totalPlayers: results.length,
         totalCourts: courts.length,
       };
-
-      // Update player stats (simplified - in real implementation, fetch current stats)
-      const updatedPlayerStats = results.reduce((acc, result) => {
-        acc[result.playerId] = {
-          matches: result.wins + result.losses,
-          wins: result.wins,
-          losses: result.losses,
-          pointsFor: result.pointsFor,
-          pointsAgainst: result.pointsAgainst,
+      const updatedPlayerStats = results.reduce((acc, r) => {
+        acc[r.playerId] = {
+          matches: r.wins + r.losses,
+          wins: r.wins,
+          losses: r.losses,
+          pointsFor: r.pointsFor,
+          pointsAgainst: r.pointsAgainst,
         };
         return acc;
-      }, {} as Record<string, any>);
-
+      }, {} as Record<string, unknown>);
       await finalizeSession(session.id, standingsSnapshot, updatedPlayerStats, user.uid);
       onSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Finalization failed");
+      setError(err instanceof Error ? err.message : "Finalization failed.");
     } finally {
       setIsFinalizing(false);
     }
-  };
+  }
 
-  const { ready, incompleteMatches: checkIncomplete } = isSessionReadyForFinalization(matches);
+  const { ready } = isSessionReadyForFinalization(matches);
   const allIncompleteHandled = incompleteMatches.every((m) => assignedResults[m.id]);
+  const verifiedCount = matches.filter((m) => m.status === "VERIFIED").length;
+  const adminCount = matches.filter((m) => m.status === "ADMIN_ASSIGNED").length;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Panel className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <Panel variant="quest" padding="lg" className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-5">
           <div>
-            <h2 className="text-2xl font-bold">Finalize Session {session.kind}</h2>
-            <p className="text-sm text-slate-600">
-              Assign results for incomplete matches and confirm finalization
+            <h2 className="heading-fantasy text-xl text-ash-100">Finalize Session {session.kind}</h2>
+            <p className="text-xs text-ash-500 mt-0.5">
+              Assign results for incomplete matches, then confirm finalization.
             </p>
           </div>
-          <Button onClick={onClose} variant="ghost" size="sm">
-            <X className="w-5 h-5" />
+          <Button onClick={onClose} variant="ghost" size="sm" disabled={isFinalizing}>
+            <X className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* Status Overview */}
-        <Panel className="bg-slate-50 p-4 mb-6">
+        {/* Status overview */}
+        <Panel variant="base" padding="md" className="mb-5">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-2xl font-bold text-green-600">
-                {matches.filter((m) => m.status === "VERIFIED").length}
-              </div>
-              <div className="text-xs text-slate-600">Verified</div>
+              <p className="text-2xl heading-fantasy text-spectral-400">{verifiedCount}</p>
+              <p className="text-[10px] text-ash-500 uppercase tracking-wider">Verified</p>
             </div>
             <div>
-              <div className="text-2xl font-bold text-blue-600">
-                {matches.filter((m) => m.status === "ADMIN_ASSIGNED").length}
-              </div>
-              <div className="text-xs text-slate-600">Admin Assigned</div>
+              <p className="text-2xl heading-fantasy text-ember-400">{adminCount}</p>
+              <p className="text-[10px] text-ash-500 uppercase tracking-wider">Admin Assigned</p>
             </div>
             <div>
-              <div className={`text-2xl font-bold ${ready ? "text-green-600" : "text-red-600"}`}>
+              <p className={`text-2xl heading-fantasy ${ready ? "text-spectral-400" : "text-crimson-400"}`}>
                 {incompleteMatches.length}
-              </div>
-              <div className="text-xs text-slate-600">Incomplete</div>
+              </p>
+              <p className="text-[10px] text-ash-500 uppercase tracking-wider">Incomplete</p>
             </div>
           </div>
         </Panel>
 
-        {/* Incomplete Matches */}
+        {/* Incomplete matches */}
         {incompleteMatches.length > 0 && (
-          <div className="mb-6">
-            <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
-              Incomplete Matches ({incompleteMatches.length})
-            </h3>
-
-            <div className="space-y-3">
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-4 h-4 text-gold-400" />
+              <h3 className="heading-fantasy text-sm text-ash-100">Incomplete Matches</h3>
+              <RuneChip tone="warning" className="text-[9px]">{incompleteMatches.length}</RuneChip>
+            </div>
+            <div className="space-y-2">
               {incompleteMatches.map((match) => {
                 const assigned = assignedResults[match.id];
                 const court = courts.find((c) => c.id === match.courtId);
-
                 return (
-                  <Panel key={match.id} className="p-4 border-amber-200 bg-amber-50">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="font-semibold">
-                        Court {court?.courtNumber} • Game {match.gameNumber}
-                      </div>
-                      <div className="text-sm text-slate-600">
-                        {match.sideA[0]?.slice(0, 8)}... vs {match.sideB[0]?.slice(0, 8)}...
-                      </div>
+                  <Panel key={match.id} variant="inventory" padding="md">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm text-ash-200 font-semibold">
+                        Court {court?.courtNumber} · Game {match.gameNumber}
+                      </p>
+                      <p className="text-xs text-ash-500 font-mono">
+                        {match.sideA[0]?.slice(0, 8)}… vs {match.sideB[0]?.slice(0, 8)}…
+                      </p>
                     </div>
-
                     {assigned ? (
-                      <div className="flex items-center gap-2 text-green-600">
+                      <div className="flex items-center gap-2 text-spectral-400 text-sm">
                         <CheckCircle className="w-4 h-4" />
-                        <span>Assigned: {assigned.scoreA}-{assigned.scoreB}</span>
+                        Assigned: {assigned.scoreA}–{assigned.scoreB}
                       </div>
                     ) : (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleAssignResult(match.id, 11, 9)}
-                        >
-                          11-9 Win A
+                      <div className="flex gap-2 flex-wrap">
+                        <Button size="sm" onClick={() => handleAssignResult(match.id, 11, 9)}>
+                          11–9 Win A
                         </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleAssignResult(match.id, 9, 11)}
-                        >
-                          9-11 Win B
+                        <Button size="sm" onClick={() => handleAssignResult(match.id, 9, 11)}>
+                          9–11 Win B
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleAssignResult(match.id, 0, 0)}
-                        >
-                          0-0 Default
+                        <Button size="sm" variant="outline" onClick={() => handleAssignResult(match.id, 0, 0)}>
+                          0–0 Default
                         </Button>
                       </div>
                     )}
@@ -224,33 +182,18 @@ export function SessionFinalizationDialog({
           </div>
         )}
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-            {error}
-          </div>
-        )}
+        {error && <p className="text-sm text-crimson-500 mb-4">{error}</p>}
 
-        {/* Action Buttons */}
         <div className="flex gap-3 justify-end">
-          <Button onClick={onClose} variant="ghost" disabled={isFinalizing}>
-            Cancel
-          </Button>
+          <Button onClick={onClose} variant="ghost" disabled={isFinalizing}>Cancel</Button>
           <Button
             onClick={handleFinalize}
             disabled={!ready || !allIncompleteHandled || isFinalizing}
-            className="gap-2"
           >
             {isFinalizing ? (
-              <>
-                <Loader className="w-4 h-4 animate-spin" />
-                Finalizing...
-              </>
+              <><Loader className="w-4 h-4 animate-spin mr-1" /> Finalizing…</>
             ) : (
-              <>
-                <CheckCircle className="w-4 h-4" />
-                Finalize Session
-              </>
+              <><CheckCircle className="w-4 h-4 mr-1" /> Finalize Session</>
             )}
           </Button>
         </div>

@@ -62,7 +62,7 @@ export function DisputePanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-amber-400" />
+          <AlertTriangle className="h-5 w-5 text-gold-400" />
           <h2 className="heading-fantasy text-ash-100 text-lg">Disputed Scores</h2>
           {matches.length > 0 && (
             <RuneChip tone="warning">{matches.length}</RuneChip>
@@ -128,7 +128,7 @@ function DisputeCard({
           <p className="text-ash-200 text-sm font-semibold">Game {match.gameNumber}</p>
           <p className="text-ash-500 text-xs font-mono">Session: {match.sessionId.slice(0, 12)}…</p>
           {(match as LadderMatchDoc & { disputeReason?: string }).disputeReason && (
-            <p className="text-amber-300 text-xs mt-1">
+            <p className="text-gold-300 text-xs mt-1">
               Reason: {(match as LadderMatchDoc & { disputeReason?: string }).disputeReason}
             </p>
           )}

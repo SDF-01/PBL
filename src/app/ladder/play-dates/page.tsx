@@ -11,6 +11,7 @@ import { SkeletonList } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
+import { usePermissions } from "@/lib/permissions/usePermissions";
 import {
   listLadderSeasons,
   listLadderSessions,
@@ -50,6 +51,12 @@ const STATUS_TONE: Record<
 
 export default function PlayDatesPage() {
   const { user, ready, signIn } = useAuth();
+  const { isSiteAdmin, clubDirectorFor, leagueCoordinatorFor, coordinatorClubIds } = usePermissions();
+  const isStaff =
+    isSiteAdmin ||
+    clubDirectorFor.length > 0 ||
+    leagueCoordinatorFor.length > 0 ||
+    coordinatorClubIds.length > 0;
   const [playDates, setPlayDates] = useState<PlayDateDoc[] | null>(null);
   const [seasons, setSeasons] = useState<LadderSeasonDoc[]>([]);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
@@ -107,7 +114,7 @@ export default function PlayDatesPage() {
               finalization.
             </p>
           </div>
-          {ready && user && (
+          {ready && user && isStaff && (
             <div className="flex gap-2 flex-wrap">
               <Button
                 size="sm"
@@ -137,7 +144,7 @@ export default function PlayDatesPage() {
               Sign-in required
             </RuneChip>
             <p className="text-ash-300 text-sm mb-3">
-              Admins must sign in to schedule play dates.
+              Sign in to check in for play dates and manage your sessions.
             </p>
             <Button size="sm" onClick={() => signIn().catch(() => {})}>
               Sign in with Google
@@ -145,7 +152,7 @@ export default function PlayDatesPage() {
           </Panel>
         )}
 
-        {user &&
+        {user && isStaff &&
           seasons.length === 0 &&
           playDates !== null && (
             <Panel variant="base" padding="md">
@@ -161,7 +168,7 @@ export default function PlayDatesPage() {
             </Panel>
           )}
 
-        {show === "venue" && user && (
+        {show === "venue" && user && isStaff && (
           <NewVenueForm
             createdBy={user.uid}
             onCreated={() => {
@@ -171,7 +178,7 @@ export default function PlayDatesPage() {
           />
         )}
 
-        {show === "playDate" && user && (
+        {show === "playDate" && user && isStaff && (
           <NewPlayDateForm
             createdBy={user.uid}
             seasons={seasons}
