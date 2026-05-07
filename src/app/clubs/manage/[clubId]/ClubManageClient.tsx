@@ -608,10 +608,17 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
   const [description, setDescription] = useState("");
   const [format, setFormat] = useState("Doubles Ladder");
 
-  // Location
+  // Facility — "__new__" = create inline, "" = none, otherwise existing id
+  const [facilityPick, setFacilityPick] = useState("");
+  const [newFacilityName, setNewFacilityName] = useState("");
+  const [newFacilityAddress, setNewFacilityAddress] = useState("");
+  const [newFacilityCourts, setNewFacilityCourts] = useState("");
+  const [newFacilityParking, setNewFacilityParking] = useState(false);
+  const [newFacilityLights, setNewFacilityLights] = useState(false);
+  const [newFacilityIndoor, setNewFacilityIndoor] = useState(false);
+
+  // Location (legacy — kept for venue check-in geofencing)
   const [venueId, setVenueId] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
 
   // Schedule
   const [registrationOpenDate, setRegistrationOpenDate] = useState("");
@@ -631,35 +638,16 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
       .catch(() => setLoading(false));
   }, [clubId]);
 
+  const selectedFacility = facilities.find((f) => f.id === facilityPick);
   const selectedVenue = venues.find((v) => v.id === venueId);
   const dayOfWeek = getDayOfWeek(firstSessionDate);
   const sessionCount = calcSessionCount(firstSessionDate, lastSessionDate);
 
-  function handleVenueChange(id: string) {
-    setVenueId(id);
-    const v = venues.find((x) => x.id === id);
-    if (v?.address) {
-      const parts = v.address.split(",");
-      if (parts.length >= 3) {
-        setCity(parts[parts.length - 2]?.trim() ?? "");
-        setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
-      }
-    }
-  }
-
-  function fillFromFacility(facilityId: string) {
-    const f = facilities.find((x) => x.id === facilityId);
-    if (!f?.address) return;
-    const parts = f.address.split(",");
-    if (parts.length >= 2) {
-      setCity(parts[parts.length - 2]?.trim() ?? "");
-      setState(parts[parts.length - 1]?.trim().split(" ")[0] ?? "");
-    }
-  }
-
   function resetForm() {
     setName(""); setDescription(""); setFormat("Doubles Ladder");
-    setVenueId(""); setCity(""); setState("");
+    setFacilityPick(""); setNewFacilityName(""); setNewFacilityAddress("");
+    setNewFacilityCourts(""); setNewFacilityParking(false); setNewFacilityLights(false); setNewFacilityIndoor(false);
+    setVenueId("");
     setRegistrationOpenDate(""); setRegistrationCloseDate("");
     setFirstSessionDate(""); setLastSessionDate("");
     setDirectorId(""); setDirectorName(""); setCoordinatorId(""); setCoordinatorName("");
@@ -669,16 +657,29 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
     if (!name.trim()) { toast("League name is required.", "error"); return; }
     setSaving(true);
     try {
+      let facilityId: string | undefined;
+      let newFacility: import("@/lib/leagues/write").NewFacilityInput | undefined;
+      if (facilityPick === "__new__") {
+        newFacility = {
+          facilityName: newFacilityName.trim() || undefined,
+          address: newFacilityAddress.trim() || undefined,
+          pickleballCourts: newFacilityCourts ? Number(newFacilityCourts) : undefined,
+          hasParking: newFacilityParking || undefined,
+          hasLights: newFacilityLights || undefined,
+          isIndoor: newFacilityIndoor || undefined,
+        };
+      } else if (facilityPick) {
+        facilityId = facilityPick;
+      }
+      const selectedFacility = facilities.find((f) => f.id === facilityPick);
       const id = await createLeague(userId, {
         name: name.trim(),
         description: description.trim() || undefined,
         clubId,
-        city: city.trim() || undefined,
-        state: state.trim() || undefined,
         leagueFormat: format,
+        facilityId,
+        newFacility,
         venueId: venueId || undefined,
-        venueName: selectedVenue?.name,
-        venueAddress: selectedVenue?.address,
         registrationOpenDate: registrationOpenDate || undefined,
         registrationCloseDate: registrationCloseDate || undefined,
         firstSessionDate: firstSessionDate || undefined,
@@ -689,11 +690,14 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
         directorName: directorName || undefined,
         coordinatorId: coordinatorId || undefined,
         coordinatorName: coordinatorName || undefined,
+        city: selectedFacility?.address?.split(",").slice(-2, -1)[0]?.trim() || undefined,
+        state: selectedFacility?.address?.split(",").slice(-1)[0]?.trim().split(" ")[0] || undefined,
       });
       setLeagues((prev) => [{
         id, orgId: clubId, clubId, name: name.trim(),
         description: description.trim() || undefined,
-        city: city.trim() || undefined, state: state.trim() || undefined,
+        city: selectedFacility?.address?.split(",").slice(-2, -1)[0]?.trim() || undefined,
+        state: selectedFacility?.address?.split(",").slice(-1)[0]?.trim().split(" ")[0] || undefined,
         league_format: format, active: true, createdBy: userId,
       }, ...prev]);
       resetForm();
@@ -734,43 +738,42 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
             </select>
           </div>
 
-          {/* Location */}
+          {/* Facility */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between border-b border-ash-800 pb-1">
-              <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium">Location</p>
-              {facilities.length > 0 && (
-                <select
-                  className="text-[10px] text-spectral-400 bg-transparent border-none outline-none cursor-pointer"
-                  defaultValue=""
-                  onChange={(e) => { if (e.target.value) fillFromFacility(e.target.value); e.target.value = ""; }}
-                >
-                  <option value="">↗ Fill from facility…</option>
-                  {facilities.map((f) => (
-                    <option key={f.id} value={f.id}>{f.facilityName || f.address || "Facility"}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-            {venues.length > 0 && (
-              <div>
-                <label className="text-ash-500 text-xs mb-1 block">Venue (court location)</label>
-                <select className={inputCls} value={venueId} onChange={(e) => handleVenueChange(e.target.value)}>
-                  <option value="">— No venue —</option>
-                  {venues.map((v) => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
-                  ))}
-                </select>
-                {selectedVenue?.address && (
-                  <p className="text-ash-500 text-xs mt-1 flex items-center gap-1">
-                    <MapPin className="h-3 w-3 shrink-0" />{selectedVenue.address}
-                  </p>
-                )}
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest font-medium border-b border-ash-800 pb-1">Facility</p>
+            <select
+              className={inputCls}
+              value={facilityPick}
+              onChange={(e) => setFacilityPick(e.target.value)}
+            >
+              <option value="">— No facility —</option>
+              {facilities.map((f) => (
+                <option key={f.id} value={f.id}>{f.facilityName ?? f.address ?? `Facility ${f.id.slice(0, 6)}`}</option>
+              ))}
+              <option value="__new__">＋ Create new facility…</option>
+            </select>
+
+            {selectedFacility && (
+              <div className="rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2 text-xs space-y-0.5">
+                {selectedFacility.facilityName && <p className="text-ash-100 font-medium">{selectedFacility.facilityName}</p>}
+                {selectedFacility.address && <p className="text-ash-400 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0" />{selectedFacility.address}</p>}
+                {(selectedFacility.pickleballCourts ?? 0) > 0 && <p className="text-ash-500">{selectedFacility.pickleballCourts} pickleball court{selectedFacility.pickleballCourts !== 1 ? "s" : ""}</p>}
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2">
-              <input className={inputCls} placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
-              <input className={inputCls} placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
-            </div>
+
+            {facilityPick === "__new__" && (
+              <div className="space-y-2 pt-2 border-t border-obsidian-700">
+                <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">New Facility Details</p>
+                <input className={inputCls} placeholder="Facility name" value={newFacilityName} onChange={(e) => setNewFacilityName(e.target.value)} />
+                <input className={inputCls} placeholder="Address" value={newFacilityAddress} onChange={(e) => setNewFacilityAddress(e.target.value)} />
+                <input type="number" min="0" className={inputCls} placeholder="Pickleball courts" value={newFacilityCourts} onChange={(e) => setNewFacilityCourts(e.target.value)} />
+                <div className="flex gap-4 text-xs text-ash-300">
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newFacilityParking} onChange={(e) => setNewFacilityParking(e.target.checked)} className="accent-ember-500" />Parking</label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newFacilityLights} onChange={(e) => setNewFacilityLights(e.target.checked)} className="accent-ember-500" />Lights</label>
+                  <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newFacilityIndoor} onChange={(e) => setNewFacilityIndoor(e.target.checked)} className="accent-ember-500" />Indoor</label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Schedule */}

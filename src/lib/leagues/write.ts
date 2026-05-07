@@ -7,6 +7,19 @@ import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { RoleKey } from "@/lib/permissions/types";
 
+export interface NewFacilityInput {
+  facilityName?: string;
+  address?: string;
+  pickleballCourts?: number;
+  tennisConversionCourts?: number;
+  hasParking?: boolean;
+  hasLights?: boolean;
+  isIndoor?: boolean;
+  surfaceType?: "hard" | "clay" | "turf" | "indoor";
+  amenities?: string[];
+  notes?: string;
+}
+
 export interface CreateLeagueInput {
   name: string;
   description?: string;
@@ -14,6 +27,10 @@ export interface CreateLeagueInput {
   city?: string;
   state?: string;
   leagueFormat?: string;
+  /** Link to an existing clubFacilities document. */
+  facilityId?: string;
+  /** Inline facility to create atomically with the league. */
+  newFacility?: NewFacilityInput;
   venueId?: string;
   venueName?: string;
   venueAddress?: string;
@@ -52,6 +69,33 @@ export async function createLeague(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+
+  // Facility — create new inline or link existing, atomically with the league.
+  if (input.newFacility) {
+    const facilityRef = doc(collection(database, COLLECTIONS.clubFacilities));
+    const { facilityName, address, pickleballCourts, tennisConversionCourts,
+            hasParking, hasLights, isIndoor, surfaceType, amenities, notes } = input.newFacility;
+    const facilityData: Record<string, unknown> = {
+      clubId: input.clubId,
+      updatedBy: createdBy,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    if (facilityName) facilityData.facilityName = facilityName;
+    if (address) facilityData.address = address;
+    if (pickleballCourts !== undefined) facilityData.pickleballCourts = pickleballCourts;
+    if (tennisConversionCourts !== undefined) facilityData.tennisConversionCourts = tennisConversionCourts;
+    if (hasParking !== undefined) facilityData.hasParking = hasParking;
+    if (hasLights !== undefined) facilityData.hasLights = hasLights;
+    if (isIndoor !== undefined) facilityData.isIndoor = isIndoor;
+    if (surfaceType) facilityData.surfaceType = surfaceType;
+    if (amenities?.length) facilityData.amenities = amenities;
+    if (notes) facilityData.notes = notes;
+    batch.set(facilityRef, facilityData);
+    leagueData.facilityId = facilityRef.id;
+  } else if (input.facilityId) {
+    leagueData.facilityId = input.facilityId;
+  }
 
   if (input.venueId) leagueData.venueId = input.venueId;
   if (input.venueName) leagueData.venueName = input.venueName;
@@ -122,6 +166,7 @@ export interface UpdateLeagueInput {
   state?: string;
   leagueFormat?: string;
   active?: boolean;
+  facilityId?: string | null;
   movementRules?: string;
   courtCount?: number;
   targetPoints?: number;
@@ -146,6 +191,7 @@ export async function updateLeagueSettings(
   if (input.state !== undefined) updates.state = input.state;
   if (input.leagueFormat !== undefined) updates.league_format = input.leagueFormat;
   if (input.active !== undefined) updates.active = input.active;
+  if (input.facilityId !== undefined) updates.facilityId = input.facilityId ?? null;
   if (input.movementRules !== undefined) updates.movementRules = input.movementRules;
   if (input.courtCount !== undefined) updates.courtCount = input.courtCount;
   if (input.targetPoints !== undefined) updates.targetPoints = input.targetPoints;

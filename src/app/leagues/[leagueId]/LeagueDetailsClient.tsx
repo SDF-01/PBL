@@ -57,12 +57,17 @@ function calcSessionCount(first: string, last: string): number {
 function LeagueSettingsEditor({
   league,
   leagueId,
+  clubId,
+  availableFacilities,
   onSaved,
 }: {
   league: LeagueDoc;
   leagueId: string;
+  clubId: string;
+  availableFacilities: ClubFacility[];
   onSaved: (updated: Partial<LeagueDoc>) => void;
 }) {
+  const { user } = useAuth();
   const [name, setName] = useState(league.name);
   const [description, setDescription] = useState(league.description ?? "");
   const [city, setCity] = useState(league.city ?? "");
@@ -73,19 +78,53 @@ function LeagueSettingsEditor({
   const [regClose, setRegClose] = useState(league.registrationCloseDate ?? "");
   const [firstSession, setFirstSession] = useState(league.firstSessionDate ?? "");
   const [lastSession, setLastSession] = useState(league.lastSessionDate ?? "");
+  // Facility selection: existing id, "__new__", or ""
+  const [facilityPick, setFacilityPick] = useState(league.facilityId ?? "");
+  const [newFacilityName, setNewFacilityName] = useState("");
+  const [newFacilityAddress, setNewFacilityAddress] = useState("");
+  const [newFacilityCourts, setNewFacilityCourts] = useState("");
+  const [newFacilityParking, setNewFacilityParking] = useState(false);
+  const [newFacilityLights, setNewFacilityLights] = useState(false);
+  const [newFacilityIndoor, setNewFacilityIndoor] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dayOfWeek = getDayOfWeekFromDate(firstSession);
   const sessionCount = calcSessionCount(firstSession, lastSession);
+  const selectedFacility = availableFacilities.find((f) => f.id === facilityPick);
+
+  const inputCls = "w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100";
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!user) return;
     setSaving(true);
     setError(null);
     try {
+      let resolvedFacilityId: string | null | undefined = undefined;
+      if (facilityPick === "__new__") {
+        const { addClubFacility } = await import("@/lib/clubs/write");
+        resolvedFacilityId = await addClubFacility(
+          clubId,
+          {
+            facilityName: newFacilityName.trim() || undefined,
+            address: newFacilityAddress.trim() || undefined,
+            pickleballCourts: newFacilityCourts ? Number(newFacilityCourts) : undefined,
+            hasParking: newFacilityParking || undefined,
+            hasLights: newFacilityLights || undefined,
+            isIndoor: newFacilityIndoor || undefined,
+          },
+          user.uid,
+        );
+      } else if (facilityPick) {
+        resolvedFacilityId = facilityPick;
+      } else {
+        resolvedFacilityId = null;
+      }
+
       const updates: UpdateLeagueInput = {
         name, description, city, state, leagueFormat: format, active,
+        facilityId: resolvedFacilityId,
         registrationOpenDate: regOpen || undefined,
         registrationCloseDate: regClose || undefined,
         firstSessionDate: firstSession || undefined,
@@ -96,6 +135,7 @@ function LeagueSettingsEditor({
       await updateLeagueSettings(leagueId, updates);
       onSaved({
         name, description, city, state, league_format: format, active,
+        facilityId: resolvedFacilityId ?? undefined,
         registrationOpenDate: regOpen || undefined,
         registrationCloseDate: regClose || undefined,
         firstSessionDate: firstSession || undefined,
@@ -165,6 +205,45 @@ function LeagueSettingsEditor({
           />
           <span className="text-sm text-ash-300">League is active</span>
         </label>
+
+        <div className="pt-3 border-t border-obsidian-600 space-y-3">
+          <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Facility</p>
+          <Field label="Facility">
+            <select className={inputCls} value={facilityPick} onChange={(e) => setFacilityPick(e.target.value)}>
+              <option value="">— No facility —</option>
+              {availableFacilities.map((f) => (
+                <option key={f.id} value={f.id}>{f.facilityName ?? f.address ?? `Facility ${f.id.slice(0, 6)}`}</option>
+              ))}
+              <option value="__new__">＋ Create new facility…</option>
+            </select>
+          </Field>
+          {selectedFacility && (
+            <div className="rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2 text-xs space-y-0.5">
+              {selectedFacility.facilityName && <p className="text-ash-100 font-medium">{selectedFacility.facilityName}</p>}
+              {selectedFacility.address && <p className="text-ash-400 flex items-center gap-1"><MapPin className="h-3 w-3 shrink-0" />{selectedFacility.address}</p>}
+              {(selectedFacility.pickleballCourts ?? 0) > 0 && <p className="text-ash-500">{selectedFacility.pickleballCourts} pickleball court{selectedFacility.pickleballCourts !== 1 ? "s" : ""}</p>}
+            </div>
+          )}
+          {facilityPick === "__new__" && (
+            <div className="space-y-2 pt-1 border-t border-obsidian-700">
+              <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">New Facility Details</p>
+              <Field label="Facility Name">
+                <input className={inputCls} value={newFacilityName} onChange={(e) => setNewFacilityName(e.target.value)} placeholder="Riverwind Park" />
+              </Field>
+              <Field label="Address">
+                <input className={inputCls} value={newFacilityAddress} onChange={(e) => setNewFacilityAddress(e.target.value)} placeholder="1234 Main St, City, MN" />
+              </Field>
+              <Field label="Pickleball Courts">
+                <input type="number" min="0" className={inputCls} value={newFacilityCourts} onChange={(e) => setNewFacilityCourts(e.target.value)} placeholder="0" />
+              </Field>
+              <div className="flex gap-4 text-xs text-ash-300 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newFacilityParking} onChange={(e) => setNewFacilityParking(e.target.checked)} className="accent-ember-500" />Parking</label>
+                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newFacilityLights} onChange={(e) => setNewFacilityLights(e.target.checked)} className="accent-ember-500" />Lights</label>
+                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={newFacilityIndoor} onChange={(e) => setNewFacilityIndoor(e.target.checked)} className="accent-ember-500" />Indoor</label>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="pt-3 border-t border-obsidian-600 space-y-3">
           <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Schedule</p>
@@ -723,8 +802,13 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                   <LeagueSettingsEditor
                     league={league}
                     leagueId={leagueId}
+                    clubId={clubId}
+                    availableFacilities={facilities}
                     onSaved={(updated) => {
                       setLeague((l) => l ? { ...l, ...updated } : l);
+                      if (updated.facilityId !== undefined) {
+                        listClubFacilities(clubId).then(setFacilities).catch(() => {});
+                      }
                       setSettingsOpen(false);
                     }}
                   />

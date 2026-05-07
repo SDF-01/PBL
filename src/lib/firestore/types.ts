@@ -110,6 +110,8 @@ export interface LeagueDoc {
   next_play_date?: string;
   check_in_status?: string;
   league_format?: string;
+  /** Club facility where this league is played (reference to clubFacilities/{id}). */
+  facilityId?: string;
   /** Venue (court location) where the league is played. */
   venueId?: string;
   venueName?: string;
