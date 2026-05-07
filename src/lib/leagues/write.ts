@@ -149,11 +149,9 @@ export async function joinLeague(userId: string, leagueId: string, clubId?: stri
   const existing = await getDoc(docRef);
   if (existing.exists()) {
     // Re-join after leaving: update status and reset joinedAt. Preserve existing role.
-    const existingRole = existing.data().role as string | undefined;
     await updateDoc(docRef, {
       status: "active",
       joinedAt: serverTimestamp(),
-      ...(existingRole ? {} : { role: "player" }),
     });
   } else {
     await setDoc(docRef, { leagueId, userId, status: "active", joinedAt: serverTimestamp(), role: "player" });
