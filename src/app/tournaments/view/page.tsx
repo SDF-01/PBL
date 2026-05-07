@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useMemo, useState, Suspense } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { BracketView } from "@/components/bracket/BracketView";
 import type { Bracket, BracketNode as EngineNode, Entrant } from "@/domain/bracket";
 import { useAuth } from "@/lib/auth-context";
+import { usePermissions } from "@/lib/permissions/usePermissions";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import {
   getTournamentBySlug,
@@ -41,6 +43,7 @@ function TournamentView() {
   const params = useSearchParams();
   const slug = params.get("slug");
   const { user, signIn } = useAuth();
+  const { isSiteAdmin } = usePermissions();
 
   const [tournament, setTournament] = useState<TournamentDoc | null>(null);
   const [regs, setRegs] = useState<RegistrationDoc[]>([]);
@@ -48,11 +51,12 @@ function TournamentView() {
   const [nodes, setNodes] = useState<BracketNodeDoc[]>([]);
   const [matches, setMatches] = useState<MatchDoc[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
   const [busy, setBusy] = useState(false);
+  const [confirmPublish, setConfirmPublish] = useState(false);
 
-  // Load tournament by slug (once).
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -70,7 +74,6 @@ function TournamentView() {
     return () => { cancelled = true; };
   }, [slug]);
 
-  // Realtime subs for registrations, bracket, nodes, matches.
   useEffect(() => {
     if (!tournament) return;
     const unsubs = [
@@ -82,8 +85,8 @@ function TournamentView() {
     return () => { unsubs.forEach((u) => u()); };
   }, [tournament]);
 
-  const isDirector = !!(user && tournament && "createdBy" in tournament &&
-    (tournament as unknown as { createdBy?: string }).createdBy === user.uid);
+  const createdBy = (tournament as unknown as { createdBy?: string } | null)?.createdBy;
+  const isDirector = !!(user && (isSiteAdmin || (createdBy && createdBy === user.uid)));
   const myReg = user ? regs.find((r) => r.userId === user.uid) : undefined;
   const confirmed = regs.filter((r) => r.status === "CONFIRMED");
   const nameById = useMemo(
@@ -91,8 +94,6 @@ function TournamentView() {
     [regs],
   );
 
-  // Build in-memory Bracket for rendering from the persisted nodes.
-  // NOTE: hooks must be called before any early returns.
   const renderBracket: Bracket | null = useMemo(() => {
     if (!bracket || nodes.length === 0) return null;
     const engineNodes: EngineNode[] = nodes.map((n) => ({
@@ -132,9 +133,9 @@ function TournamentView() {
     );
   }
 
-  // --- Actions ---
   async function onRegister() {
     if (!user || !tournament) return;
+    setActionError(null);
     setBusy(true);
     try {
       await createRegistration({
@@ -142,34 +143,32 @@ function TournamentView() {
         userId: user.uid,
         displayName: user.displayName ?? user.email ?? "Anonymous",
       });
-      if (isDirector === false) {
-        // Notify the director.
-        const createdBy = (tournament as unknown as { createdBy?: string }).createdBy;
-        if (createdBy) {
-          notifyUser({
-            userId: createdBy,
-            title: "New registration",
-            body: `${user.displayName ?? user.email} registered for ${tournament.name}.`,
-            href: `/tournaments/view?slug=${tournament.slug}`,
-            kind: "GENERAL",
-            createdBy: user.uid,
-          }).catch(() => {});
-        }
+      if (!isDirector && createdBy) {
+        notifyUser({
+          userId: createdBy,
+          title: "New registration",
+          body: `${user.displayName ?? user.email} registered for ${tournament.name}.`,
+          href: `/tournaments/view?slug=${tournament.slug}`,
+          kind: "GENERAL",
+          createdBy: user.uid,
+        }).catch(() => {});
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Registration failed.");
+      setActionError(err instanceof Error ? err.message : "Registration failed.");
     } finally { setBusy(false); }
   }
 
   async function onWithdraw() {
     if (!myReg) return;
+    setActionError(null);
     setBusy(true);
     try { await updateRegistrationStatus(myReg.id, "WITHDRAWN"); }
-    catch (err) { alert(err instanceof Error ? err.message : "Withdraw failed."); }
+    catch (err) { setActionError(err instanceof Error ? err.message : "Withdraw failed."); }
     finally { setBusy(false); }
   }
 
   async function onSetStatus(id: string, status: RegistrationDoc["status"]) {
+    setActionError(null);
     setBusy(true);
     try {
       await updateRegistrationStatus(id, status);
@@ -184,14 +183,23 @@ function TournamentView() {
           createdBy: user.uid,
         }).catch(() => {});
       }
-    } catch (err) { alert(err instanceof Error ? err.message : "Update failed."); }
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Update failed."); }
     finally { setBusy(false); }
   }
 
   async function onPublishBracket() {
     if (!tournament || !user) return;
-    if (confirmed.length < 2) { alert("Need at least 2 confirmed entrants."); return; }
-    if (!confirm(`Publish bracket with ${confirmed.length} entrants? Existing bracket (if any) will be replaced.`)) return;
+    if (confirmed.length < 2) {
+      setActionError("Need at least 2 confirmed entrants to publish a bracket.");
+      return;
+    }
+    setConfirmPublish(true);
+  }
+
+  async function executePublishBracket() {
+    if (!tournament || !user) return;
+    setConfirmPublish(false);
+    setActionError(null);
     setBusy(true);
     try {
       const entrants: Entrant[] = confirmed.map((r) => ({
@@ -206,7 +214,6 @@ function TournamentView() {
         bestOf: tournament.bestOf ?? 3,
         createdBy: user.uid,
       });
-      // Notify confirmed entrants.
       notifyMany(
         confirmed.map((r) => r.userId).filter((x): x is string => !!x),
         {
@@ -218,15 +225,16 @@ function TournamentView() {
         },
       ).catch(() => {});
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Publish failed.");
+      setActionError(err instanceof Error ? err.message : "Publish failed.");
     } finally { setBusy(false); }
   }
 
   async function onStart() {
     if (!tournament) return;
+    setActionError(null);
     setBusy(true);
     try { await startTournament(tournament.id); }
-    catch (err) { alert(err instanceof Error ? err.message : "Failed."); }
+    catch (err) { setActionError(err instanceof Error ? err.message : "Failed to start tournament."); }
     finally { setBusy(false); }
   }
 
@@ -259,6 +267,25 @@ function TournamentView() {
         <Link href="/tournaments" className="text-spectral-500 hover:text-spectral-400 text-sm">← All Tournaments</Link>
       </div>
 
+      {/* Confirm publish banner */}
+      {confirmPublish && (
+        <Panel variant="quest" padding="md" className="border-gold-500/50 bg-gold-900/20">
+          <div className="flex items-start gap-3 flex-wrap">
+            <AlertTriangle className="h-5 w-5 text-gold-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-ash-100 text-sm font-medium">Publish bracket with {confirmed.length} entrants?</p>
+              <p className="text-ash-400 text-xs mt-0.5">Any existing bracket will be replaced. This cannot be undone.</p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button size="sm" variant="ghost" onClick={() => setConfirmPublish(false)} disabled={busy}>Cancel</Button>
+              <Button size="sm" variant="outline" className="border-gold-500/60 text-gold-400 hover:bg-gold-500/10" onClick={executePublishBracket} disabled={busy}>
+                {busy ? "Publishing…" : "Confirm"}
+              </Button>
+            </div>
+          </div>
+        </Panel>
+      )}
+
       {/* Registration action bar */}
       <Panel variant="base" padding="md">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -269,7 +296,7 @@ function TournamentView() {
                 ? <>You are <span className="font-mono text-ember-400">{myReg.status.toLowerCase()}</span>.</>
                 : "You aren't registered yet."}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {!user ? (
               <Button size="sm" onClick={() => signIn().catch(() => {})}>Sign in with Google</Button>
             ) : !myReg && tournament.status === "REGISTRATION_OPEN" ? (
@@ -287,6 +314,15 @@ function TournamentView() {
             )}
           </div>
         </div>
+        {actionError && (
+          <div className="mt-3 flex items-center gap-2 rounded-pixel border border-crimson-500/40 bg-crimson-500/10 px-3 py-2 text-sm text-crimson-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="flex-1">{actionError}</span>
+            <button onClick={() => setActionError(null)} className="text-crimson-500 hover:text-crimson-300">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </Panel>
 
       {/* Tabs */}
@@ -470,8 +506,7 @@ function MatchesTab({
           const aName = m.participantAId ? (nameById[m.participantAId] ?? "TBD") : "BYE";
           const bName = m.participantBId ? (nameById[m.participantBId] ?? "TBD") : "BYE";
           const canScore =
-            m.status !== "COMPLETED" && m.participantAId && m.participantBId &&
-            (isDirector /* TODO: also allow participants by userId lookup */);
+            m.status !== "COMPLETED" && m.participantAId && m.participantBId && isDirector;
           return (
             <li key={m.id}>
               <Panel variant={m.status === "COMPLETED" ? "base" : "raised"} padding="md">
@@ -554,7 +589,12 @@ function ScoreModal({
     >
       <div className="w-full max-w-md">
         <Panel variant="raised" padding="lg">
-          <h2 className="heading-fantasy text-lg text-ash-100 mb-1">Enter Score</h2>
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="heading-fantasy text-lg text-ash-100">Enter Score</h2>
+            <button onClick={onClose} className="text-ash-500 hover:text-ash-200 p-1">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
           <p className="text-ash-500 text-xs mb-4 font-mono">
             Best of {match.bestOf} · to {match.targetPoints} · win by {match.winBy}
           </p>

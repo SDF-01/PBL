@@ -545,7 +545,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
             </Panel>
           ) : error ? (
             <Panel variant="base" padding="lg">
-              <p className="text-rose-400">{error}</p>
+              <p className="text-crimson-400">{error}</p>
             </Panel>
           ) : league ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -876,7 +876,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                         Join now to play.
                       </h2>
                     </div>
-                    {joinError && <p className="text-rose-400 text-xs">{joinError}</p>}
+                    {joinError && <p className="text-crimson-400 text-xs">{joinError}</p>}
                     <Button
                       size="sm"
                       className="w-full"

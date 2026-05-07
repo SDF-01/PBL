@@ -131,7 +131,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
       <ResponsiveShell desktopChromeless>
         <main className="container py-10 max-w-2xl">
           <Panel variant="base" padding="lg">
-            <p className="text-rose-400">Club not found.</p>
+            <p className="text-crimson-400">Club not found.</p>
             <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">← Back to My Clubs</Link>
           </Panel>
         </main>
@@ -144,7 +144,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
       <ResponsiveShell desktopChromeless>
         <main className="container py-10 max-w-2xl">
           <Panel variant="base" padding="lg">
-            <p className="text-rose-400">You don&apos;t have director access to this club.</p>
+            <p className="text-crimson-400">You don&apos;t have director access to this club.</p>
             <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">← Back to My Clubs</Link>
           </Panel>
         </main>
@@ -1589,7 +1589,7 @@ function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId
                 <p className="text-ash-500 text-xs font-mono">{entry.userId}</p>
               </div>
               <button onClick={() => handleRemove(entry)} disabled={removing === entry.userRoleId}
-                className="text-ash-500 hover:text-rose-400 transition-colors disabled:opacity-50">
+                className="text-ash-500 hover:text-crimson-400 transition-colors disabled:opacity-50">
                 {removing === entry.userRoleId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               </button>
             </Panel>

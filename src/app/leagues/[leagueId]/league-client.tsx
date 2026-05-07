@@ -71,7 +71,7 @@ export function LeagueDetailsPageClient({ params }: LeagueDetailsPageClientProps
             </Panel>
           ) : error ? (
             <Panel variant="base" padding="lg">
-              <p className="text-rose-400">{error}</p>
+              <p className="text-crimson-400">{error}</p>
             </Panel>
           ) : league ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">

@@ -200,14 +200,26 @@ export async function listClubsByLeagueMembership(userId: string): Promise<ClubD
 
 export async function listUserClubs(userId: string): Promise<ClubDoc[]> {
   if (!isFirebaseConfigured()) return [];
-  const snap = await getDocs(
-    query(
-      collection(db(), COLLECTIONS.clubs),
-      where("memberIds", "array-contains", userId),
-      orderBy("createdAt", "desc"),
-    ),
-  );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
+  // Two queries merged: clubs the user created + clubs they're a member of.
+  // Both use single-field filters (no composite index required).
+  // orderBy is applied client-side to avoid requiring a composite index on
+  // memberIds + createdAt, which causes silent failures when the index is absent.
+  const [createdSnap, memberSnap] = await Promise.all([
+    getDocs(query(collection(db(), COLLECTIONS.clubs), where("createdBy", "==", userId))),
+    getDocs(query(collection(db(), COLLECTIONS.clubs), where("memberIds", "array-contains", userId))),
+  ]);
+  const seen = new Set<string>();
+  const clubs: ClubDoc[] = [];
+  for (const snap of [createdSnap, memberSnap]) {
+    for (const d of snap.docs) {
+      if (!seen.has(d.id)) {
+        seen.add(d.id);
+        clubs.push({ id: d.id, ...d.data() } as ClubDoc);
+      }
+    }
+  }
+  clubs.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+  return clubs;
 }
 
 export async function listPendingClubs(): Promise<ClubDoc[]> {
@@ -259,15 +271,16 @@ export async function getClubFollowerCount(clubId: string): Promise<number> {
   return snap.data().count;
 }
 
-/** All clubs a user is following, ordered by follow date descending. */
+/** All clubs a user is following. Sorted client-side to avoid composite index requirement. */
 export async function listFollowedClubs(userId: string): Promise<ClubDoc[]> {
   if (!isFirebaseConfigured()) return [];
   const snap = await getDocs(
     query(
       collection(db(), COLLECTIONS.clubs),
       where("followerIds", "array-contains", userId),
-      orderBy("createdAt", "desc"),
     ),
   );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
+  const clubs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubDoc);
+  clubs.sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+  return clubs;
 }

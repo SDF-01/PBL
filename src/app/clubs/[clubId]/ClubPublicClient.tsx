@@ -141,7 +141,7 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
       <ResponsiveShell desktopChromeless>
         <main className="container py-10 max-w-4xl">
           <Panel variant="base" padding="lg">
-            <p className="text-rose-400">Club not found.</p>
+            <p className="text-crimson-400">Club not found.</p>
             <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">
               ← My Clubs
             </Link>
