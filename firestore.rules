@@ -366,7 +366,9 @@ service cloud.firestore {
           && resource.data.createdBy == request.auth.uid
           && resource.data.status == "pending"
           && request.resource.data.status == "pending"
-          && keepsCreatedBy());
+          && keepsCreatedBy())
+        // Any signed-in user may follow or unfollow a club (only followerIds changes).
+        || (isSignedIn() && hasOnlyChanged(["followerIds"]));
       allow delete: if isAdmin();
     }
 

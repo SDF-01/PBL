@@ -36,6 +36,7 @@ export interface LeagueMemberEntry {
   leagueId: string;
   userId: string;
   status: string;
+  role?: string;
   joinedAt?: string;
   displayName?: string;
 }

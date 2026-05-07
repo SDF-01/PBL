@@ -5,6 +5,7 @@
 import { collection, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
+import { followClub } from "@/lib/clubs/write";
 import type { RoleKey } from "@/lib/permissions/types";
 
 export interface NewFacilityInput {
@@ -142,14 +143,29 @@ export async function createLeague(
   return leagueRef.id;
 }
 
-export async function joinLeague(userId: string, leagueId: string): Promise<void> {
-  const docRef = doc(db(), COLLECTIONS.leagueMemberships, `${leagueId}__${userId}`);
+export async function joinLeague(userId: string, leagueId: string, clubId?: string): Promise<void> {
+  const database = db();
+  const docRef = doc(database, COLLECTIONS.leagueMemberships, `${leagueId}__${userId}`);
   const existing = await getDoc(docRef);
   if (existing.exists()) {
-    // Re-join after leaving: update status and reset joinedAt.
-    await updateDoc(docRef, { status: "active", joinedAt: serverTimestamp() });
+    // Re-join after leaving: update status and reset joinedAt. Preserve existing role.
+    const existingRole = existing.data().role as string | undefined;
+    await updateDoc(docRef, {
+      status: "active",
+      joinedAt: serverTimestamp(),
+      ...(existingRole ? {} : { role: "player" }),
+    });
   } else {
-    await setDoc(docRef, { leagueId, userId, status: "active", joinedAt: serverTimestamp() });
+    await setDoc(docRef, { leagueId, userId, status: "active", joinedAt: serverTimestamp(), role: "player" });
+  }
+
+  // Auto-follow the club so the player gets posts and updates in their feed.
+  if (clubId) {
+    const followerRef = doc(database, COLLECTIONS.clubFollowers, `${userId}_${clubId}`);
+    const followerSnap = await getDoc(followerRef);
+    if (!followerSnap.exists()) {
+      await followClub(userId, clubId).catch(() => {}); // non-fatal
+    }
   }
 }
 

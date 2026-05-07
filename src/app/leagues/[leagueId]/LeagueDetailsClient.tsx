@@ -504,7 +504,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     setJoining(true);
     setJoinError(null);
     try {
-      await joinLeague(user.uid, leagueId);
+      await joinLeague(user.uid, leagueId, clubId || undefined);
       setMembership({ id: `${leagueId}__${user.uid}`, status: "active" });
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : "Failed to join league.");
@@ -817,7 +817,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                 )}
 
                 {/* ── Active member ── */}
-                {!isStaff && user && isMember && (
+                {user && isMember && (
                   <Panel variant="hud" padding="lg" className="space-y-4">
                     <div>
                       <RuneChip tone="success" className="mb-2">
@@ -865,8 +865,8 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                   </Panel>
                 )}
 
-                {/* ── Logged-in, not a member — show join ── */}
-                {!isStaff && user && !isMember && membershipChecked && (
+                {/* ── Logged-in, not a member — show join (all roles can join) ── */}
+                {user && !isMember && membershipChecked && (
                   <Panel variant="quest" padding="lg" className="space-y-4">
                     <div>
                       <p className="text-ash-400 text-xs uppercase tracking-[0.24em]">
@@ -895,7 +895,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                 )}
 
                 {/* ── Logged-in but membership check still loading ── */}
-                {!isStaff && user && !membershipChecked && !permLoading && (
+                {user && !membershipChecked && !permLoading && (
                   <Panel variant="base" padding="lg" className="flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin text-ember-400" />
                     <p className="text-ash-500 text-sm">Loading your status…</p>
