@@ -35,6 +35,9 @@
     "zod": "^3.23.8",
     "zustand": "^5.0.0"
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",
     "@types/node": "^22.7.0",
