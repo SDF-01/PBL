@@ -2,27 +2,56 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FlaskConical, LogOut } from "lucide-react";
+import { FlaskConical, Loader2, LogOut } from "lucide-react";
+import { GoogleAuthProvider, signInWithPopup, signOut as fbSignOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 
-// Key written by TestingClient before switching into a test account.
 const TEST_MODE_KEY = "pbl_test_mode";
 
+interface TestModeState {
+  provider: "google.com" | "password";
+}
+
+function readTestMode(): TestModeState | null {
+  try {
+    const raw = localStorage.getItem(TEST_MODE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as TestModeState;
+  } catch {
+    return null;
+  }
+}
+
 export function TestModeBanner() {
-  const [active, setActive] = useState(false);
-  const { user, signOut } = useAuth();
+  const [state, setState] = useState<TestModeState | null>(null);
+  const [exiting, setExiting] = useState(false);
+  const { user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    setActive(localStorage.getItem(TEST_MODE_KEY) === "1");
+    setState(readTestMode());
   }, [user]);
 
-  if (!active) return null;
+  if (!state) return null;
 
   async function handleExit() {
+    setExiting(true);
     localStorage.removeItem(TEST_MODE_KEY);
-    await signOut();
-    router.push("/auth/login");
+    try {
+      await fbSignOut(auth());
+      if (state?.provider === "google.com") {
+        // Re-auth silently — browser is still logged into Google so this
+        // usually resolves without any visible popup.
+        await signInWithPopup(auth(), new GoogleAuthProvider());
+        router.push("/admin/testing");
+      } else {
+        router.push("/auth/login");
+      }
+    } catch {
+      // If the re-auth popup is dismissed or fails, send to login.
+      router.push("/auth/login");
+    }
   }
 
   return (
@@ -30,13 +59,21 @@ export function TestModeBanner() {
       <span className="flex items-center gap-1.5">
         <FlaskConical className="h-3.5 w-3.5 shrink-0" />
         Test Mode · signed in as{" "}
-        <span className="font-mono font-bold">{user?.displayName ?? user?.email ?? "test account"}</span>
+        <span className="font-mono font-bold">
+          {user?.displayName ?? user?.email ?? "test account"}
+        </span>
       </span>
       <button
         onClick={handleExit}
-        className="flex items-center gap-1 underline underline-offset-2 hover:no-underline whitespace-nowrap"
+        disabled={exiting}
+        className="flex items-center gap-1 underline underline-offset-2 hover:no-underline whitespace-nowrap disabled:opacity-60"
       >
-        <LogOut className="h-3 w-3" /> Exit Test Mode
+        {exiting ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <LogOut className="h-3 w-3" />
+        )}
+        {exiting ? "Returning…" : "Exit Test Mode"}
       </button>
     </div>
   );

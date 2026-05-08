@@ -44,8 +44,15 @@ export function TestingClient() {
     if (switching) return;
     setSwitching(account.uid);
     try {
-      // Remember that we're in test mode so the banner can show.
-      localStorage.setItem(TEST_MODE_KEY, "1");
+      // Persist the admin's provider so the banner can re-auth them on exit.
+      const adminProvider =
+        user?.providerData.find((p) => p.providerId === "google.com")
+          ? "google.com"
+          : "password";
+      localStorage.setItem(
+        TEST_MODE_KEY,
+        JSON.stringify({ provider: adminProvider }),
+      );
       await signInWithEmail(account.email, TEST_PASSWORD);
       router.push("/dashboard");
     } catch (e) {
