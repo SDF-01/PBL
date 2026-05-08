@@ -406,13 +406,13 @@ service cloud.firestore {
 
     match /clubPosts/{postId} {
       allow read: if true;
-      // Directors post on behalf of their clubs; authorId must match the caller.
-      allow create: if isSignedIn()
+      // Club directors (users/{uid}.role == CLUB_ADMIN) may post; authorId must match the caller.
+      allow create: if isClubDirector()
         && request.resource.data.authorId == request.auth.uid;
-      allow update: if isSignedIn()
+      allow update: if isClubDirector()
         && resource.data.authorId == request.auth.uid;
       allow delete: if isAdmin()
-        || (isSignedIn() && resource.data.authorId == request.auth.uid);
+        || (isClubDirector() && resource.data.authorId == request.auth.uid);
     }
 
     match /roleEvents/{id} {
