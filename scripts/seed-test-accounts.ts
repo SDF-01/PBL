@@ -56,10 +56,12 @@ function toEmail(first: string, last: string): string {
 }
 
 function loadCredentials() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const raw =
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON ??
+    process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
     throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT_JSON is required. Paste the service account JSON into .env.",
+      "Set FIREBASE_SERVICE_ACCOUNT or FIREBASE_SERVICE_ACCOUNT_JSON in your environment.",
     );
   }
   return JSON.parse(raw);
