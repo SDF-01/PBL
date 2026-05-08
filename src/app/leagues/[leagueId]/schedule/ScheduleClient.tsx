@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, CalendarRange, Loader2, RefreshCw, Swords } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -18,7 +19,14 @@ interface Props {
   leagueId: string;
 }
 
-export function ScheduleClient({ leagueId }: Props) {
+export function ScheduleClient({ leagueId: propLeagueId }: Props) {
+  const pathname = usePathname();
+  const pathnameSegment = pathname.split("/")[2];
+  const leagueId =
+    pathnameSegment && pathnameSegment !== "__fallback"
+      ? pathnameSegment
+      : propLeagueId;
+
   const { user } = useAuth();
   const { isSiteAdmin, leagueCoordinatorFor } = usePermissions();
   const canManage =

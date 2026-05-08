@@ -62,7 +62,11 @@ export function RosterClient({ leagueId: propLeagueId }: { leagueId: string }) {
 
 function RosterInner({ propLeagueId }: { propLeagueId: string }) {
   const pathname = usePathname();
-  const leagueId = propLeagueId || pathname.split("/")[2] || "";
+  const pathnameSegment = pathname.split("/")[2];
+  const leagueId =
+    pathnameSegment && pathnameSegment !== "__fallback"
+      ? pathnameSegment
+      : propLeagueId;
   const { user } = useAuth();
   const {
     isSiteAdmin,
