@@ -7,6 +7,7 @@ import { SiteFooter } from "./SiteFooter";
 import { MobileTopBar } from "./mobile/MobileTopBar";
 import { MobileTabBar } from "./mobile/MobileTabBar";
 import { BackToHome } from "./BackToHome";
+import { TestModeBanner } from "@/components/ui/TestModeBanner";
 
 // ResponsiveShell swaps the entire chrome based on device class. This is
 // distinct from Tailwind media queries: each branch renders its own
@@ -45,6 +46,7 @@ export function ResponsiveShell({
   if (isMobile) {
     return (
       <div className="min-h-screen flex flex-col">
+        <TestModeBanner />
         <MobileTopBar />
         <div className={mobilePadForTabBar ? "pt-14 pb-20 flex-1" : "pt-14 flex-1"}>
           <BackToHome />
@@ -58,6 +60,7 @@ export function ResponsiveShell({
   if (desktopChromeless) {
     return (
       <>
+        <TestModeBanner />
         <TopNav />
         {children}
       </>
@@ -66,6 +69,7 @@ export function ResponsiveShell({
 
   return (
     <>
+      <TestModeBanner />
       <TopNav />
       <BackToHome />
       {children}

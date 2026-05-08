@@ -2,19 +2,19 @@
 
 Mobile-first pickleball league software for clubs, ladder play, player profiles, tournaments, and admin operations.
 
-This repository is currently a **Next.js static export backed by Firebase Auth and Cloud Firestore**. It is not a Prisma/Postgres application and it does not currently run a production server API. The app is deployed as static HTML/JS to Firebase Hosting, and client code talks directly to Firebase services.
+This repository is currently a **Next.js static export backed by Firebase Auth, Cloud Firestore, Firebase Storage, and Firebase Cloud Messaging client SDKs**. It is not a Prisma/Postgres application and it does not currently run a production server API. The app is deployed as static HTML/JS to Firebase Hosting, and client code talks directly to Firebase services.
 
 ## Current Status
 
-The application has working UI and pure domain engines, but privileged operational writes are in a security transition.
+The application has working UI, pure domain engines, Firebase-backed reads/writes, Storage uploads, PWA scaffolding, and FCM token registration. It is still in a security transition because the production architecture remains a static client talking directly to Firebase.
 
-The Firestore rules were recently moved to an emergency lockdown posture after a Firebase security audit. Several admin workflows now intentionally require a trusted backend function before they can run safely. Helpers that would previously perform unsafe browser-side privileged writes now throw:
+Several privileged workflows are still browser-driven and protected only by Firestore/Storage rules. Some helper paths are documented as backend-required, and the shared guard throws:
 
 ```ts
 trustedBackendRequired("action name")
 ```
 
-That is intentional. It prevents role escalation, ELO tampering, forged audit entries, and broad match/session mutation until Cloud Functions or another trusted Admin SDK backend is implemented.
+That guard is intentional where it is used, but it is not yet wired into every high-risk write helper. Treat role changes, club approval, league administration, ladder generation/finalization, score/ELO mutation, audit logging, notifications, and tournament operations as workflows that need Cloud Functions or another trusted Admin SDK backend before production.
 
 ## Stack
 
@@ -24,7 +24,9 @@ That is intentional. It prevents role escalation, ELO tampering, forged audit en
 | Language | TypeScript strict mode | `noUncheckedIndexedAccess` enabled. |
 | Styling | Tailwind CSS + CSS variables | Obsidian/ember/rune visual system. |
 | Auth | Firebase Auth | Email/password and Google OAuth. |
-| Database | Cloud Firestore | Client SDK reads; locked-down rules; privileged writes need backend. |
+| Database | Cloud Firestore | Client SDK reads/writes; rules enforce the current boundary; privileged writes need backend. |
+| Storage | Firebase Storage | Player photos and club logos; rules restrict file type/size but club-logo authorization still needs backend/scope hardening. |
+| Push/PWA | Web service workers + FCM | Static app SW and Firebase Messaging SW exist; token registration is client-side; server send trigger is not implemented. |
 | Hosting | Firebase Hosting | Serves `out/`; rewrites for static dynamic-route fallbacks. |
 | Analytics | Firebase Analytics | Lazy client-only initialization. |
 | Tests | Vitest | Domain tests plus Firebase rules test harness. |
@@ -50,6 +52,8 @@ src/
   lib/
     firebase.ts                Lazy Firebase client initialization
     auth-context.tsx           Firebase Auth provider
+    fcm.ts                     FCM token registration and foreground listener
+    storage.ts                 Firebase Storage image upload helpers
     firestore/                 Collection names, types, general repo/write helpers
     permissions/               Client-side role display helpers and pending club writes
     ladder/                    Ladder reads plus backend-required write stubs
@@ -68,12 +72,16 @@ Detected and used:
 - Firebase Hosting
 - Firebase Auth
 - Cloud Firestore
+- Firebase Storage
 - Firebase Analytics
+- Firebase Cloud Messaging client SDK
 - Firebase Admin SDK in `scripts/seed-firestore.ts` only
 
-Configured but not actively used in app code:
+Partially scaffolded:
 
-- Firebase Storage bucket appears in env config, but there is no `storage.rules` and no upload/download code.
+- PWA service worker in `public/sw.js`.
+- Firebase Messaging service worker in `public/firebase-messaging-sw.js`.
+- FCM token writes to `fcmTokens`; no Cloud Function or Admin SDK sender exists yet.
 
 Not present:
 
@@ -90,15 +98,18 @@ Read these before implementing privileged features:
 
 Current rules posture:
 
-- Staff checks use Firebase Auth custom claims, not user-writable Firestore profile fields.
+- Staff checks prefer Firebase Auth custom claims, but still fall back to `users/{uid}.role`.
 - Users cannot self-promote by editing `users/{uid}.role`.
-- `userRoles` are not client-writable.
-- Ladder sessions/courts/matches are staff-only from rules.
+- `userRoles` are client-writable by site admins and club directors; scope validation still needs backend/rules hardening.
+- Ladder sessions/courts are staff-only from rules; participants can submit, verify, or dispute limited ladder match fields.
 - ELO/stat mutations and `eloEvents` are not client-writable.
-- Audit collections are backend-only from client rules.
-- Public reads still exist for several catalog/player surfaces; privacy hardening remains a future phase.
+- Audit collections are append-only or admin-readable depending on collection, but audit creation is not yet centralized around trusted commands.
+- Public reads still exist for several catalog and operational surfaces; privacy hardening remains a future phase.
+- Player profile reads require authentication, but `users/{uid}` remains publicly readable and should be split from private account data.
+- Storage club-logo writes are allowed for any authenticated user under `/clubs/**`; director/tenant scope is currently enforced only by application UI and needs rules/backend enforcement.
+- FCM token registration can store device tokens, but actual push delivery requires a trusted server trigger.
 
-Important: custom claims are not set by this repository yet. Until a trusted backend exists, many staff/admin write paths will be unavailable by design.
+Important: custom claims are not set by this repository yet. Firestore rules still fall back to `users/{uid}.role` for staff checks, so role authority must be moved to custom claims or backend-owned role state before production.
 
 ## Backend-Required Workflows
 
@@ -116,8 +127,10 @@ The following flows must be moved to Cloud Functions or another trusted Admin SD
 - audit and role event creation
 - bulk notifications and announcements
 - achievement/trophy awards
+- push notification fanout
+- Storage authorization for club-owned assets
 
-The client helper [src/lib/security/backendRequired.ts](src/lib/security/backendRequired.ts) marks these blocked paths.
+The client helper [src/lib/security/backendRequired.ts](src/lib/security/backendRequired.ts) marks backend-required paths, but current write helpers also contain TODO comments where migration is still pending.
 
 ## Domain Engines
 
@@ -215,6 +228,8 @@ The current Firebase project id used by scripts is `pickleleauge`. Keep `.fireba
 - `Development Summaries/IMPLEMENTATION_GUIDE.md` - current implementation guide and secure-backend TODOs.
 - `Development Summaries/DEPLOYMENT_SUMMARY.md` - deployment and verification notes.
 - `automation/firebase_database_security_remediation_handoff.toon` - phased security remediation handoff.
+- `USE_CASE_TESTING.md` - role-based manual QA script and security regression checklist.
+- `ENHANCEMENTS.md` - reviewed feature backlog and recommended improvements.
 
 ## Production Gate
 
@@ -224,7 +239,8 @@ Do not treat this app as production-ready until:
 - custom claims or backend-only role docs are implemented
 - Firestore rules tests pass in CI
 - App Check is configured and enforced
-- Storage is either disabled or protected by `storage.rules`
+- Storage rules enforce owner/director scope, not just authentication and image constraints
+- FCM has a backend sender, token cleanup, and notification preferences
 - public/private profile data is split
 - CI has protected production deploy environments
 

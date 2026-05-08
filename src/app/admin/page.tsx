@@ -16,6 +16,7 @@ import {
   Megaphone,
   Send,
   Loader2,
+  FlaskConical,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
@@ -331,6 +332,27 @@ export default function AdminHubPage() {
                       </div>
                       <p className="text-ash-400 text-sm leading-relaxed">
                         Full history of all administrative actions on the platform.
+                      </p>
+                    </div>
+                  </Panel>
+                </Link>
+
+                <Link href="/admin/testing">
+                  <Panel
+                    variant="quest"
+                    padding="lg"
+                    className="h-full flex items-start gap-4 hover:border-rune-500/40 transition-colors cursor-pointer"
+                  >
+                    <div className="shrink-0 p-2 rounded-pixel bg-rune-500/15 text-rune-400">
+                      <FlaskConical className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="heading-fantasy text-ash-100 text-base">Test Accounts</h3>
+                        <RuneChip tone="rune" className="text-[9px]">Testing</RuneChip>
+                      </div>
+                      <p className="text-ash-400 text-sm leading-relaxed">
+                        Switch into a fake player account to QA the site from their perspective.
                       </p>
                     </div>
                   </Panel>

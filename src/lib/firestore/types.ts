@@ -31,6 +31,7 @@ export interface UserProfile {
   clubId: string | null;
   leagueIds: string[];
   startingSkillRating?: number | null;
+  isTestAccount?: boolean;
   createdAt: string;
   updatedAt: string;
 }

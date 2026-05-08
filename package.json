@@ -13,6 +13,7 @@
     "test:rules": "firebase emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed-firestore.ts",
+    "seed:test": "tsx scripts/seed-test-accounts.ts",
     "deploy": "next build && firebase deploy --only hosting --project pickleleauge",
     "deploy:all": "next build && firebase deploy --project pickleleauge",
     "rules:deploy": "firebase deploy --only firestore:rules --project pickleleauge",
