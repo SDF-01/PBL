@@ -137,9 +137,22 @@ export async function applyMatchEloDeltas(args: {
       : outcome.sideB.some((p) => p.userId === uid);
 
   const batch = writeBatch(db());
+  const playerMeta: Array<{
+    userId: string;
+    displayName: string;
+    won: boolean;
+    delta: number;
+    eloAfter: number;
+    pointsFor: number;
+    pointsAgainst: number;
+    source: string;
+    sourceId: string;
+  }> = [];
+
   for (const d of deltas) {
     const pRef = doc(db(), COLLECTIONS.players, d.userId);
     const snap = await getDoc(pRef);
+    let displayName = d.userId;
     if (!snap.exists()) {
       batch.set(pRef, {
         userId: d.userId,
@@ -158,6 +171,7 @@ export async function applyMatchEloDeltas(args: {
       });
     } else {
       const curr = snap.data() as PlayerProfileDoc;
+      displayName = curr.displayName ?? d.userId;
       batch.update(pRef, {
         elo: d.after,
         eloPeak: Math.max(d.after, curr.eloPeak ?? d.after),
@@ -185,8 +199,26 @@ export async function applyMatchEloDeltas(args: {
       pointsAgainst: pointsAgainst(outcome, d.userId),
       createdAt: serverTimestamp(),
     });
+    playerMeta.push({
+      userId: d.userId,
+      displayName,
+      won: won(d.userId),
+      delta: d.delta,
+      eloAfter: d.after,
+      pointsFor: pointsFor(outcome, d.userId),
+      pointsAgainst: pointsAgainst(outcome, d.userId),
+      source,
+      sourceId,
+    });
   }
   await batch.commit();
+
+  // best-effort fan-out: notify followers of each player in this match
+  try {
+    const { notifyFollowersOfMatch } = await import("./follows");
+    void notifyFollowersOfMatch(playerMeta);
+  } catch { /* ignore */ }
+
   return deltas;
 }
 

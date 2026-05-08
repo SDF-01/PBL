@@ -18,6 +18,7 @@ import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { getAdminStats, type AdminStats } from "@/lib/admin/repo";
+import { AnalyticsDashboard } from "@/components/admin/AnalyticsDashboard";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import type {
   LadderSeasonDoc,
@@ -112,6 +113,15 @@ export function AdminDashboard(_props: AdminDashboardProps) {
           Platform governance, club approvals, and role management.
         </p>
       </header>
+
+      {isSiteAdmin && (
+        <section>
+          <h2 className="heading-fantasy mb-3 text-xs uppercase tracking-[0.2em] text-ash-500">
+            Engagement Analytics
+          </h2>
+          <AnalyticsDashboard />
+        </section>
+      )}
 
       {isSiteAdmin && (
         <section>

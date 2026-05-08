@@ -45,6 +45,10 @@ export interface CreateLeagueInput {
   directorName?: string;
   coordinatorId?: string;
   coordinatorName?: string;
+  /** Stripe Payment Link URL for registration fee collection. */
+  stripePaymentLink?: string;
+  /** Registration fee in USD cents (display only). */
+  registrationFee?: number;
 }
 
 export async function createLeague(
@@ -109,6 +113,8 @@ export async function createLeague(
   if (input.sessionCount !== undefined) leagueData.sessionCount = input.sessionCount;
   if (input.directorId) { leagueData.directorId = input.directorId; leagueData.directorName = input.directorName ?? ""; }
   if (input.coordinatorId) { leagueData.coordinatorId = input.coordinatorId; leagueData.coordinatorName = input.coordinatorName ?? ""; }
+  if (input.stripePaymentLink) leagueData.stripePaymentLink = input.stripePaymentLink;
+  if (input.registrationFee !== undefined) leagueData.registrationFee = input.registrationFee;
 
   batch.set(leagueRef, leagueData);
 

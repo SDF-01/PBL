@@ -10,6 +10,10 @@ import {
   Pencil,
   Trophy,
   Activity,
+  UserPlus,
+  UserMinus,
+  Users,
+  MessageSquare,
 } from "lucide-react";
 import { SkeletonCard, SkeletonList } from "@/components/ui/Skeleton";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
@@ -21,9 +25,17 @@ import {
   getPlayerProfile,
   listRecentEloEvents,
 } from "@/lib/players/repo";
+import {
+  isFollowingPlayer,
+  followPlayer,
+  unfollowPlayer,
+  getPlayerFollowerCount,
+} from "@/lib/players/follows";
+import { sendChallenge } from "@/lib/players/challenges";
 import { getHeadToHeadRecord, type HeadToHeadRecord } from "@/lib/ladder/repo";
 import { getUserRole } from "@/lib/firestore/userRepo";
 import { skillBand } from "@/lib/players/elo";
+import { getTopPartners, type PartnerStat } from "@/lib/players/partnerStats";
 import type {
   PlayerProfileDoc,
   EloEventDoc,
@@ -54,6 +66,12 @@ function PlayerView() {
   const [h2h, setH2h] = useState<HeadToHeadRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [following, setFollowing] = useState<boolean | null>(null);
+  const [followerCount, setFollowerCount] = useState<number | null>(null);
+  const [followPending, setFollowPending] = useState(false);
+  const [challengeSent, setChallengeSent] = useState(false);
+  const [challengePending, setChallengePending] = useState(false);
+  const [partners, setPartners] = useState<PartnerStat[]>([]);
 
   useEffect(() => {
     if (!uid) {
@@ -71,8 +89,11 @@ function PlayerView() {
         setProfile(p);
         setEvents(ev);
         setRole(r);
+        getTopPartners(uid).then(setPartners).catch(() => {});
         if (user && user.uid !== uid) {
           getHeadToHeadRecord(user.uid, uid).then(setH2h).catch(() => {});
+          isFollowingPlayer(user.uid, uid).then(setFollowing).catch(() => setFollowing(false));
+          getPlayerFollowerCount(uid).then(setFollowerCount).catch(() => {});
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load.");
@@ -123,6 +144,40 @@ function PlayerView() {
   const band = skillBand(profile.elo);
   const isMe = user?.uid === profile.userId;
 
+  async function handleChallenge() {
+    if (!user || !uid || !profile || challengePending) return;
+    setChallengePending(true);
+    try {
+      await sendChallenge({
+        challengerId: user.uid,
+        challengerName: user.displayName ?? "A player",
+        challengeeId: uid,
+        challengeeName: profile.displayName,
+      });
+      setChallengeSent(true);
+    } finally {
+      setChallengePending(false);
+    }
+  }
+
+  async function handleFollowToggle() {
+    if (!user || !uid || followPending) return;
+    setFollowPending(true);
+    try {
+      if (following) {
+        await unfollowPlayer(user.uid, uid);
+        setFollowing(false);
+        setFollowerCount((c) => (c !== null ? Math.max(0, c - 1) : null));
+      } else {
+        await followPlayer(user.uid, uid, user.displayName ?? undefined);
+        setFollowing(true);
+        setFollowerCount((c) => (c !== null ? c + 1 : null));
+      }
+    } finally {
+      setFollowPending(false);
+    }
+  }
+
   const roleLabel: Record<UserRole, string> = {
     SITE_ADMIN: "Site Admin",
     CLUB_ADMIN: "Club Director",
@@ -154,12 +209,38 @@ function PlayerView() {
           >
             <ArrowLeft className="h-4 w-4" /> Leaderboard
           </Link>
-          {isMe && (
+          {isMe ? (
             <Link href="/players/edit">
               <Button size="sm" variant="outline">
                 <Pencil className="h-3.5 w-3.5" /> Edit
               </Button>
             </Link>
+          ) : user && (
+            <div className="flex gap-2">
+              {following !== null && (
+                <Button
+                  size="sm"
+                  variant={following ? "outline" : "primary"}
+                  onClick={handleFollowToggle}
+                  disabled={followPending}
+                >
+                  {following ? (
+                    <><UserMinus className="h-3.5 w-3.5" /> Following</>
+                  ) : (
+                    <><UserPlus className="h-3.5 w-3.5" /> Follow</>
+                  )}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleChallenge}
+                disabled={challengePending || challengeSent}
+              >
+                <Swords className="h-3.5 w-3.5" />
+                {challengeSent ? "Sent!" : "Challenge"}
+              </Button>
+            </div>
           )}
         </div>
 
@@ -189,6 +270,12 @@ function PlayerView() {
                       ? "Ambidextrous"
                       : `${profile.dominantHand.toLowerCase()}-handed`}
                   </RuneChip>
+                )}
+                {followerCount !== null && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-ash-500 font-mono">
+                    <Users className="h-3 w-3" />
+                    {followerCount} follower{followerCount !== 1 ? "s" : ""}
+                  </span>
                 )}
               </div>
               <h1 className="heading-fantasy text-display-md text-ash-100 mt-2">
@@ -302,6 +389,40 @@ function PlayerView() {
               ELO Trend
             </h2>
             <EloTrendChart events={events} />
+          </Panel>
+        )}
+
+        {partners.length > 0 && (
+          <Panel variant="base" padding="md">
+            <h2 className="heading-fantasy text-lg text-ash-100 mb-3">
+              Top Doubles Partners
+            </h2>
+            <ul className="divide-y divide-obsidian-400">
+              {partners.map((p, i) => (
+                <li key={p.partnerId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="heading-fantasy text-sm text-ash-500 w-4 shrink-0">{i + 1}</span>
+                    <Link
+                      href={`/players/view?uid=${p.partnerId}`}
+                      className="text-spectral-400 hover:text-spectral-300 truncate"
+                    >
+                      {p.partnerName ?? p.partnerId.slice(0, 8)}
+                    </Link>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-ash-400 font-mono text-xs">
+                      {p.wins}W–{p.losses}L
+                    </span>
+                    <span className={`heading-fantasy text-xs ${p.winRate >= 0.5 ? "text-ember-400" : "text-ash-500"}`}>
+                      {Math.round(p.winRate * 100)}%
+                    </span>
+                    <span className="text-ash-600 text-xs font-mono">
+                      {p.gamesPlayed}g
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </Panel>
         )}
 

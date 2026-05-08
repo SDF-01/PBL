@@ -162,6 +162,10 @@ export default function LeagueCreatePage() {
   const [director, setDirector] = useState<ResolvedUser | null>(null);
   const [coordinator, setCoordinator] = useState<ResolvedUser | null>(null);
 
+  // Payments
+  const [stripePaymentLink, setStripePaymentLink] = useState("");
+  const [registrationFee, setRegistrationFee] = useState("");
+
   // UI
   const [openSection, setOpenSection] = useState<"location" | "schedule" | "staff" | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -251,6 +255,8 @@ export default function LeagueCreatePage() {
         // Derive city/state from selected facility address for weather/display.
         city: selectedFacility?.address?.split(",").slice(-2, -1)[0]?.trim() || undefined,
         state: selectedFacility?.address?.split(",").slice(-1)[0]?.trim().split(" ")[0] || undefined,
+        stripePaymentLink: stripePaymentLink.trim() || undefined,
+        registrationFee: registrationFee ? Math.round(Number(registrationFee) * 100) : undefined,
       };
       const leagueId = await createLeague(user.uid, input);
       setSuccess(true);
@@ -619,6 +625,45 @@ export default function LeagueCreatePage() {
                 </div>
               </div>
             )}
+          </Panel>
+
+          {/* ── Payments (optional) ── */}
+          <Panel variant="base" padding="lg" className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">
+                Registration Fee
+              </h2>
+              <span className="text-[10px] text-ash-600 font-mono">optional</span>
+            </div>
+            <p className="text-xs text-ash-500 leading-relaxed">
+              Create a{" "}
+              <a href="https://dashboard.stripe.com/payment-links" target="_blank" rel="noopener noreferrer" className="text-spectral-500 hover:underline">
+                Stripe Payment Link
+              </a>{" "}
+              in your Stripe dashboard and paste it here. Players will be redirected to it when they join.
+            </p>
+            <label className="text-xs text-ash-400 space-y-1 block">
+              <span>Fee amount (USD)</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                className={fieldCls}
+                value={registrationFee}
+                onChange={(e) => setRegistrationFee(e.target.value)}
+                placeholder="e.g. 49.99"
+              />
+            </label>
+            <label className="text-xs text-ash-400 space-y-1 block">
+              <span>Stripe Payment Link URL</span>
+              <input
+                type="url"
+                className={fieldCls}
+                value={stripePaymentLink}
+                onChange={(e) => setStripePaymentLink(e.target.value)}
+                placeholder="https://buy.stripe.com/…"
+              />
+            </label>
           </Panel>
 
           {error && (

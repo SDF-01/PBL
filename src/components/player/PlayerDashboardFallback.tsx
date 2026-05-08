@@ -12,9 +12,9 @@ import {
   TrendingDown,
   Minus,
   Swords,
-  Clock,
   CheckCircle,
   ArrowRight,
+  Users,
 } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -24,9 +24,14 @@ import { listPlayDates } from "@/lib/ladder/repo";
 import { listPlayerRecentMatches } from "@/lib/ladder/repo";
 import { listFollowedClubs } from "@/lib/clubs/repo";
 import { listFeedPosts } from "@/lib/clubs/repo";
+import {
+  listFollowedPlayerIds,
+  listFollowedActivity,
+} from "@/lib/players/follows";
+import { ChallengesPanel } from "@/components/player/ChallengesPanel";
 import { skillBand } from "@/lib/players/elo";
 import { formatDistanceToNow, parseISO } from "date-fns";
-import type { PlayerProfileDoc, PlayDateDoc, LadderMatchDoc } from "@/lib/firestore/types";
+import type { PlayerProfileDoc, PlayDateDoc, LadderMatchDoc, EloEventDoc } from "@/lib/firestore/types";
 import type { ClubPost } from "@/lib/permissions/types";
 
 interface Props {
@@ -40,6 +45,9 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
   const [upcomingDates, setUpcomingDates] = useState<PlayDateDoc[]>([]);
   const [recentMatches, setRecentMatches] = useState<LadderMatchDoc[]>([]);
   const [feedPosts, setFeedPosts] = useState<ClubPost[]>([]);
+  const [playerActivity, setPlayerActivity] = useState<
+    Array<(EloEventDoc & { followedId: string }) & { followedProfile: PlayerProfileDoc | null }>
+  >([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +55,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
     (async () => {
       try {
         const today = new Date().toISOString().split("T")[0]!;
-        const [p, pd, rm, followedClubs] = await Promise.all([
+        const [p, pd, rm, followedClubs, followedIds] = await Promise.all([
           getPlayerProfile(userId),
           listPlayDates().then((dates) =>
             dates
@@ -57,6 +65,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
           ),
           listPlayerRecentMatches(userId, 5).catch(() => [] as LadderMatchDoc[]),
           listFollowedClubs(userId).catch(() => []),
+          listFollowedPlayerIds(userId).catch(() => [] as string[]),
         ]);
         setProfile(p);
         setUpcomingDates(pd);
@@ -64,6 +73,19 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
         if (followedClubs.length > 0) {
           const posts = await listFeedPosts(followedClubs.map((c) => c.id)).catch(() => []);
           setFeedPosts(posts);
+        }
+        if (followedIds.length > 0) {
+          const events = await listFollowedActivity(followedIds).catch(() => []);
+          const profileMap = new Map<string, PlayerProfileDoc | null>();
+          await Promise.all(
+            followedIds.map(async (id) => {
+              const prof = await getPlayerProfile(id).catch(() => null);
+              profileMap.set(id, prof);
+            }),
+          );
+          setPlayerActivity(
+            events.map((e) => ({ ...e, followedProfile: profileMap.get(e.followedId) ?? null })),
+          );
         }
       } finally {
         setLoading(false);
@@ -198,6 +220,34 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
         )}
       </Panel>
 
+      {/* Challenges inbox */}
+      <ChallengesPanel userId={userId} displayName={profile?.displayName ?? "Player"} />
+
+      {/* Player activity feed */}
+      <Panel variant="base" padding="md">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="heading-fantasy text-ash-100 text-base flex items-center gap-2">
+            <Users className="h-4 w-4 text-rune-400" /> Following Activity
+          </h2>
+          <Link href="/players">
+            <button className="text-[11px] text-ash-500 hover:text-ash-300 transition-colors flex items-center gap-0.5">
+              Find players <ArrowRight className="h-3 w-3" />
+            </button>
+          </Link>
+        </div>
+        {playerActivity.length === 0 ? (
+          <p className="text-ash-500 text-sm">
+            Follow players to see their match results here.
+          </p>
+        ) : (
+          <ul className="divide-y divide-obsidian-700">
+            {playerActivity.map((item) => (
+              <ActivityRow key={item.id} item={item} />
+            ))}
+          </ul>
+        )}
+      </Panel>
+
       {/* Club feed */}
       {feedPosts.length > 0 && (
         <Panel variant="base" padding="md">
@@ -230,6 +280,80 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
         </Panel>
       )}
     </div>
+  );
+}
+
+function ActivityRow({
+  item,
+}: {
+  item: (EloEventDoc & { followedId: string }) & { followedProfile: PlayerProfileDoc | null };
+}) {
+  const name = item.followedProfile?.displayName ?? item.playerId.slice(0, 8);
+  const initial = name.slice(0, 1).toUpperCase();
+  const won = item.won;
+  const deltaStr = item.delta >= 0 ? `+${item.delta}` : String(item.delta);
+  const sourceLabel = item.source === "ladderMatch" ? "Ladder" : "Tournament";
+  const scoreStr =
+    typeof item.pointsFor === "number" && typeof item.pointsAgainst === "number"
+      ? ` · ${item.pointsFor}–${item.pointsAgainst}`
+      : "";
+
+  const ageMs = (() => {
+    const ca = item.createdAt as unknown;
+    if (ca && typeof ca === "object" && "toDate" in ca)
+      return (ca as { toDate(): Date }).toDate().getTime();
+    if (typeof ca === "string") return new Date(ca).getTime();
+    return 0;
+  })();
+  const ago = ageMs > 0
+    ? formatDistanceToNow(new Date(ageMs), { addSuffix: true })
+    : "";
+
+  return (
+    <li className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+      <Link href={`/players/view?uid=${item.followedId}`} className="shrink-0">
+        {item.followedProfile?.photoURL ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.followedProfile.photoURL}
+            alt=""
+            className="h-7 w-7 rounded-pixel object-cover border border-obsidian-500"
+          />
+        ) : (
+          <div className="h-7 w-7 rounded-pixel bg-obsidian-700 border border-obsidian-500 flex items-center justify-center text-xs text-ash-500">
+            {initial}
+          </div>
+        )}
+      </Link>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Link
+            href={`/players/view?uid=${item.followedId}`}
+            className="text-sm text-ash-200 hover:text-ash-100 font-medium transition-colors"
+          >
+            {name}
+          </Link>
+          <span className="text-ash-500 text-xs">
+            {won ? "won" : "lost"} a {sourceLabel} match{scoreStr}
+          </span>
+        </div>
+        <p className="text-ash-600 text-[10px] mt-0.5">{ago}</p>
+      </div>
+      <div className="shrink-0 flex items-center gap-1.5">
+        {won ? (
+          <TrendingUp className="h-3.5 w-3.5 text-spectral-400" />
+        ) : (
+          <TrendingDown className="h-3.5 w-3.5 text-crimson-500" />
+        )}
+        <span
+          className={`heading-fantasy text-sm ${
+            item.delta >= 0 ? "text-spectral-400" : "text-crimson-500"
+          }`}
+        >
+          {deltaStr}
+        </span>
+      </div>
+    </li>
   );
 }
 

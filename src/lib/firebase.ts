@@ -7,6 +7,7 @@ import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getMessaging, type Messaging } from "firebase/messaging";
 
 const config = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -22,6 +23,7 @@ let _app: FirebaseApp | null = null;
 let _db: Firestore | null = null;
 let _auth: Auth | null = null;
 let _storage: FirebaseStorage | null = null;
+let _messaging: Messaging | null = null;
 
 export function isFirebaseConfigured(): boolean {
   return Boolean(config.apiKey && config.projectId && config.appId);
@@ -54,6 +56,13 @@ export function storage(): FirebaseStorage {
   if (_storage) return _storage;
   _storage = getStorage(getFirebaseApp());
   return _storage;
+}
+
+/** Returns the Firebase Messaging instance. Browser-only — call inside a useEffect or async function. */
+export function messaging(): Messaging {
+  if (_messaging) return _messaging;
+  _messaging = getMessaging(getFirebaseApp());
+  return _messaging;
 }
 
 /**

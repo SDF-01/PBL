@@ -846,9 +846,14 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                           <CalendarDays className="h-3.5 w-3.5" /> Play Dates
                         </Button>
                       </Link>
-                      <Link href="/ladder/standings">
+                      <Link href={`/leagues/${leagueId}/standings`}>
                         <Button size="sm" variant="outline" className="w-full">
                           <Layers className="h-3.5 w-3.5" /> Standings
+                        </Button>
+                      </Link>
+                      <Link href={`/leagues/${leagueId}/schedule`}>
+                        <Button size="sm" variant="outline" className="w-full">
+                          <CalendarDays className="h-3.5 w-3.5" /> Schedule
                         </Button>
                       </Link>
                       <Button
@@ -877,20 +882,50 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                       </h2>
                     </div>
                     {joinError && <p className="text-crimson-400 text-xs">{joinError}</p>}
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      onClick={handleJoin}
-                      disabled={joining}
-                    >
-                      {joining ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Joining…
-                        </>
-                      ) : (
-                        "Join League"
-                      )}
-                    </Button>
+                    {league.stripePaymentLink ? (
+                      <div className="space-y-2">
+                        {typeof league.registrationFee === "number" && (
+                          <p className="text-ash-400 text-sm font-mono">
+                            Registration fee:{" "}
+                            <span className="text-gold-400 heading-fantasy">
+                              ${(league.registrationFee / 100).toFixed(2)}
+                            </span>
+                          </p>
+                        )}
+                        <a
+                          href={league.stripePaymentLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full"
+                        >
+                          <Button size="sm" variant="primary" className="w-full">
+                            Pay &amp; Register →
+                          </Button>
+                        </a>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full text-ash-500"
+                          onClick={handleJoin}
+                          disabled={joining}
+                        >
+                          {joining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Joining…</> : "Join without paying"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={handleJoin}
+                        disabled={joining}
+                      >
+                        {joining ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Joining…</>
+                        ) : (
+                          "Join League"
+                        )}
+                      </Button>
+                    )}
                   </Panel>
                 )}
 

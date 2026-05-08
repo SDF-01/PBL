@@ -9,6 +9,7 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileTopBar } from "@/components/layout/mobile/MobileTopBar";
 import { MobileTabBar } from "@/components/layout/mobile/MobileTabBar";
 import { BackToHome } from "@/components/layout/BackToHome";
+import { PushNotificationBanner } from "@/components/PushNotificationBanner";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isMobile, ready: deviceReady } = useDevice();
@@ -54,6 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+      <PushNotificationBanner />
     </>
   );
 }

@@ -134,6 +134,10 @@ export interface LeagueDoc {
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Stripe Payment Link URL for league registration fee. */
+  stripePaymentLink?: string;
+  /** Registration fee in USD cents (display only; enforcement via Stripe). */
+  registrationFee?: number;
 }
 
 export interface SeasonDoc {
@@ -269,6 +273,8 @@ export interface NotificationDoc {
     | "SCORE_DISPUTED"
     | "LADDER_PROMOTED"
     | "LADDER_DEMOTED"
+    | "PLAYER_FOLLOWED"
+    | "PLAYER_MATCH_RESULT"
     | "GENERAL";
   read: boolean;
   createdAt: string;
@@ -558,5 +564,81 @@ export interface EloEventDoc {
   won?: boolean;
   pointsFor?: number;
   pointsAgainst?: number;
+  createdAt: string;
+}
+
+// ============================================================
+// PLAYER CHALLENGES
+// Player-to-player informal match requests.
+// ============================================================
+
+export type ChallengeStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "DECLINED"
+  | "COMPLETED"
+  | "EXPIRED";
+
+export interface PlayerChallengeDoc {
+  id: string;
+  challengerId: string;
+  challengerName: string;
+  challengeeId: string;
+  challengeeName: string;
+  message?: string;
+  proposedDate?: string;
+  status: ChallengeStatus;
+  scoreA?: number;
+  scoreB?: number;
+  /** Who was sideA (challenger = "challenger" or "challengee"). */
+  winnerSide?: "challenger" | "challengee";
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// PLAY-DATE RSVP
+// ============================================================
+
+export interface PlayDateRsvpDoc {
+  id: string;
+  playDateId: string;
+  userId: string;
+  displayName: string;
+  attending: boolean;
+  createdAt: string;
+}
+
+// ============================================================
+// FCM PUSH TOKENS
+// ============================================================
+
+export interface FcmTokenDoc {
+  id: string;
+  userId: string;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// LEAGUE ROUND-ROBIN SCHEDULE MATCHES
+// ============================================================
+
+export type ScheduleMatchStatus = "SCHEDULED" | "COMPLETED" | "FORFEIT";
+
+export interface LeagueScheduleMatchDoc {
+  id: string;
+  leagueId: string;
+  round: number;
+  playerAId: string;
+  playerAName: string;
+  playerBId: string;
+  playerBName: string;
+  status: ScheduleMatchStatus;
+  scoreA?: number;
+  scoreB?: number;
+  scheduledDate?: string;
+  completedAt?: string;
   createdAt: string;
 }

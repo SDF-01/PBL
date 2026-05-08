@@ -291,31 +291,61 @@ export default function PlayerEditPage() {
                   maxLength={60}
                 />
               </Field>
-              <Field label="DUPR rating" className="md:col-span-1">
-                <input
-                  type="number"
-                  step="0.001"
-                  min={2}
-                  max={8}
-                  className={fieldCls}
-                  value={duprRating}
-                  onChange={(e) =>
-                    setDuprRating(
-                      e.target.value === "" ? "" : Number(e.target.value),
-                    )
-                  }
-                  placeholder="e.g. 4.25"
-                />
-              </Field>
-              <Field label="DUPR id">
-                <input
-                  className={fieldCls}
-                  value={duprId}
-                  onChange={(e) => setDuprId(e.target.value)}
-                  placeholder="optional"
-                  maxLength={40}
-                />
-              </Field>
+              <div className="md:col-span-2 border-t border-obsidian-500 pt-3 mt-1">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+                  <span className="text-xs uppercase tracking-[0.2em] text-ash-400">
+                    DUPR Rating
+                  </span>
+                  {duprId ? (
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      ✓ linked ({duprId})
+                    </span>
+                  ) : (
+                    <a
+                      href="https://mydupr.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-spectral-500 hover:text-spectral-400"
+                    >
+                      Find your DUPR ID →
+                    </a>
+                  )}
+                </div>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <Field label="DUPR rating">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min={2}
+                      max={8}
+                      className={fieldCls}
+                      value={duprRating}
+                      onChange={(e) =>
+                        setDuprRating(
+                          e.target.value === "" ? "" : Number(e.target.value),
+                        )
+                      }
+                      placeholder="e.g. 4.25"
+                    />
+                  </Field>
+                  <Field label="DUPR player id">
+                    <input
+                      className={fieldCls}
+                      value={duprId}
+                      onChange={(e) => setDuprId(e.target.value)}
+                      placeholder="From mydupr.com profile URL"
+                      maxLength={40}
+                    />
+                  </Field>
+                </div>
+                <p className="text-[11px] text-ash-600 mt-1.5 leading-relaxed">
+                  Enter your DUPR rating manually from{" "}
+                  <a href="https://mydupr.com" target="_blank" rel="noopener noreferrer" className="text-spectral-500 hover:underline">
+                    mydupr.com
+                  </a>
+                  . Your ID appears in your profile URL.
+                </p>
+              </div>
               <Field label="Bio" className="md:col-span-2">
                 <textarea
                   className={`${fieldCls} min-h-[90px]`}
