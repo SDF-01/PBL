@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft, CheckSquare, Download, Loader2, MapPin,
-  Search, Square, Trophy, AlertCircle, CheckCircle2,
+  ArrowLeft, CheckSquare, ChevronDown, ChevronUp, ChevronsUpDown,
+  Download, Filter, Loader2, MapPin, Search, Square, Trophy,
+  AlertCircle, CheckCircle2, X,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
@@ -28,6 +29,17 @@ interface ImportResult {
   errors: string[];
 }
 
+type SortCol = "name" | "address" | "courts" | "status";
+type SortDir = "asc" | "desc";
+type StatusFilter = "all" | "new" | "imported";
+
+function SortIcon({ col, active, dir }: { col: SortCol; active: SortCol | null; dir: SortDir }) {
+  if (active !== col) return <ChevronsUpDown className="h-3 w-3 text-ash-600 ml-1 inline" />;
+  return dir === "asc"
+    ? <ChevronUp className="h-3 w-3 text-ember-400 ml-1 inline" />
+    : <ChevronDown className="h-3 w-3 text-ember-400 ml-1 inline" />;
+}
+
 export default function ImportCourtsPage() {
   const { user } = useAuth();
   const { isSiteAdmin, loading: permLoading } = usePermissions();
@@ -40,8 +52,15 @@ export default function ImportCourtsPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
-  // Load existing osmIds so we can flag already-imported courts
   const [existingOsmIds, setExistingOsmIds] = useState<Set<string>>(new Set());
+
+  // Filter & sort state
+  const [filterText, setFilterText] = useState("");
+  const [filterStatus, setFilterStatus] = useState<StatusFilter>("all");
+  const [filterHasCourts, setFilterHasCourts] = useState(false);
+  const [filterHideUnnamed, setFilterHideUnnamed] = useState(true);
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   useEffect(() => {
     if (!isFirebaseConfigured() || !isSiteAdmin) return;
@@ -64,6 +83,11 @@ export default function ImportCourtsPage() {
     setSearchError(null);
     setRows(null);
     setResult(null);
+    setFilterText("");
+    setFilterStatus("all");
+    setFilterHasCourts(false);
+    setFilterHideUnnamed(true);
+    setSortCol(null);
     try {
       const results = await searchPickleballCourts(areaQuery.trim());
       setRows(
@@ -80,6 +104,15 @@ export default function ImportCourtsPage() {
     }
   }
 
+  function toggleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  }
+
   function toggleRow(osmId: string) {
     setRows((prev) =>
       prev?.map((r) => (r.osmId === osmId ? { ...r, selected: !r.selected } : r)) ?? null,
@@ -93,6 +126,53 @@ export default function ImportCourtsPage() {
   function deselectAll() {
     setRows((prev) => prev?.map((r) => ({ ...r, selected: false })) ?? null);
   }
+
+  // Derived: filtered + sorted rows
+  const displayedRows = useMemo(() => {
+    if (!rows) return [];
+    let out = rows;
+
+    if (filterStatus === "new") out = out.filter((r) => !r.alreadyImported);
+    else if (filterStatus === "imported") out = out.filter((r) => r.alreadyImported);
+
+    if (filterHideUnnamed) out = out.filter((r) => !!r.facilityName);
+
+    if (filterHasCourts) out = out.filter((r) => (r.pickleballCourts ?? 0) > 0);
+
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase();
+      out = out.filter(
+        (r) =>
+          (r.facilityName ?? "").toLowerCase().includes(q) ||
+          (r.address ?? "").toLowerCase().includes(q),
+      );
+    }
+
+    if (sortCol) {
+      out = [...out].sort((a, b) => {
+        let av: string | number = 0;
+        let bv: string | number = 0;
+        if (sortCol === "name") {
+          av = (a.facilityName ?? "").toLowerCase();
+          bv = (b.facilityName ?? "").toLowerCase();
+        } else if (sortCol === "address") {
+          av = (a.address ?? "").toLowerCase();
+          bv = (b.address ?? "").toLowerCase();
+        } else if (sortCol === "courts") {
+          av = a.pickleballCourts ?? -1;
+          bv = b.pickleballCourts ?? -1;
+        } else if (sortCol === "status") {
+          av = a.alreadyImported ? 1 : 0;
+          bv = b.alreadyImported ? 1 : 0;
+        }
+        if (av < bv) return sortDir === "asc" ? -1 : 1;
+        if (av > bv) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return out;
+  }, [rows, filterText, filterStatus, filterHasCourts, filterHideUnnamed, sortCol, sortDir]);
 
   async function handleImport() {
     if (!user || !rows) return;
@@ -112,7 +192,6 @@ export default function ImportCourtsPage() {
       const { db } = await import("@/lib/firebase");
       const { COLLECTIONS } = await import("@/lib/firestore/collections");
 
-      // Ensure community club document exists
       const communityRef = doc(db(), COLLECTIONS.clubs, COMMUNITY_CLUB_ID);
       await setDoc(
         communityRef,
@@ -133,7 +212,6 @@ export default function ImportCourtsPage() {
         if (existingOsmIds.has(osm.osmId)) { skipped++; continue; }
         try {
           const payload = osmToClubFacility(osm, user.uid);
-          // Exclude clubId from payload (addClubFacility adds it)
           const { clubId: _clubId, createdAt: _ca, updatedAt: _ua, updatedBy: _ub, ...rest } = payload;
           await addClubFacility(COMMUNITY_CLUB_ID, rest as Parameters<typeof addClubFacility>[1], user.uid);
           setExistingOsmIds((prev) => new Set([...prev, osm.osmId]));
@@ -143,7 +221,6 @@ export default function ImportCourtsPage() {
         }
       }
 
-      // Mark imported rows as alreadyImported
       setRows((prev) =>
         prev?.map((r) => {
           const wasImported = toImport.some((t) => t.osmId === r.osmId);
@@ -190,6 +267,9 @@ export default function ImportCourtsPage() {
   const selectedCount = rows?.filter((r) => r.selected && !r.alreadyImported).length ?? 0;
   const newCount = rows?.filter((r) => !r.alreadyImported).length ?? 0;
   const alreadyCount = rows?.filter((r) => r.alreadyImported).length ?? 0;
+  const isFiltered = filterText.trim() || filterStatus !== "all" || filterHasCourts || filterHideUnnamed;
+
+  const thCls = "text-[10px] uppercase tracking-widest text-ash-500 hover:text-ash-300 transition-colors cursor-pointer select-none flex items-center";
 
   return (
     <ResponsiveShell desktopChromeless>
@@ -270,10 +350,15 @@ export default function ImportCourtsPage() {
         {/* Results table */}
         {rows !== null && (
           <Panel variant="inventory" padding="md" className="space-y-3">
-            {/* Toolbar */}
+
+            {/* Toolbar row 1 — counts + select actions */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap text-sm">
-                <span className="text-ash-200 font-medium">{rows.length} results</span>
+                <span className="text-ash-200 font-medium">
+                  {isFiltered
+                    ? <>{displayedRows.length} <span className="text-ash-500 font-normal">of {rows.length}</span></>
+                    : rows.length} results
+                </span>
                 {newCount > 0 && (
                   <RuneChip tone="spectral" className="text-[9px]">{newCount} new</RuneChip>
                 )}
@@ -300,25 +385,127 @@ export default function ImportCourtsPage() {
               </div>
             </div>
 
+            {/* Toolbar row 2 — filters */}
+            {rows.length > 0 && (
+              <div className="flex items-center gap-3 flex-wrap border-t border-obsidian-700 pt-3">
+                <Filter className="h-3.5 w-3.5 text-ash-500 shrink-0" />
+
+                {/* Text search */}
+                <div className="relative flex-1 min-w-[160px] max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-ash-600 pointer-events-none" />
+                  <input
+                    className="w-full bg-obsidian-900 border border-obsidian-500 rounded-pixel pl-7 pr-7 py-1.5 text-xs text-ash-100 placeholder:text-ash-600 focus:outline-none focus:border-ember-500"
+                    placeholder="Name or address…"
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                  />
+                  {filterText && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterText("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ash-600 hover:text-ash-300 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Status pills */}
+                <div className="flex items-center gap-1">
+                  {(["all", "new", "imported"] as StatusFilter[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setFilterStatus(s)}
+                      className={`px-2 py-1 text-[10px] uppercase tracking-wide rounded-pixel border transition-colors ${
+                        filterStatus === s
+                          ? "border-ember-500 bg-ember-500/15 text-ember-300"
+                          : "border-obsidian-500 text-ash-500 hover:border-obsidian-400 hover:text-ash-300"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Hide unnamed toggle — on by default */}
+                <button
+                  type="button"
+                  onClick={() => setFilterHideUnnamed((v) => !v)}
+                  className={`px-2 py-1 text-[10px] uppercase tracking-wide rounded-pixel border transition-colors ${
+                    filterHideUnnamed
+                      ? "border-ember-500 bg-ember-500/15 text-ember-300"
+                      : "border-obsidian-500 text-ash-500 hover:border-obsidian-400 hover:text-ash-300"
+                  }`}
+                >
+                  Hide unnamed
+                </button>
+
+                {/* Has courts toggle */}
+                <button
+                  type="button"
+                  onClick={() => setFilterHasCourts((v) => !v)}
+                  className={`px-2 py-1 text-[10px] uppercase tracking-wide rounded-pixel border transition-colors ${
+                    filterHasCourts
+                      ? "border-spectral-500 bg-spectral-500/15 text-spectral-300"
+                      : "border-obsidian-500 text-ash-500 hover:border-obsidian-400 hover:text-ash-300"
+                  }`}
+                >
+                  Has court count
+                </button>
+
+                {/* Clear all filters */}
+                {isFiltered && (
+                  <button
+                    type="button"
+                    onClick={() => { setFilterText(""); setFilterStatus("all"); setFilterHasCourts(false); setFilterHideUnnamed(false); }}
+                    className="text-[10px] text-ash-600 hover:text-crimson-400 transition-colors flex items-center gap-0.5"
+                  >
+                    <X className="h-3 w-3" /> Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+
             {rows.length === 0 ? (
               <div className="text-center py-6 space-y-1">
                 <Trophy className="h-6 w-6 text-ash-600 mx-auto" />
                 <p className="text-ash-500 text-sm">No pickleball courts found in this area.</p>
                 <p className="text-ash-600 text-xs">Try a broader area like a county or state.</p>
               </div>
+            ) : displayedRows.length === 0 ? (
+              <div className="text-center py-6 space-y-1">
+                <Filter className="h-6 w-6 text-ash-600 mx-auto" />
+                <p className="text-ash-500 text-sm">No results match your filters.</p>
+                <button
+                  type="button"
+                  onClick={() => { setFilterText(""); setFilterStatus("all"); setFilterHasCourts(false); }}
+                  className="text-xs text-ember-400 hover:text-ember-300 transition-colors"
+                >
+                  Clear filters
+                </button>
+              </div>
             ) : (
               <>
-                {/* Column headers */}
-                <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem] gap-2 text-[10px] uppercase tracking-widest text-ash-600 pb-2 border-b border-obsidian-600">
+                {/* Column headers — sortable */}
+                <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem] gap-2 pb-2 border-b border-obsidian-600">
                   <span />
-                  <span>Facility</span>
-                  <span>Address</span>
-                  <span className="text-right">Courts</span>
-                  <span className="text-center">Status</span>
+                  <button type="button" className={thCls} onClick={() => toggleSort("name")}>
+                    Facility <SortIcon col="name" active={sortCol} dir={sortDir} />
+                  </button>
+                  <button type="button" className={thCls} onClick={() => toggleSort("address")}>
+                    Address <SortIcon col="address" active={sortCol} dir={sortDir} />
+                  </button>
+                  <button type="button" className={`${thCls} justify-end`} onClick={() => toggleSort("courts")}>
+                    <SortIcon col="courts" active={sortCol} dir={sortDir} /> Courts
+                  </button>
+                  <button type="button" className={`${thCls} justify-center`} onClick={() => toggleSort("status")}>
+                    Status <SortIcon col="status" active={sortCol} dir={sortDir} />
+                  </button>
                 </div>
 
                 <div className="divide-y divide-obsidian-700 max-h-[60vh] overflow-y-auto -mx-4 px-4">
-                  {rows.map((row) => (
+                  {displayedRows.map((row) => (
                     <div
                       key={row.osmId}
                       className={`grid grid-cols-[2rem_1fr_1fr_5rem_5rem] gap-2 items-start py-2.5 ${
@@ -347,7 +534,7 @@ export default function ImportCourtsPage() {
                         </p>
                         {row.osmId && (
                           <a
-                            href={`https://www.openstreetmap.org/${row.osmId.replace("/", "/")}`}
+                            href={`https://www.openstreetmap.org/${row.osmId}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[9px] text-ash-600 hover:text-spectral-400 transition-colors"
