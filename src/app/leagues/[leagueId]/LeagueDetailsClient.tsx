@@ -55,6 +55,10 @@ function calcSessionCount(first: string, last: string): number {
   return Math.floor((d2 - d1) / (7 * 24 * 60 * 60 * 1000)) + 1;
 }
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function LeagueSettingsEditor({
   league,
   leagueId,
@@ -416,6 +420,10 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   const [joinError, setJoinError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [facilities, setFacilities] = useState<ClubFacility[]>([]);
+  const leagueFacility = league?.facilityId
+    ? facilities.find((facility) => facility.id === league.facilityId)
+    : undefined;
+  const weatherFacility = leagueFacility ?? facilities[0];
   const [weather, setWeather] = useState<WeatherDay[] | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(false);
@@ -459,7 +467,14 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   // Fetch 5-day weather forecast via Open-Meteo forecast API (no API key required).
   useEffect(() => {
     if (!league) return;
-    const hasLocation = facilities[0]?.address || league.venueAddress || league.city;
+    const hasLeagueCoordinates = finiteNumber(league.latitude) && finiteNumber(league.longitude);
+    const hasFacilityCoordinates = finiteNumber(weatherFacility?.lat) && finiteNumber(weatherFacility?.lng);
+    const hasLocation =
+      hasLeagueCoordinates ||
+      hasFacilityCoordinates ||
+      weatherFacility?.address ||
+      league.venueAddress ||
+      league.city;
     if (!hasLocation) return;
     setWeatherLoading(true);
     setWeatherError(false);
@@ -469,20 +484,19 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
         // 1. League lat/lng (set when league was geocoded)
         // 2. Facility lat/lng (set when facility was geocoded — most common)
         // 3. Nominatim geocode of full address / zip fallback
-        let lat: number | undefined = league.latitude;
-        let lng: number | undefined = league.longitude;
+        let lat: number | undefined = finiteNumber(league.latitude) ? league.latitude : undefined;
+        let lng: number | undefined = finiteNumber(league.longitude) ? league.longitude : undefined;
 
-        if (!lat || !lng) {
-          const facility = facilities[0];
-          if (facility?.lat && facility?.lng) {
-            lat = facility.lat;
-            lng = facility.lng;
+        if (!finiteNumber(lat) || !finiteNumber(lng)) {
+          if (finiteNumber(weatherFacility?.lat) && finiteNumber(weatherFacility?.lng)) {
+            lat = weatherFacility.lat;
+            lng = weatherFacility.lng;
           }
         }
 
-        if (!lat || !lng) {
+        if (!finiteNumber(lat) || !finiteNumber(lng)) {
           // Last resort: geocode with Nominatim using full address (handles street addresses)
-          const facilityAddress = facilities[0]?.address ?? league.venueAddress ?? "";
+          const facilityAddress = weatherFacility?.address ?? league.venueAddress ?? "";
           const geoQuery = facilityAddress || `${league.city ?? ""} ${league.state ?? ""}`.trim();
           if (geoQuery) {
             const geoRes = await fetch(
@@ -497,7 +511,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
           }
         }
 
-        if (!lat || !lng) { setWeatherError(true); return; }
+        if (!finiteNumber(lat) || !finiteNumber(lng)) { setWeatherError(true); return; }
         const wxRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=5`,
         );
@@ -525,7 +539,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
         setWeatherLoading(false);
       }
     })();
-  }, [league, facilities]);
+  }, [league, weatherFacility]);
 
   const clubId = league?.clubId ?? league?.orgId ?? "";
   const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(clubId));
@@ -759,7 +773,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
               <div className="space-y-4">
 
                 {/* ── Weather forecast ── */}
-                {(facilities[0]?.address || league.venueAddress || league.city) && (
+                {(weatherFacility?.address || weatherFacility?.lat || league.venueAddress || league.city) && (
                   <Panel variant="base" padding="lg" className="space-y-3">
                     <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Weather Forecast</p>
                     {weatherLoading ? (
