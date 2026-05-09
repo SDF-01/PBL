@@ -61,8 +61,9 @@ export function MobileTabBar() {
             <li key={href}>
               <Link
                 href={href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium tracking-wide uppercase transition-colors",
+                  "flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium tracking-wide uppercase transition-colors",
                   active ? "text-ember-400" : "text-ash-400 hover:text-ash-200",
                 )}
               >

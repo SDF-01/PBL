@@ -8,12 +8,24 @@ import { ModeToggle } from "@/components/ui/ModeToggle";
 import { Bell } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useAdminMode } from "@/lib/admin-context";
+import { usePermissions } from "@/lib/permissions/usePermissions";
+import { useRoleView } from "@/lib/role-view-context";
+import { RuneChip } from "@/components/ui/RuneChip";
 import { subscribeNotifications } from "@/lib/firestore/repo";
 
 export function MobileTopBar() {
   const { user } = useAuth();
   const { canAccessAdmin } = useAdminMode();
+  const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, loading } = usePermissions();
+  const { isStaffView } = useRoleView();
   const [unread, setUnread] = useState(0);
+
+  const roleChip = !loading && user
+    ? isSiteAdmin && isStaffView ? { label: "Admin", tone: "ember" as const }
+    : clubDirectorFor.length > 0 && isStaffView ? { label: "Director", tone: "rune" as const }
+    : coordinatorClubIds.length > 0 && isStaffView ? { label: "Coord", tone: "rune" as const }
+    : null
+    : null;
 
   useEffect(() => {
     if (!user) {
@@ -34,6 +46,11 @@ export function MobileTopBar() {
           <span className="heading-fantasy text-ash-100 text-base tracking-wide">
             Ladder League
           </span>
+          {roleChip && (
+            <RuneChip tone={roleChip.tone} className="text-[9px]">
+              {roleChip.label}
+            </RuneChip>
+          )}
         </Link>
         <div className="flex items-center gap-2">
           {canAccessAdmin && <ModeToggle />}

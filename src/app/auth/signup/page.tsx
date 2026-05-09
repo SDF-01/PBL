@@ -13,6 +13,38 @@ import { resolveSelectedLeagueId } from "@/lib/selectedLeague";
 const fieldCls =
   "w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100 placeholder:text-ash-600 focus:outline-none focus:border-ember-500";
 
+function passwordStrength(pw: string): { score: 0 | 1 | 2 | 3 | 4; label: string; color: string } {
+  if (!pw) return { score: 0, label: "", color: "" };
+  let s = 0;
+  if (pw.length >= 8)  s++;
+  if (pw.length >= 12) s++;
+  if (/[A-Z]/.test(pw)) s++;
+  if (/[0-9]/.test(pw)) s++;
+  if (/[^a-zA-Z0-9]/.test(pw)) s++;
+  const score = Math.min(4, s) as 0 | 1 | 2 | 3 | 4;
+  const LABELS: Record<number, string> = { 0: "", 1: "Weak", 2: "Fair", 3: "Good", 4: "Strong" };
+  const COLORS: Record<number, string> = { 0: "", 1: "bg-crimson-500", 2: "bg-ember-500", 3: "bg-gold-400", 4: "bg-emerald-500" };
+  return { score, label: LABELS[score] ?? "", color: COLORS[score] ?? "" };
+}
+
+function PasswordStrengthBar({ password }: { password: string }) {
+  const { score, label, color } = passwordStrength(password);
+  if (!password) return null;
+  return (
+    <div className="mt-1.5 space-y-1">
+      <div className="flex gap-1">
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors duration-300 ${i <= score ? color : "bg-obsidian-500"}`}
+          />
+        ))}
+      </div>
+      <p className="text-[11px] text-ash-500">{label}</p>
+    </div>
+  );
+}
+
 function Field({
   label,
   required,
@@ -209,6 +241,7 @@ function SignupPageContent() {
                 autoComplete="new-password"
                 required
               />
+              <PasswordStrengthBar password={password} />
             </Field>
 
             <Field label="Confirm password" required className="md:col-span-2">

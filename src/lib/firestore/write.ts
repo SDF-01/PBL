@@ -144,6 +144,12 @@ export async function markNotificationRead(id: string): Promise<void> {
   await updateDoc(doc(db(), COLLECTIONS.notifications, id), { read: true });
 }
 
+export async function markAllNotificationsRead(ids: string[]): Promise<void> {
+  await Promise.all(
+    ids.map((id) => updateDoc(doc(db(), COLLECTIONS.notifications, id), { read: true })),
+  );
+}
+
 // ============================================================
 // REGISTRATIONS
 // ============================================================

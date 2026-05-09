@@ -24,6 +24,7 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { useToast } from "@/lib/toast-context";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { getAdminStats, listRecentRoleEvents, type AdminStats } from "@/lib/admin/repo";
 import { listAllUsers } from "@/lib/firestore/userRepo";
 import { writeNotification } from "@/lib/ladder/write";
@@ -101,6 +102,7 @@ export default function AdminHubPage() {
   const [announceTitle, setAnnounceTitle] = useState("");
   const [announceBody, setAnnounceBody] = useState("");
   const [announcing, setAnnouncing] = useState(false);
+  const [confirmAnnounce, setConfirmAnnounce] = useState(false);
 
   useEffect(() => {
     if (permLoading || !isSiteAdmin || !isFirebaseConfigured()) {
@@ -425,7 +427,7 @@ export default function AdminHubPage() {
               />
               <Button
                 size="sm"
-                onClick={handleAnnounce}
+                onClick={() => setConfirmAnnounce(true)}
                 disabled={announcing || !announceTitle.trim() || !announceBody.trim()}
               >
                 {announcing ? (
@@ -474,6 +476,21 @@ export default function AdminHubPage() {
         )}
 
       </main>
+
+      {confirmAnnounce && (
+        <ConfirmDialog
+          title="Send Platform Announcement?"
+          description={`This will deliver a notification to every registered user. Title: "${announceTitle}"`}
+          confirmLabel="Send to All Users"
+          variant="primary"
+          submitting={announcing}
+          onConfirm={async () => {
+            await handleAnnounce();
+            setConfirmAnnounce(false);
+          }}
+          onCancel={() => setConfirmAnnounce(false)}
+        />
+      )}
     </ResponsiveShell>
   );
 }

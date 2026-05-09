@@ -15,6 +15,7 @@ import {
   CheckCircle,
   ArrowRight,
   Users,
+  Search,
 } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -98,7 +99,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
           <Panel key={i} variant="base" padding="md">
-            <div className="h-16 bg-obsidian-700 animate-pulse rounded" />
+            <div className="h-16 bg-obsidian-700 animate-shimmer rounded" />
           </Panel>
         ))}
       </div>
@@ -149,6 +150,30 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
         )}
       </Panel>
 
+      {/* Next session reminder */}
+      {upcomingDates.length > 0 && upcomingDates[0] && (
+        <Panel variant="hud" padding="md" className="flex items-center gap-4 flex-wrap">
+          <div className="p-2 rounded-pixel bg-spectral-500/15 shrink-0">
+            <CalendarDays className="h-5 w-5 text-spectral-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-ash-500 text-[10px] uppercase tracking-widest">Next Play Date</p>
+            <p className="text-ash-100 text-sm font-medium">
+              {upcomingDates[0].date} · <span className="text-ash-400">{formatDateLabel(upcomingDates[0].date)}</span>
+            </p>
+          </div>
+          {upcomingDates[0].status === "CHECK_IN_OPEN" ? (
+            <Link href="/ladder/check-in">
+              <Button size="sm">
+                <CheckCircle className="h-3.5 w-3.5" /> Check In
+              </Button>
+            </Link>
+          ) : (
+            <RuneChip tone="spectral" className="text-[9px]">{upcomingDates[0].status}</RuneChip>
+          )}
+        </Panel>
+      )}
+
       {/* Quick actions */}
       <Panel variant="inventory" padding="md">
         <RuneChip tone="rune" className="mb-3">Quick Actions</RuneChip>
@@ -171,6 +196,11 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
           <Link href={`/players/view?uid=${userId}`}>
             <Button size="sm" variant="outline" className="w-full">
               <Swords className="h-3.5 w-3.5" /> My Profile
+            </Button>
+          </Link>
+          <Link href="/leagues" className="col-span-2">
+            <Button size="sm" variant="ghost" className="w-full border border-obsidian-500 hover:border-spectral-500/50">
+              <Search className="h-3.5 w-3.5" /> Find a League
             </Button>
           </Link>
         </div>

@@ -18,7 +18,7 @@ export function ModeToggle() {
       variant={isAdminMode ? "ghost" : "outline"}
       size="sm"
       className="gap-2"
-      title={isAdminMode ? "Switch to Player Mode" : "Switch to Admin Mode"}
+      aria-label={isAdminMode ? "Switch to Player Mode" : "Switch to Admin Mode"}
     >
       {isAdminMode ? (
         <>

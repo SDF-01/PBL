@@ -9,6 +9,8 @@ import { useAdminMode } from "@/lib/admin-context";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { Building2, ShieldCheck } from "lucide-react";
+import { RuneChip } from "@/components/ui/RuneChip";
+import { useRoleView } from "@/lib/role-view-context";
 
 const NAV = [
   { href: "/clubs",         label: "Clubs" },
@@ -22,6 +24,14 @@ export function TopNav() {
   const { canAccessAdmin } = useAdminMode();
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, provisionalClubs, loading } = usePermissions();
+  const { isStaffView } = useRoleView();
+
+  const roleChip = !loading && user
+    ? isSiteAdmin && isStaffView ? { label: "Site Admin", tone: "ember" as const }
+    : clubDirectorFor.length > 0 && isStaffView ? { label: "Club Director", tone: "rune" as const }
+    : coordinatorClubIds.length > 0 && isStaffView ? { label: "Coordinator", tone: "rune" as const }
+    : null
+    : null;
 
   const hasClubAccess =
     !loading &&
@@ -61,6 +71,11 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          {roleChip && (
+            <RuneChip tone={roleChip.tone} className="hidden lg:inline-flex text-[10px]">
+              {roleChip.label}
+            </RuneChip>
+          )}
           {canAccessAdmin && <ModeToggle />}
           {isSiteAdmin && (
             <Link href="/admin">

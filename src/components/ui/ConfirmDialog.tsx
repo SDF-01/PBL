@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "./Button";
 import { Panel } from "./Panel";
@@ -25,12 +26,44 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const firstBtn = panelRef.current?.querySelector<HTMLElement>("button");
+    firstBtn?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !submitting) {
+        onCancel();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (e.shiftKey ? document.activeElement === first : document.activeElement === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [submitting, onCancel]);
+
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-obsidian-950/80 backdrop-blur-sm"
       onClick={() => !submitting && onCancel()}
     >
       <Panel
+        ref={panelRef}
         variant="quest"
         padding="lg"
         className="w-full max-w-sm space-y-4"
@@ -41,7 +74,7 @@ export function ConfirmDialog({
             <AlertTriangle className="h-5 w-5 text-crimson-400" />
           </div>
           <div>
-            <h2 className="heading-fantasy text-ash-100 text-base">{title}</h2>
+            <h2 id="confirm-dialog-title" className="heading-fantasy text-ash-100 text-base">{title}</h2>
             {description && (
               <p className="text-ash-400 text-sm mt-1">{description}</p>
             )}

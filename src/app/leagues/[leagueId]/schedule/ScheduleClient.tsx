@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, CalendarRange, Loader2, RefreshCw, Swords } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { useAuth } from "@/lib/auth-context";
@@ -35,6 +36,7 @@ export function ScheduleClient({ leagueId: propLeagueId }: Props) {
   const [matches, setMatches] = useState<LeagueScheduleMatchDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,6 +83,21 @@ export function ScheduleClient({ leagueId: propLeagueId }: Props) {
   const sortedRounds = Array.from(rounds.entries()).sort(([a], [b]) => a - b);
 
   return (
+    <>
+    {confirmRegenerate && (
+      <ConfirmDialog
+        title="Regenerate Schedule?"
+        description={`This will delete all ${matches.length} existing matches and create fresh round-robin pairings. Match results will be lost.`}
+        confirmLabel="Regenerate"
+        variant="danger"
+        submitting={generating}
+        onConfirm={async () => {
+          setConfirmRegenerate(false);
+          await handleGenerate();
+        }}
+        onCancel={() => setConfirmRegenerate(false)}
+      />
+    )}
     <ResponsiveShell desktopChromeless>
       <main className="container py-6 md:py-10 space-y-6 max-w-3xl">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -94,7 +111,9 @@ export function ScheduleClient({ leagueId: propLeagueId }: Props) {
             <Button
               size="sm"
               variant="primary"
-              onClick={handleGenerate}
+              onClick={() =>
+                matches.length > 0 ? setConfirmRegenerate(true) : handleGenerate()
+              }
               disabled={generating}
             >
               {generating ? (
@@ -157,6 +176,7 @@ export function ScheduleClient({ leagueId: propLeagueId }: Props) {
         )}
       </main>
     </ResponsiveShell>
+    </>
   );
 }
 
