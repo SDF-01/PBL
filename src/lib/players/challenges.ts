@@ -197,6 +197,30 @@ export async function sendChallenge(input: {
   return ref.id;
 }
 
+export async function withdrawChallenge(
+  challengeId: string,
+  challengerId: string,
+  challengerName: string,
+  challengeeId: string,
+): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.playerChallenges, challengeId), {
+    status: "DECLINED" as ChallengeStatus,
+    updatedAt: serverTimestamp(),
+  });
+
+  try {
+    const { notifyUser } = await import("../firestore/write");
+    await notifyUser({
+      userId: challengeeId,
+      title: `${challengerName} withdrew their challenge`,
+      body: "The challenge has been cancelled.",
+      href: "/(authenticated)/dashboard",
+      kind: "CHALLENGE",
+      createdBy: challengerId,
+    });
+  } catch { /* ignore */ }
+}
+
 export async function respondToChallenge(
   challengeId: string,
   accept: boolean,

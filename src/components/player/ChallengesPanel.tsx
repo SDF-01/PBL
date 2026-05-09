@@ -20,6 +20,7 @@ import {
   listPendingSent,
   listActiveChallenges,
   respondToChallenge,
+  withdrawChallenge,
 } from "@/lib/players/challenges";
 import type { PlayerChallengeDoc } from "@/lib/firestore/types";
 
@@ -33,6 +34,8 @@ export function ChallengesPanel({ userId, displayName }: Props) {
   const [active, setActive] = useState<PlayerChallengeDoc[]>([]);
   const [pendingSent, setPendingSent] = useState<PlayerChallengeDoc[]>([]);
   const [responding, setResponding] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [confirmWithdraw, setConfirmWithdraw] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -53,6 +56,17 @@ export function ChallengesPanel({ userId, displayName }: Props) {
       }
     } finally {
       setResponding(null);
+    }
+  }
+
+  async function handleWithdraw(challenge: PlayerChallengeDoc) {
+    setWithdrawing(challenge.id);
+    setConfirmWithdraw(null);
+    try {
+      await withdrawChallenge(challenge.id, userId, displayName, challenge.challengeeId);
+      setPendingSent((prev) => prev.filter((c) => c.id !== challenge.id));
+    } finally {
+      setWithdrawing(null);
     }
   }
 
@@ -186,7 +200,36 @@ export function ChallengesPanel({ userId, displayName }: Props) {
                   <p className="text-ash-500 text-xs truncate mt-0.5">"{c.message}"</p>
                 )}
               </div>
-              <RuneChip tone="neutral" className="text-[9px] shrink-0">Pending</RuneChip>
+              <div className="flex items-center gap-2 shrink-0">
+                {confirmWithdraw === c.id ? (
+                  <>
+                    <button
+                      onClick={() => handleWithdraw(c)}
+                      disabled={withdrawing === c.id}
+                      className="text-[10px] text-crimson-400 hover:text-crimson-300 font-medium disabled:opacity-50"
+                    >
+                      {withdrawing === c.id ? "Cancelling…" : "Confirm"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmWithdraw(null)}
+                      className="text-[10px] text-ash-500 hover:text-ash-300"
+                    >
+                      Keep
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <RuneChip tone="neutral" className="text-[9px]">Pending</RuneChip>
+                    <button
+                      onClick={() => setConfirmWithdraw(c.id)}
+                      className="text-ash-600 hover:text-crimson-400 transition-colors"
+                      title="Cancel challenge"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>

@@ -20,7 +20,7 @@ import {
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
-import { getPlayerProfile } from "@/lib/players/repo";
+import { getPlayerProfile, listRecentEloEvents } from "@/lib/players/repo";
 import { listPlayDates } from "@/lib/ladder/repo";
 import { listPlayerRecentMatches } from "@/lib/ladder/repo";
 import { listFollowedClubs } from "@/lib/clubs/repo";
@@ -47,6 +47,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
   const [upcomingDates, setUpcomingDates] = useState<PlayDateDoc[]>([]);
   const [recentMatches, setRecentMatches] = useState<LadderMatchDoc[]>([]);
   const [completedChallenges, setCompletedChallenges] = useState<PlayerChallengeDoc[]>([]);
+  const [eloBySourceId, setEloBySourceId] = useState<Map<string, number>>(new Map());
   const [feedPosts, setFeedPosts] = useState<ClubPost[]>([]);
   const [playerActivity, setPlayerActivity] = useState<
     Array<(EloEventDoc & { followedId: string }) & { followedProfile: PlayerProfileDoc | null }>
@@ -58,7 +59,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
     (async () => {
       try {
         const today = new Date().toISOString().split("T")[0]!;
-        const [p, pd, rm, ch, followedClubs, followedIds] = await Promise.all([
+        const [p, pd, rm, ch, followedClubs, followedIds, eloEvts] = await Promise.all([
           getPlayerProfile(userId),
           listPlayDates().then((dates) =>
             dates
@@ -70,11 +71,13 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
           listChallengeHistory(userId).catch(() => [] as PlayerChallengeDoc[]),
           listFollowedClubs(userId).catch(() => []),
           listFollowedPlayerIds(userId).catch(() => [] as string[]),
+          listRecentEloEvents(userId, 30).catch(() => [] as EloEventDoc[]),
         ]);
         setProfile(p);
         setUpcomingDates(pd);
         setRecentMatches(rm);
         setCompletedChallenges(ch.filter((c) => c.status === "COMPLETED"));
+        setEloBySourceId(new Map(eloEvts.filter(e => e.sourceId).map(e => [e.sourceId!, e.delta])));
         if (followedClubs.length > 0) {
           const posts = await listFeedPosts(followedClubs.map((c) => c.id)).catch(() => []);
           setFeedPosts(posts);
@@ -248,10 +251,10 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
         ) : (
           <ul className="divide-y divide-obsidian-600">
             {recentMatches.map((m) => (
-              <MatchRow key={m.id} match={m} playerId={userId} />
+              <MatchRow key={m.id} match={m} playerId={userId} eloDelta={eloBySourceId.get(m.id)} />
             ))}
             {completedChallenges.map((c) => (
-              <ChallengeMatchRow key={c.id} challenge={c} userId={userId} />
+              <ChallengeMatchRow key={c.id} challenge={c} userId={userId} eloDelta={eloBySourceId.get(c.id)} />
             ))}
           </ul>
         )}
@@ -432,7 +435,7 @@ function PlayDateRow({ pd }: { pd: PlayDateDoc }) {
   );
 }
 
-function MatchRow({ match, playerId }: { match: LadderMatchDoc; playerId: string }) {
+function MatchRow({ match, playerId, eloDelta }: { match: LadderMatchDoc; playerId: string; eloDelta?: number }) {
   const onSideA = match.sideA.includes(playerId);
   const myScore = onSideA ? match.scoreA : match.scoreB;
   const oppScore = onSideA ? match.scoreB : match.scoreA;
@@ -467,12 +470,17 @@ function MatchRow({ match, playerId }: { match: LadderMatchDoc; playerId: string
         <RuneChip tone={won ? "spectral" : isDraw ? "neutral" : "crimson"} className="text-[9px]">
           {won ? "W" : isDraw ? "D" : "L"}
         </RuneChip>
+        {eloDelta != null && (
+          <span className={`text-[10px] font-mono font-bold ${eloDelta >= 0 ? "text-spectral-400" : "text-crimson-500"}`}>
+            {eloDelta >= 0 ? `+${eloDelta}` : eloDelta}
+          </span>
+        )}
       </div>
     </li>
   );
 }
 
-function ChallengeMatchRow({ challenge: c, userId }: { challenge: PlayerChallengeDoc; userId: string }) {
+function ChallengeMatchRow({ challenge: c, userId, eloDelta }: { challenge: PlayerChallengeDoc; userId: string; eloDelta?: number }) {
   const isChallenger = c.challengerId === userId;
   const opponentName = isChallenger ? c.challengeeName : c.challengerName;
   const opponentId   = isChallenger ? c.challengeeId  : c.challengerId;
@@ -512,6 +520,11 @@ function ChallengeMatchRow({ challenge: c, userId }: { challenge: PlayerChalleng
         <RuneChip tone={won ? "spectral" : "crimson"} className="text-[9px]">
           {won ? "W" : "L"}
         </RuneChip>
+        {eloDelta != null && (
+          <span className={`text-[10px] font-mono font-bold ${eloDelta >= 0 ? "text-spectral-400" : "text-crimson-500"}`}>
+            {eloDelta >= 0 ? `+${eloDelta}` : eloDelta}
+          </span>
+        )}
       </div>
     </li>
   );
