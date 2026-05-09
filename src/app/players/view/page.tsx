@@ -176,6 +176,9 @@ function PlayerView() {
         setFollowing(true);
         setFollowerCount((c) => (c !== null ? c + 1 : null));
       }
+    } catch (err) {
+      console.error("Follow toggle failed:", err);
+      alert("Could not update follow status. Please try again.");
     } finally {
       setFollowPending(false);
     }
