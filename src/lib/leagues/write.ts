@@ -35,6 +35,7 @@ export interface CreateLeagueInput {
   venueId?: string;
   venueName?: string;
   venueAddress?: string;
+  geoLocationAssistedCheckIn?: boolean;
   registrationOpenDate?: string;
   registrationCloseDate?: string;
   firstSessionDate?: string;
@@ -69,6 +70,7 @@ export async function createLeague(
     city: input.city ?? "",
     state: input.state ?? "",
     league_format: input.leagueFormat ?? "Doubles Ladder",
+    geoLocationAssistedCheckIn: input.geoLocationAssistedCheckIn ?? false,
     active: true,
     createdBy,
     createdAt: serverTimestamp(),
@@ -189,6 +191,7 @@ export interface UpdateLeagueInput {
   leagueFormat?: string;
   active?: boolean;
   facilityId?: string | null;
+  geoLocationAssistedCheckIn?: boolean;
   movementRules?: string;
   courtCount?: number;
   targetPoints?: number;
@@ -214,6 +217,7 @@ export async function updateLeagueSettings(
   if (input.leagueFormat !== undefined) updates.league_format = input.leagueFormat;
   if (input.active !== undefined) updates.active = input.active;
   if (input.facilityId !== undefined) updates.facilityId = input.facilityId ?? null;
+  if (input.geoLocationAssistedCheckIn !== undefined) updates.geoLocationAssistedCheckIn = input.geoLocationAssistedCheckIn;
   if (input.movementRules !== undefined) updates.movementRules = input.movementRules;
   if (input.courtCount !== undefined) updates.courtCount = input.courtCount;
   if (input.targetPoints !== undefined) updates.targetPoints = input.targetPoints;

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -15,17 +15,36 @@ import { getPlayerProfile } from "@/lib/players/repo";
 import { listVenues } from "@/lib/ladder/repo";
 import { upsertPlayerProfile } from "@/lib/players/write";
 import { uploadPlayerPhoto } from "@/lib/storage";
+import { resolveSelectedLeagueId } from "@/lib/selectedLeague";
 import type {
   PlayerProfileDoc,
   DominantHand,
   VenueDoc,
 } from "@/lib/firestore/types";
 
+const PROVISIONAL_RANGES = [
+  { id: "newer_player",              label: "Newer Player",              min: 2.0, max: 2.5, mid: 2.25 },
+  { id: "developing_player",         label: "Developing Player",         min: 2.5, max: 3.0, mid: 2.75 },
+  { id: "intermediate_player",       label: "Intermediate Player",       min: 3.0, max: 3.5, mid: 3.25 },
+  { id: "strong_intermediate_player",label: "Strong Intermediate Player",min: 3.5, max: 4.0, mid: 3.75 },
+  { id: "advanced_player",           label: "Advanced Player (4.0+)",    min: 4.0, max: null, mid: 4.25 },
+] as const;
+
 const HANDS: DominantHand[] = ["RIGHT", "LEFT", "AMBI"];
 
 export default function PlayerEditPage() {
+  return (
+    <Suspense>
+      <PlayerEditInner />
+    </Suspense>
+  );
+}
+
+function PlayerEditInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, ready, signIn } = useAuth();
+  const selectedLeagueId = resolveSelectedLeagueId(searchParams);
 
   const [loading, setLoading] = useState(true);
   const [existing, setExisting] = useState<PlayerProfileDoc | null>(null);
@@ -45,6 +64,8 @@ export default function PlayerEditPage() {
   const [bio, setBio] = useState("");
   const [duprRating, setDuprRating] = useState<number | "">("");
   const [duprId, setDuprId] = useState("");
+  const [duprUnknown, setDuprUnknown] = useState(false);
+  const [provisionalRangeId, setProvisionalRangeId] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +118,19 @@ export default function PlayerEditPage() {
       setError("Display name is required.");
       return;
     }
+    if (!existing && duprUnknown && !provisionalRangeId) {
+      setError("Select a skill level when DUPR rating is unknown.");
+      return;
+    }
+
+    // Resolve effective DUPR rating from known value or provisional midpoint
+    let effectiveDupr: number | undefined;
+    if (duprUnknown && provisionalRangeId) {
+      effectiveDupr = PROVISIONAL_RANGES.find((r) => r.id === provisionalRangeId)?.mid;
+    } else if (typeof duprRating === "number") {
+      effectiveDupr = duprRating;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -116,11 +150,14 @@ export default function PlayerEditPage() {
         yearsPlaying:
           typeof yearsPlaying === "number" ? yearsPlaying : undefined,
         bio,
-        duprRating:
-          typeof duprRating === "number" ? duprRating : undefined,
+        duprRating: effectiveDupr,
         duprId: duprId.trim() || null,
       });
-      router.push(`/players/view?uid=${user.uid}`);
+      if (selectedLeagueId) {
+        router.push(`/leagues/${selectedLeagueId}`);
+      } else {
+        router.push(`/players/view?uid=${user.uid}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed.");
     } finally {
@@ -165,12 +202,18 @@ export default function PlayerEditPage() {
       <main className="container py-6 md:py-10 space-y-6 max-w-2xl">
         <div>
           <h1 className="heading-fantasy text-display-md text-ash-100">
-            {existing ? "Edit Profile" : "Create Profile"}
+            {existing ? "Edit Profile" : "Set Up Your Player Profile"}
           </h1>
           <p className="text-ash-400 text-sm mt-1">
-            Profile identity, location, and equipment. ELO and stats update
-            automatically from verified match results.
+            {existing
+              ? "Profile identity, location, and equipment. ELO and stats update automatically from verified match results."
+              : "Tell us enough to place you in the right group. You can add more details later."}
           </p>
+          {!existing && selectedLeagueId && (
+            <RuneChip tone="spectral" className="mt-2">
+              Joining league · complete your profile to continue
+            </RuneChip>
+          )}
         </div>
 
         {loading ? (
@@ -294,56 +337,87 @@ export default function PlayerEditPage() {
               <div className="md:col-span-2 border-t border-obsidian-500 pt-3 mt-1">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                   <span className="text-xs uppercase tracking-[0.2em] text-ash-400">
-                    DUPR Rating
+                    Skill Rating
                   </span>
-                  {duprId ? (
-                    <span className="text-[10px] text-emerald-400 font-mono">
-                      ✓ linked ({duprId})
-                    </span>
-                  ) : (
-                    <a
-                      href="https://mydupr.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] text-spectral-500 hover:text-spectral-400"
-                    >
-                      Find your DUPR ID →
-                    </a>
+                  {duprId && (
+                    <span className="text-[10px] text-emerald-400 font-mono">✓ DUPR linked ({duprId})</span>
                   )}
                 </div>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <Field label="DUPR rating">
-                    <input
-                      type="number"
-                      step="0.001"
-                      min={2}
-                      max={8}
-                      className={fieldCls}
-                      value={duprRating}
-                      onChange={(e) =>
-                        setDuprRating(
-                          e.target.value === "" ? "" : Number(e.target.value),
-                        )
-                      }
-                      placeholder="e.g. 4.25"
-                    />
-                  </Field>
-                  <Field label="DUPR player id">
-                    <input
-                      className={fieldCls}
-                      value={duprId}
-                      onChange={(e) => setDuprId(e.target.value)}
-                      placeholder="From mydupr.com profile URL"
-                      maxLength={40}
-                    />
-                  </Field>
-                </div>
-                <p className="text-[11px] text-ash-600 mt-1.5 leading-relaxed">
-                  Enter your DUPR rating manually from{" "}
+                <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={duprUnknown}
+                    onChange={(e) => {
+                      setDuprUnknown(e.target.checked);
+                      if (e.target.checked) setDuprRating("");
+                      else setProvisionalRangeId("");
+                    }}
+                    className="accent-ember-500 h-4 w-4"
+                  />
+                  <span className="text-xs text-ash-300">I don&apos;t know my DUPR rating</span>
+                </label>
+
+                {duprUnknown ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-ash-500 mb-2">Select your approximate skill level:</p>
+                    {PROVISIONAL_RANGES.map((range) => (
+                      <label
+                        key={range.id}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-pixel border cursor-pointer transition-colors ${
+                          provisionalRangeId === range.id
+                            ? "border-ember-500 bg-ember-900/20 text-ember-200"
+                            : "border-obsidian-500 bg-obsidian-800 text-ash-300 hover:border-obsidian-400"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="provisionalRange"
+                          value={range.id}
+                          checked={provisionalRangeId === range.id}
+                          onChange={() => setProvisionalRangeId(range.id)}
+                          className="accent-ember-500 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">{range.label}</span>
+                          <span className="text-ash-500 text-xs ml-2">
+                            DUPR {range.min}–{range.max ?? ""}
+                          </span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <Field label="DUPR rating">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min={1}
+                        max={8}
+                        className={fieldCls}
+                        value={duprRating}
+                        onChange={(e) =>
+                          setDuprRating(e.target.value === "" ? "" : Number(e.target.value))
+                        }
+                        placeholder="e.g. 4.25"
+                      />
+                    </Field>
+                    <Field label="DUPR player id">
+                      <input
+                        className={fieldCls}
+                        value={duprId}
+                        onChange={(e) => setDuprId(e.target.value)}
+                        placeholder="From mydupr.com profile URL"
+                        maxLength={40}
+                      />
+                    </Field>
+                  </div>
+                )}
+                <p className="text-[11px] text-ash-600 mt-2 leading-relaxed">
+                  Find your DUPR rating at{" "}
                   <a href="https://mydupr.com" target="_blank" rel="noopener noreferrer" className="text-spectral-500 hover:underline">
                     mydupr.com
-                  </a>
-                  . Your ID appears in your profile URL.
+                  </a>.
                 </p>
               </div>
               <Field label="Bio" className="md:col-span-2">

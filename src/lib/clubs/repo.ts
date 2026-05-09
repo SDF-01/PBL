@@ -94,6 +94,13 @@ export async function getClubFacility(clubId: string): Promise<ClubFacility | nu
   return facilities[0] ?? null;
 }
 
+/** Fetch a single facility by its document ID (cross-club lookup for play-date check-in). */
+export async function getClubFacilityById(facilityId: string): Promise<ClubFacility | null> {
+  if (!isFirebaseConfigured()) return null;
+  const snap = await getDoc(doc(db(), COLLECTIONS.clubFacilities, facilityId));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as ClubFacility) : null;
+}
+
 // ── Club posts ─────────────────────────────────────────────────────────────
 
 /** List recent posts for a single club, newest first. */

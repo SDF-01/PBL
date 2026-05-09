@@ -75,6 +75,7 @@ function LeagueSettingsEditor({
   const [state, setState] = useState(league.state ?? "");
   const [format, setFormat] = useState(league.league_format ?? "Doubles Ladder");
   const [active, setActive] = useState(league.active !== false);
+  const [geoLocationAssistedCheckIn, setGeoLocationAssistedCheckIn] = useState(league.geoLocationAssistedCheckIn === true);
   const [regOpen, setRegOpen] = useState(league.registrationOpenDate ?? "");
   const [regClose, setRegClose] = useState(league.registrationCloseDate ?? "");
   const [firstSession, setFirstSession] = useState(league.firstSessionDate ?? "");
@@ -126,6 +127,7 @@ function LeagueSettingsEditor({
       const updates: UpdateLeagueInput = {
         name, description, city, state, leagueFormat: format, active,
         facilityId: resolvedFacilityId,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: regOpen || undefined,
         registrationCloseDate: regClose || undefined,
         firstSessionDate: firstSession || undefined,
@@ -137,6 +139,7 @@ function LeagueSettingsEditor({
       onSaved({
         name, description, city, state, league_format: format, active,
         facilityId: resolvedFacilityId ?? undefined,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: regOpen || undefined,
         registrationCloseDate: regClose || undefined,
         firstSessionDate: firstSession || undefined,
@@ -205,6 +208,20 @@ function LeagueSettingsEditor({
             className="rounded"
           />
           <span className="text-sm text-ash-300">League is active</span>
+        </label>
+        <label className="flex items-start gap-2 cursor-pointer rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2">
+          <input
+            type="checkbox"
+            checked={geoLocationAssistedCheckIn}
+            onChange={(e) => setGeoLocationAssistedCheckIn(e.target.checked)}
+            className="mt-0.5 accent-ember-500"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm text-ash-300">Use GPS-assisted check-in</span>
+            <span className="block text-xs text-ash-500 mt-0.5">
+              Players check in from their device location when play dates are active.
+            </span>
+          </span>
         </label>
 
         <div className="pt-3 border-t border-obsidian-600 space-y-3">
@@ -451,10 +468,12 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
         let lat = league.latitude;
         let lng = league.longitude;
         if (!lat || !lng) {
-          // Prefer facility address for geocoding; fall back to league city.
-          const cityName = league.city ?? facilities[0]?.address ?? league.venueAddress ?? "";
+          // Prefer facility zip code for geocoding (most precise), then fall back to city.
+          const facilityAddress = facilities[0]?.address ?? league.venueAddress ?? "";
+          const zipMatch = facilityAddress.match(/\b(\d{5})\b/);
+          const geoQuery = zipMatch?.[1] ?? league.city ?? facilityAddress;
           const geoRes = await fetch(
-            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json&country_code=US`,
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(geoQuery)}&count=1&language=en&format=json&country_code=US`,
           );
           const geoData = await geoRes.json() as { results?: { latitude: number; longitude: number }[] };
           lat = geoData.results?.[0]?.latitude;
@@ -580,6 +599,10 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                         {league.check_in_status}
                       </div>
                     )}
+                    <div>
+                      <span className="text-ash-100">Check-in mode:</span>{" "}
+                      {league.geoLocationAssistedCheckIn ? "GPS-assisted" : "Manual/admin assisted"}
+                    </div>
                   </div>
 
                   {/* Schedule */}

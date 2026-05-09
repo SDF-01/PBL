@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, Minus, Trophy, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { ArrowLeft, Lock, Minus, Trophy, TrendingDown, TrendingUp, Users } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
@@ -116,6 +117,34 @@ function StandingsInner({ propLeagueId }: { propLeagueId: string }) {
     if (rank === 3) return "text-ember-500";
     return "text-ash-600";
   };
+
+  if (!user) {
+    return (
+      <ResponsiveShell desktopChromeless>
+        <main className="container py-10 max-w-2xl">
+          <Link href={`/leagues/${leagueId}`} className="text-ash-400 hover:text-ash-200 text-sm inline-flex items-center gap-1 mb-6">
+            <ArrowLeft className="h-4 w-4" /> Back to league
+          </Link>
+          <Panel variant="quest" padding="lg" className="text-center space-y-4">
+            <Lock className="h-10 w-10 text-ash-500 mx-auto" />
+            <RuneChip tone="neutral">Members Only</RuneChip>
+            <h2 className="heading-fantasy text-xl text-ash-100">Standings available after login</h2>
+            <p className="text-ash-400 text-sm max-w-xs mx-auto">
+              Create an account or log in to view player rankings, match history, and league results.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Link href={`/auth/signup?leagueId=${leagueId}`}>
+                <Button size="sm">Create Account</Button>
+              </Link>
+              <Link href={`/auth/login?leagueId=${leagueId}`}>
+                <Button size="sm" variant="outline">Login</Button>
+              </Link>
+            </div>
+          </Panel>
+        </main>
+      </ResponsiveShell>
+    );
+  }
 
   return (
     <ResponsiveShell desktopChromeless>

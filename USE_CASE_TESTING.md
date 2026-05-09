@@ -119,6 +119,7 @@ For every test case, the tester should fill in:
 | CLUBMGT-02 | Player, Guest | Attempt to open club management page. | Access is denied or user is prompted to authenticate. |  |  |  |  |
 | CLUBMGT-03 | Club Director, Site Admin | Review club overview stats. | Active leagues, players/members, and coordinators are visible. |  |  |  |  |
 | CLUBMGT-04 | Club Director, Site Admin | Create a league from club management. | League is created and appears in club league list. |  |  |  |  |
+| CLUBMGT-04A | Club Director, Site Admin | Create a league from club management with GPS-assisted check-in enabled. | League saves and displays GPS-assisted check-in mode on league details. |  |  |  |  |
 | CLUBMGT-05 | Club Director, Site Admin | Edit facility information. | Facility changes save and display on management and public club pages. |  |  |  |  |
 | CLUBMGT-06 | Club Director, Site Admin | Delete facility information. | Confirmation appears before delete; facility is removed after confirmation. |  |  |  |  |
 | CLUBMGT-07 | Club Director, Site Admin | Set facility surface type and indoor/outdoor state. | Surface and indoor/outdoor values save and display correctly. |  |  |  |  |
@@ -144,6 +145,7 @@ For every test case, the tester should fill in:
 | LEAGUE-06 | Club Director, League Coordinator, Site Admin | Open league settings editor. | Authorized staff can edit permitted league settings. |  |  |  |  |
 | LEAGUE-07 | Player, Guest | Verify league settings editor is unavailable. | Player/Guest cannot see or use staff league settings controls. |  |  |  |  |
 | LEAGUE-08 | Club Director, League Coordinator, Site Admin | Save league settings. | Changes persist and appear on league details. |  |  |  |  |
+| LEAGUE-09 | Club Director, League Coordinator, Site Admin | Toggle GPS-assisted check-in in league settings. | Check-in mode updates between GPS-assisted and manual/admin assisted on league details. |  |  |  |  |
 
 ---
 

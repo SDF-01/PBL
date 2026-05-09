@@ -30,6 +30,7 @@ import {
   respondToChallenge,
   formatLabel,
 } from "@/lib/players/challenges";
+import { getEloEventsForSource } from "@/lib/players/repo";
 import type { PlayerChallengeDoc, ChallengeConditions } from "@/lib/firestore/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -54,6 +55,8 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
   const [loadingChallenge, setLoadingChallenge] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // playerId → delta for completed matches
+  const [eloDeltas, setEloDeltas] = useState<Map<string, number>>(new Map());
 
   // ── conditions form state ────────────────────────────────────────────────
   const [format, setFormat] = useState<ChallengeConditions["format"]>("game-11");
@@ -78,6 +81,11 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
     const unsub = subscribeChallenge(challengeId, (c) => {
       setChallenge(c);
       setLoadingChallenge(false);
+      if (c?.status === "COMPLETED" && c.eloApplied) {
+        getEloEventsForSource(challengeId).then((events) => {
+          setEloDeltas(new Map(events.map((e) => [e.playerId, e.delta])));
+        }).catch(() => {});
+      }
     });
     return () => unsub();
   }, [challengeId]);
@@ -96,7 +104,7 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
         <main className="container py-10 max-w-xl">
           <Panel variant="base" padding="md">
             <p className="text-crimson-400 text-sm">Challenge not found.</p>
-            <Link href="/(authenticated)/dashboard" className="text-ash-500 hover:text-ash-300 text-sm mt-2 inline-block">
+            <Link href="/dashboard" className="text-ash-500 hover:text-ash-300 text-sm mt-2 inline-block">
               ← Dashboard
             </Link>
           </Panel>
@@ -310,7 +318,7 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
 
         {/* Back nav */}
         <Link
-          href="/(authenticated)/dashboard"
+          href="/dashboard"
           className="text-ash-400 hover:text-ash-200 text-sm inline-flex items-center gap-1"
         >
           <ArrowLeft className="h-4 w-4" /> Dashboard
@@ -777,7 +785,30 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
             {winnerName && (
               <p className="text-center text-ash-300 text-sm">
                 <span className="text-spectral-400 font-medium">{winnerName}</span> wins
-                {challenge.eloApplied ? " · ELO updated" : ""}
+                {challenge.eloApplied && (
+                  <span className="text-ash-500">
+                    {" · "}
+                    {([
+                      { name: challenge.challengerName, id: challenge.challengerId },
+                      { name: challenge.challengeeName, id: challenge.challengeeId },
+                    ] as const).map(({ name, id }, i) => {
+                      const delta = eloDeltas.get(id);
+                      return (
+                        <span key={id}>
+                          {i > 0 && <span className="text-ash-700"> · </span>}
+                          {name}{" "}
+                          {delta != null ? (
+                            <span className={`font-mono font-bold ${delta >= 0 ? "text-spectral-400" : "text-crimson-500"}`}>
+                              ({delta >= 0 ? `+${delta}` : delta})
+                            </span>
+                          ) : (
+                            <span className="text-ash-600">(ELO updated)</span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </span>
+                )}
               </p>
             )}
 

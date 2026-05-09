@@ -1,0 +1,500 @@
+TOON_VERSION: 1.0
+ARTIFACT_TYPE: agent_update_spec
+ARTIFACT_NAME: ladder_league_builders_spec_v4_agent_update
+FORMAT_INTENT: machine-readable implementation directive
+SOURCE_DOCUMENT: League_Builders_Spec_V4.pdf
+SOURCE_AUTHORITY: client requirements document
+STATUS: approved-input
+
+META {
+  project_name: "Ladder League"
+  product_type: "mobile-first doubles ladder platform"
+  platform_shape: "responsive web application"
+  current_stack: ["TypeScript", "JavaScript", "CSS", "Firebase", "Firestore", "Firebase Auth", "optional Storage", "optional Cloud Functions"]
+  primary_users: ["league admins", "tournament admins", "players"]
+  source_translation_goal: "convert client requirements into agent-operable implementation rules"
+}
+
+PRECEDENCE_RULES {
+  rule_01: "Client requirements in this file override prior speculative product concepts for MVP scope."
+  rule_02: "If any prior prompt introduced broad tournament bracket features, generic sports-platform expansion, heavy game theming, or analytics-first scope, those ideas are deferred unless explicitly reapproved by the client."
+  rule_03: "Build narrow, polished, explainable ladder operations first."
+  rule_04: "When in doubt, preserve fairness, auditability, mobile speed, and admin clarity over novelty."
+  rule_05: "The system is NOT a generic tournament platform in V1."
+}
+
+PRODUCT_IDENTITY {
+  canonical_identity: "A court-based doubles ladder system with two sessions per play date and admin-controlled operational flow."
+  core_competitive_format: "individual ladder ranking generated from doubles play"
+  release_focus: "one format done extremely well"
+  intended_experience: "players act quickly on court from phones; admins control attendance, generation, monitoring, and finalization without chaos"
+}
+
+PRODUCT_GOALS {
+  goal_01: "Fast player check-in, score entry, verification, and standings visibility from mobile."
+  goal_02: "Clear admin workflow from attendance review to generation lock to live monitoring to finalization."
+  goal_03: "Deterministic, explainable session generation and movement logic."
+  goal_04: "Score verification plus audit support so later integrations such as DUPR remain possible."
+  goal_05: "Responsive admin views for larger screens without sacrificing mobile-first design."
+}
+
+NON_GOALS_V1 {
+  non_goal_01: "Do not build a full tournament bracket suite."
+  non_goal_02: "Do not build a generalized multi-sport rules engine."
+  non_goal_03: "Do not build analytics-heavy reporting as a primary scope item."
+  non_goal_04: "Do not secretly automate fairness judgments outside explicit business rules."
+  non_goal_05: "Do not overdecorate the UI or prioritize spectacle over clarity."
+}
+
+DESIGN_PRINCIPLES {
+  principle_01: "Player speed over feature clutter. During live play, the app should behave like a pocket command card, not a spreadsheet."
+  principle_02: "Admin control without chaos. Admins can override before and after sessions, but generation hard-locks structure during play."
+  principle_03: "Fairness through explicit rules. No silent assumptions, no automatic dispute resolution, no hidden movement behavior."
+  principle_04: "Future-ready data integrity. Score verification, audit trails, and external ID linkage are designed in now."
+  principle_05: "Mobile-first, desktop-capable. Players primarily use phones; admins may use phones or larger screens."
+}
+
+DOMAIN_HIERARCHY {
+  season {
+    description: "named container for many play dates and season-level settings"
+  }
+  play_date {
+    description: "real-world date of play; contains venue, attendance, Session A, Session B"
+  }
+  session_A {
+    description: "generated after attendance review and based on prior ladder state"
+  }
+  session_B {
+    description: "generated only after Session A is finalized and only from Session A participants/results"
+  }
+  court {
+    description: "competitive unit containing 4 or 5 players and generated doubles rotations"
+  }
+  match {
+    description: "single doubles game to configurable X points between two sides of two players"
+  }
+  hierarchy_constraints: [
+    "Each play date contains exactly two sessions in V1: Session A and Session B.",
+    "Players are ranked individually even though the matches themselves are doubles matches.",
+    "Session B is not a manual continuation; it is a computed output from Session A.",
+    "Players who did not actually play Session A are not eligible for Session B in V1."
+  ]
+}
+
+COMPETITION_RULES {
+  court_sizing_and_distribution {
+    hard_rules: [
+      "Courts must never be smaller than 4 players.",
+      "Only 4-player and 5-player courts are allowed in V1.",
+      "If active player count does not divide evenly by 4, prefer 5-player courts.",
+      "Admin can choose distribution placement of larger courts: top-heavy, middle, or bottom-heavy."
+    ]
+    reference_distributions: [
+      "12 players => 3 courts of 4",
+      "13 players => 1 court of 5 and 2 courts of 4",
+      "14 players => 2 courts of 5 and 1 court of 4",
+      "15 players => 3 courts of 5",
+      "16 players => 4 courts of 4"
+    ]
+  }
+
+  rotation_generation {
+    hard_rules: [
+      "Rotation generation is automatic.",
+      "Admins do not manually build partner/opponent pairings in V1."
+    ]
+    four_player_courts: [
+      "Generate 4 games.",
+      "Each player partners with each other player exactly 1 time across the session."
+    ]
+    five_player_courts: [
+      "Generate 6 game slots.",
+      "One player sits each game.",
+      "Optimize for balanced partner distribution.",
+      "Optimize for balanced opponent distribution.",
+      "Optimize for balanced sit-out distribution."
+    ]
+  }
+
+  scoring_and_ranking {
+    hard_rules: [
+      "Each match is a single game to X points.",
+      "X is configurable at session level or season level.",
+      "One player submits score.",
+      "A player from the opposing side verifies score.",
+      "Only verified scores affect live standings.",
+      "Store sideA score and sideB score directly, not just winner/loser.",
+      "Court ranking sort order is wins first, point differential second.",
+      "Final movement is calculated only when the session is finalized.",
+      "Admins may edit verified scores, but every edit must preserve audit trail."
+    ]
+  }
+
+  movement_between_courts {
+    allowed_patterns: ["one-up-one-down", "two-up-two-down"]
+    hard_rules: [
+      "Movement pattern is admin-configurable per session.",
+      "Top court players cannot move upward beyond the top court.",
+      "Bottom court players cannot move downward beyond the bottom court.",
+      "Boundary players remain in place rather than wrapping around."
+    ]
+    boundary_rule: "Top court top performers stay on top court; bottom court bottom performers stay on bottom court."
+  }
+
+  attendance_absence_return_placement {
+    hard_rules: [
+      "A player who misses a session moves down the ladder for fairness.",
+      "Returning players are primarily placed by ladder position.",
+      "Cumulative season stats may inform admin judgment but do not automatically override ladder state in V1."
+    ]
+    cumulative_admin_context_metrics: ["total wins", "point differential", "sessions played"]
+  }
+}
+
+SESSION_LIFECYCLE {
+  step_01: "Open check-in window for Session A."
+  step_02: "Players self-check in within configured geofence; admins can override when GPS fails or exceptions are justified."
+  step_03: "Admin reviews attendance, repositions players for fairness if needed, and confirms final court distribution."
+  step_04: "Admin generates Session A; courts, rosters, and rotations become locked and official."
+  step_05: "Players use court-centric home screens to enter and verify scores in semi-ordered flow."
+  step_06: "Live standings update only as verified scores arrive."
+  step_07: "If player exits or match is incomplete, match is flagged for admin assignment; system must not silently ignore or auto-decide."
+  step_08: "Admin finalizes Session A; movement is calculated."
+  step_09: "Generate Session B from Session A participants and results only."
+  step_10: "Repeat operational pattern for Session B."
+  step_11: "Close play date and persist new ladder state for next play date."
+}
+
+LOCKING_PHILOSOPHY {
+  before_generation: "Admin has broad freedom to adjust players and fairness placement."
+  after_generation: "Structural changes are not allowed. Courts, rosters, and rotations are locked."
+  rationale: "Live play cannot feel like shifting sand for players already on court."
+}
+
+CHECK_IN_RULES {
+  hard_rules: [
+    "Self-check-in succeeds only within time window and venue geofence.",
+    "Geofence should use venue latitude/longitude plus allowed radius in feet or meters.",
+    "Admin override remains available because mobile GPS and buildings are unreliable.",
+    "Check-in belongs to Session A, because Session B eligibility depends on actual Session A participation.",
+    "Players who did not play Session A are not eligible for Session B in V1."
+  ]
+}
+
+INCOMPLETE_MATCH_RULES {
+  hard_rules: [
+    "System assumes checked-in players intend to play.",
+    "If someone leaves unexpectedly, remaining matches involving that player must be admin-assigned before finalization.",
+    "Do not auto-resolve incomplete results."
+  ]
+}
+
+ROLES_AND_MODES {
+  identity_model: "single user identity may hold both player and admin roles simultaneously"
+  mode_behavior: "mode switching changes visible tools, not underlying identity or permissions"
+
+  player_mode_capabilities: [
+    "check in",
+    "see assigned court",
+    "view current match",
+    "view next match",
+    "enter score",
+    "verify score",
+    "see standings",
+    "see profile"
+  ]
+
+  admin_mode_capabilities: [
+    "review attendance",
+    "reposition players before generation",
+    "generate sessions",
+    "monitor live matches",
+    "edit scores with audit trail",
+    "assign incomplete matches",
+    "finalize sessions"
+  ]
+
+  ux_requirement: "Even in Player Mode, dual-role users must have a visible one-tap path back to Admin Mode, such as shield icon or mode dropdown."
+}
+
+UI_STRATEGY {
+  global_strategy: "show the next useful thing, not everything"
+  player_experience_priority: "court-centric, one-handed, fast, obvious"
+  admin_experience_priority: "operational density, exception handling, real work over decoration"
+  visual_tone: [
+    "clean sports-tech",
+    "strong spacing",
+    "high-contrast buttons",
+    "compact status chips",
+    "calm color accents",
+    "avoid overdecorating"
+  ]
+}
+
+SCREEN_REQUIREMENTS {
+  player_home {
+    purpose: "primary heart of the player experience"
+    must_answer: [
+      "Where am I?",
+      "Who am I playing with?",
+      "Who am I playing against?",
+      "What action do I need to take now?"
+    ]
+    required_elements: [
+      "prominent court label near top",
+      "current match card with side composition and score status",
+      "Enter Score action",
+      "Verify Score action",
+      "next match preview",
+      "sit-out state when relevant",
+      "secondary path to full session overview or standings, but not default"
+    ]
+  }
+
+  admin_dashboard {
+    purpose: "operational control surface"
+    required_elements: [
+      "role toggle between Player and Admin context",
+      "season management entry",
+      "play date creation entry",
+      "check-in management entry",
+      "session generation entry",
+      "monitoring entry",
+      "finalization entry",
+      "compact status block showing player count, court count, and Session A/B state"
+    ]
+    anti_patterns: [
+      "Do not make this screen decorative.",
+      "Do not bury operational actions behind deep navigation."
+    ]
+  }
+
+  critical_admin_screens: [
+    "check-in review",
+    "live session monitor",
+    "finalization"
+  ]
+
+  check_in_review_purpose: "fairness adjustments happen before lock"
+  live_session_monitor_purpose: "show pending/submitted/verified/blocked matches"
+  finalization_purpose: "assign missing matches and confirm movement"
+}
+
+FIREBASE_DATA_MODEL {
+  storage_strategy: "Firestore documents with relational clarity via flatter model and explicit IDs"
+  top_level_collections: [
+    "users",
+    "seasons",
+    "playDates",
+    "sessions",
+    "courts",
+    "matches",
+    "checkIns",
+    "standingsSnapshots",
+    "venues",
+    "audits"
+  ]
+
+  collections {
+    users: "identity, roles, activeMode, DUPR linkage, player profile details"
+    seasons: "season records plus season defaults such as points-to-X and movement patterns"
+    playDates: "venue, date, season, operational status, pointers to Session A and Session B"
+    sessions: "A/B type, playDate link, generation status, scoring rules, movement settings, timestamps"
+    courts: "session-linked court records, player assignments, court number, size, movement metadata"
+    matches: "side assignments, scores, submitter, verifier, audit status, admin override fields"
+    checkIns: "attendance events, geofence validation result, timestamps, admin override flag"
+    standingsSnapshots: "computed standings per court and per session, optional cumulative rollups"
+    venues: "court location data, geofence radius, display metadata"
+    audits: "append-only event log for score edits, result assignment, and generation actions"
+  }
+
+  document_shape_principles: [
+    "Store IDs redundantly when it simplifies Firestore queries.",
+    "Persist computed standings snapshots instead of recalculating all history on every load.",
+    "Separate mutable match state from immutable audit events.",
+    "Use server timestamps for generation, submission, verification, and finalization milestones.",
+    "Consider Cloud Functions for validation/automation if client-only trust becomes risky."
+  ]
+
+  status_enums {
+    session_status: ["draft", "generated", "live", "awaiting-finalization", "finalized"]
+    match_status: ["scheduled", "submitted", "awaiting-verification", "verified", "admin-assigned"]
+    check_in_status: ["pending", "confirmed", "geo-rejected", "admin-confirmed"]
+  }
+}
+
+FRONTEND_ARCHITECTURE {
+  app_type: "responsive web app"
+  typing_policy: "TypeScript defines core domain models and state contracts even if some early modules remain JavaScript"
+  css_policy: "use reusable utility classes or component styles; avoid one-off page styling"
+
+  route_groups: [
+    "player",
+    "admin",
+    "shared session views",
+    "profile"
+  ]
+
+  core_domain_types: [
+    "User",
+    "Season",
+    "PlayDate",
+    "Session",
+    "Court",
+    "Match",
+    "CheckIn",
+    "StandingsSnapshot",
+    "Venue"
+  ]
+
+  state_slices: [
+    "auth state",
+    "active mode",
+    "current play date",
+    "current session",
+    "live match updates",
+    "admin review data"
+  ]
+
+  service_layer_rule: "Firebase access must be isolated behind clearly named service modules; UI components must not mix rendering with query logic."
+  validation_layer_rule: "Use client validation for speed and optional server-side validation for sensitive writes such as score edits and finalization."
+
+  recommended_component_families: [
+    "status chip",
+    "match card",
+    "court card",
+    "standings row",
+    "role toggle",
+    "check-in button",
+    "admin action tile",
+    "finalization modal",
+    "audit history drawer"
+  ]
+
+  suggested_module_breakdown {
+    auth: "Firebase Auth integration, role bootstrap, active-mode persistence"
+    players: "court home screen, match actions, check-in experience"
+    admin: "attendance review, generation flows, match monitoring, score edits, finalization"
+    sessions: "session queries, derived court grouping, live status watchers, standings display"
+    data: "shared Firestore access utilities, converters, optimistic update helpers"
+    ui: "reusable presentation components and layout wrappers"
+    utils: "geofence math, sorting helpers, rotation helpers, formatting functions"
+  }
+}
+
+REALTIME_RULES {
+  hard_rules: [
+    "Use Firestore listeners selectively.",
+    "Do not subscribe every screen to every match on the play date."
+  ]
+  player_home_subscriptions: [
+    "player active session",
+    "assigned court",
+    "relevant matches only"
+  ]
+  admin_monitor_subscriptions: [
+    "broader session scope allowed because it is an operational control surface"
+  ]
+}
+
+MVP_BUILD_SEQUENCE {
+  step_01: "Set up auth, user roles, and global mode toggle."
+  step_02: "Build season, venue, and play date creation basics for admins."
+  step_03: "Implement player check-in with geofence validation and admin override."
+  step_04: "Build attendance review and court assignment preview."
+  step_05: "Implement Session A generation, locking, and rotation generation."
+  step_06: "Build player court home, score submission, and score verification."
+  step_07: "Implement live standings and Session A finalization with admin-assigned result path."
+  step_08: "Generate Session B from Session A participants and results."
+  step_09: "Persist ladder updates and cumulative stats for the next play date."
+}
+
+MVP_SCOPE {
+  includes: [
+    "one ladder format: individual ladder ranked from doubles results",
+    "court sizes restricted to four and five players",
+    "two sessions per play date: Session A and Session B",
+    "player-driven score submission plus opponent verification",
+    "admin score edits with audit support",
+    "admin assignment path for incomplete matches",
+    "dual-role users with mode toggle",
+    "cumulative season stats stored for admin context"
+  ]
+}
+
+DEFERRED_SCOPE {
+  deferred: [
+    "public API contract and third-party integration endpoints",
+    "full bracket and generalized tournament formats",
+    "advanced analytics dashboards",
+    "automated external rating sync",
+    "sophisticated absence policies beyond current ladder behavior"
+  ]
+  note: "DUPR readiness is included in the data model, but actual sync/integration mechanics are deferred until access details are known."
+}
+
+FUTURE_ENHANCEMENTS {
+  candidates: [
+    "DUPR identity linkage and result submission workflows",
+    "richer cumulative ranking support",
+    "notifications for check-in and verification",
+    "dispute flags",
+    "historical analytics",
+    "more configurable scoring and movement rules engine"
+  ]
+}
+
+AGENT_IMPLEMENTATION_DIRECTIVES {
+  directive_01: "Treat competition mechanics and operational workflow as source-of-truth business logic, not just UI suggestions."
+  directive_02: "Do not let UI flows violate session lock rules."
+  directive_03: "Do not auto-finalize or auto-resolve disputes/incomplete matches."
+  directive_04: "All verified score edits must leave a traceable audit record."
+  directive_05: "Session generation must be deterministic enough to explain to admins."
+  directive_06: "Every blocking status transition must be visible somewhere in the UI."
+  directive_07: "Use cumulative stats to inform admin judgment only; never silently override ladder movement in V1."
+  directive_08: "Keep player interactions fast enough for one-handed use beside a court."
+  directive_09: "Preserve a narrow MVP. Do not gold-plate with generic sports-platform abstractions too early."
+  directive_10: "Prefer explainability, operational smoothness, fairness, and mobile speed over novelty."
+}
+
+ACCEPTANCE_CRITERIA {
+  product_acceptance: [
+    "A player can check in from within venue geofence during allowed window.",
+    "An admin can override failed or exceptional check-ins.",
+    "An admin can preview and adjust fairness placement before generation.",
+    "Generating Session A locks courts, rosters, and rotations.",
+    "A player can see assigned court, current match, next match, and score actions from phone."
+    "A submitted score requires opposing-side verification before affecting standings.",
+    "Live standings update after verification only.",
+    "An admin can monitor pending/submitted/verified/blocked matches from live control surface.",
+    "Incomplete matches require explicit admin assignment before session finalization.",
+    "Finalizing Session A computes movement and enables Session B generation from eligible participants only.",
+    "Audit traces exist for generation actions, score changes, and admin result assignment.",
+    "Play date closure persists ladder state for next date."
+  ]
+  ui_acceptance: [
+    "Player home is court-centric, not dashboard-centric.",
+    "Admin dashboard emphasizes attendance, generation, monitoring, and finalization.",
+    "Dual-role users can switch back to admin quickly from player context.",
+    "UI remains clean sports-tech, high contrast, and not overdecorated."
+  ]
+  data_acceptance: [
+    "Firestore collection structure supports direct operational querying without excessive nesting.",
+    "Statuses are explicit and consistent across session, match, and check-in records.",
+    "Standings snapshots are stored for historical performance and efficient reads."
+  ]
+}
+
+AGENT_OUTPUT_EXPECTATIONS {
+  expected_repository_bias: "lean, modular, mobile-first, Firebase-native, TypeScript-first where domain logic matters"
+  disallowed_bias: [
+    "generic tournament platform architecture as core MVP",
+    "unbounded analytics scope",
+    "UI spectacle over clarity",
+    "hidden rules or implicit auto-resolution behavior"
+  ]
+}
+
+FINAL_SUMMARY {
+  statement: "Build the first release as a polished, narrow product. Win the court experience first. Expand later."
+}

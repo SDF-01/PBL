@@ -157,6 +157,7 @@ export default function LeagueCreatePage() {
   const [registrationCloseDate, setRegistrationCloseDate] = useState("");
   const [firstSessionDate, setFirstSessionDate] = useState("");
   const [lastSessionDate, setLastSessionDate] = useState("");
+  const [geoLocationAssistedCheckIn, setGeoLocationAssistedCheckIn] = useState(false);
 
   // Staff
   const [director, setDirector] = useState<ResolvedUser | null>(null);
@@ -242,6 +243,7 @@ export default function LeagueCreatePage() {
         leagueFormat: leagueFormat.trim() || undefined,
         facilityId,
         newFacility,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: registrationOpenDate || undefined,
         registrationCloseDate: registrationCloseDate || undefined,
         firstSessionDate: firstSessionDate || undefined,
@@ -580,6 +582,21 @@ export default function LeagueCreatePage() {
                 {firstSessionDate && lastSessionDate && lastSessionDate < firstSessionDate && (
                   <p className="text-crimson-400 text-xs">Last session must be on or after the first session.</p>
                 )}
+
+                <label className="flex items-start gap-2 rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={geoLocationAssistedCheckIn}
+                    onChange={(e) => setGeoLocationAssistedCheckIn(e.target.checked)}
+                    className="mt-0.5 accent-ember-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-ash-200 text-sm font-medium">Use GPS-assisted check-in</span>
+                    <span className="block text-ash-500 text-xs mt-0.5">
+                      Players check in from their device location when play dates are active.
+                    </span>
+                  </span>
+                </label>
               </div>
             )}
           </Panel>

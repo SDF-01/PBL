@@ -1,0 +1,448 @@
+project_update:
+  name: Pickleball League Homepage, League Discovery, Auth, and Profile Setup Update
+  target_app: Existing pickleballleague.web.app application
+  intended_agent: VS Code coding agent using Claude 4.7
+  implementation_stack:
+    frontend:
+      - TypeScript
+      - JavaScript
+      - CSS
+    backend_services:
+      - Firebase
+      - Firebase Auth
+      - Firestore or existing Firebase database structure
+  scope: Implement only the agreed V1 updates from the homepage/account/league discovery workshop.
+  preserve_existing_structure: true
+  priority: high
+
+agent_instructions:
+  overall_goal: >
+    Update the existing application without rewriting the whole app. Preserve the current homepage layout and visual direction, but replace the current public action model with account-based entry points and location-based league discovery.
+  working_style:
+    - Inspect the existing route structure before creating new files.
+    - Reuse existing components, styles, Firebase helpers, and data models where possible.
+    - Prefer small composable components over large rewrites.
+    - Do not remove existing admin or ladder functionality unless it is directly replaced by this spec.
+    - Add graceful loading, empty, and permission-denied states.
+    - Keep UI mobile-first.
+  non_goals:
+    - Do not build the full admin dashboard redesign yet.
+    - Do not build the full match scoring workflow yet.
+    - Do not expose public standings.
+    - Do not add manual city or ZIP search in this iteration.
+    - Do not implement tournament updates in this iteration.
+
+accepted_decisions:
+  homepage_primary_actions:
+    decision: Replace Player Check-in and Admin Dashboard with Login and Create Account.
+    status: accepted
+  homepage_layout:
+    decision: Preserve the current main page layout as much as possible.
+    status: accepted
+  location_discovery:
+    decision: Use the user's current location to find nearby leagues.
+    status: accepted
+  manual_search:
+    decision: Do not add manual city or ZIP search in V1.
+    status: accepted
+  nearby_results:
+    decision: Show the closest league plus nearby alternative leagues.
+    status: accepted
+  nearby_alternative_action:
+    decision: View League opens a public league details page.
+    status: accepted
+  public_standings:
+    decision: Do not show standings publicly.
+    status: accepted
+  join_flow:
+    decision: Users must create an account before joining or requesting to join a league.
+    status: accepted
+  signup_redirect:
+    decision: After account creation, send the user directly to player profile setup.
+    status: accepted
+  player_profile_setup:
+    decision: Use a progressive player profile setup.
+    status: accepted
+  starting_skill:
+    decision: Starting skill is based on DUPR.
+    status: accepted
+  unknown_dupr:
+    decision: If the player does not know their DUPR, allow provisional rating range selection.
+    status: accepted
+
+routes:
+  - path: /
+    name: Home
+    access: public
+    update_type: modify_existing
+    purpose: >
+      Preserve current landing page feel while changing the primary actions to account-based entry and adding current-location-based league discovery.
+    required_changes:
+      hero:
+        keep_existing_visual_layout: true
+        primary_button:
+          label: Login
+          destination: /auth/login
+        secondary_button:
+          label: Create Account
+          destination: /auth/signup
+        suggested_copy:
+          headline: Run your ladder. Win the court.
+          body: Log in or create an account to check in, view your session, submit scores, and climb your league standings.
+      league_discovery_card:
+        component_name_suggestion: NearbyLeaguesCard
+        placement: Replace or evolve the current public play-date/status area.
+        title: Leagues Near You
+        discovery_method: browser_geolocation
+        manual_search_enabled: false
+        max_nearby_alternatives: 3
+        behavior:
+          permission_not_requested:
+            title: Find the closest league near you
+            message: Allow location access to see nearby pickleball leagues.
+            action_label: Use My Location
+          permission_granted_with_results:
+            title: Leagues Near You
+            featured_label: Closest League
+            show_featured_fields:
+              - league_name
+              - city
+              - distance
+              - next_play_date
+              - check_in_status
+            featured_actions:
+              - label: Login
+                destination: /auth/login
+                carry_context:
+                  - selected_league_id
+              - label: Create Account
+                destination: /auth/signup
+                carry_context:
+                  - selected_league_id
+            alternatives_label: Nearby Alternatives
+            show_alternative_fields:
+              - league_name
+              - city
+              - distance
+              - next_play_date
+              - status
+            alternative_action:
+              label: View League
+              destination_pattern: /leagues/:leagueId
+          permission_denied:
+            title: Location Needed
+            message: Location access is required to show nearby leagues.
+            action_label: Try Again
+            manual_search_enabled: false
+          no_nearby_league:
+            title: No Nearby League Found
+            message: No active league was found near your current location.
+            action_label: Create Account
+            action_destination: /auth/signup
+          loading:
+            title: Finding nearby leagues
+            message: Checking your location and looking for active leagues.
+    firebase_notes:
+      expected_league_fields:
+        - id
+        - name
+        - city
+        - state
+        - latitude
+        - longitude
+        - active
+        - next_play_date
+        - check_in_status
+      query_strategy: >
+        Use existing Firebase structure if available. If the current data model does not include league latitude and longitude, add those fields to league records. For V1, client-side distance calculation is acceptable after fetching active leagues. For larger scale, migrate to geohash or GeoFirestore-style querying later.
+      distance_logic:
+        formula: Haversine distance
+        sort: ascending_distance
+        featured_result: first_result_after_sort
+        alternatives: next_3_results_after_featured
+
+  - path: /leagues/:leagueId
+    name: Public League Details
+    access: public
+    update_type: create_or_modify_existing
+    purpose: Let visitors inspect a nearby league before creating an account or logging in.
+    sections:
+      - league_header
+      - venue_location
+      - next_play_date
+      - check_in_status
+      - league_format
+      - general_description
+      - login_or_create_account_actions
+      - locked_standings_message
+    visible_without_login:
+      - league_name
+      - city
+      - venue_or_general_location
+      - next_play_date
+      - check_in_status
+      - league_format
+      - general_description
+    hidden_until_login:
+      - standings
+      - player_profiles
+      - match_history
+      - court_assignments
+    public_standings:
+      enabled: false
+      replacement_card:
+        title: Standings available after login
+        message: Create an account or log in to view player rankings, match history, and league results.
+    actions:
+      primary:
+        label: Create Account
+        destination: /auth/signup
+        carry_context:
+          - selected_league_id
+      secondary:
+        label: Login
+        destination: /auth/login
+        carry_context:
+          - selected_league_id
+    join_behavior:
+      anonymous_join_request: false
+      join_requires_account: true
+
+  - path: /auth/signup
+    name: Create Account
+    access: public
+    update_type: modify_existing
+    purpose: Create a user account and preserve selected league context when signup starts from a league page or homepage league card.
+    required_changes:
+      preserve_context:
+        selected_league_id: true
+        accepted_context_sources:
+          - query_param
+          - route_state
+          - session_storage
+        suggested_query_param: leagueId
+      after_successful_signup:
+        destination: /players/edit
+        carry_context:
+          - selected_league_id
+      firebase_auth:
+        use_existing_auth_flow: true
+        do_not_duplicate_auth_logic: true
+
+  - path: /auth/login
+    name: Login
+    access: public
+    update_type: modify_existing
+    purpose: Login existing users and preserve selected league context when login starts from a league page or homepage league card.
+    required_changes:
+      preserve_context:
+        selected_league_id: true
+        accepted_context_sources:
+          - query_param
+          - route_state
+          - session_storage
+        suggested_query_param: leagueId
+      after_successful_login:
+        preferred_behavior: >
+          If selected_league_id exists and the user needs a completed player profile, route to /players/edit. Otherwise route to the appropriate logged-in landing page using existing app logic.
+      firebase_auth:
+        use_existing_auth_flow: true
+        do_not_duplicate_auth_logic: true
+
+  - path: /players/edit
+    name: Player Profile Setup
+    access: authenticated
+    update_type: modify_existing
+    purpose: Progressive first-run player profile setup after account creation.
+    required_changes:
+      setup_type: progressive
+      selected_league_context:
+        preserve_selected_league_id: true
+        display_selected_league_if_available: true
+      first_run_required_fields:
+        - display_name
+        - selected_league
+        - rating_input
+      optional_later_fields:
+        - phone
+        - city
+        - preferred_hand
+        - preferred_play_times
+        - notes
+        - profile_photo_or_avatar
+      copy:
+        title: Set up your player profile
+        body: Tell us enough to place you in the right league group. You can add more details later.
+      rating_input:
+        rating_source: DUPR
+        known_dupr_option:
+          label: DUPR Rating
+          input_type: number
+          required: false
+          helper_text: Enter your DUPR rating if you know it.
+          examples:
+            - 2.75
+            - 3.25
+            - 4.10
+          validation:
+            min: 1.0
+            max: 8.0
+            decimals_allowed: 2
+        unknown_dupr_option:
+          label: I do not know my DUPR
+          behavior: reveal_provisional_rating_ranges
+        provisional_rating_ranges:
+          required_when_dupr_unknown: true
+          options:
+            - id: newer_player
+              label: Newer Player
+              estimated_min: 2.0
+              estimated_max: 2.5
+            - id: developing_player
+              label: Developing Player
+              estimated_min: 2.5
+              estimated_max: 3.0
+            - id: intermediate_player
+              label: Intermediate Player
+              estimated_min: 3.0
+              estimated_max: 3.5
+            - id: strong_intermediate_player
+              label: Strong Intermediate Player
+              estimated_min: 3.5
+              estimated_max: 4.0
+            - id: advanced_player
+              label: Advanced Player
+              estimated_min: 4.0
+              estimated_max: null
+      validation_rules:
+        display_name_required: true
+        selected_league_required_when_context_missing: true
+        require_either_dupr_or_provisional_range: true
+      after_profile_save:
+        unresolved_decision: true
+        note: >
+          The workshop has not yet decided whether the user should automatically submit a join request, see a confirmation screen, or enter an admin approval state after profile setup. Do not hard-code this final join behavior unless the existing app already has a standard pattern.
+        safe_default: Route back to /leagues/:leagueId as an authenticated user if selected_league_id is available. Otherwise route to existing player home or profile page.
+
+components_to_consider:
+  - name: NearbyLeaguesCard
+    purpose: Handles geolocation permission states, nearby league results, featured closest league, and alternatives.
+  - name: LeagueResultCard
+    purpose: Displays one league result with name, distance, next play date, status, and action.
+  - name: PublicLeagueDetailsPage
+    purpose: Displays public league information without exposing standings or player details.
+  - name: LockedStandingsCard
+    purpose: Tells public users that standings require login.
+  - name: DuprRatingInput
+    purpose: Lets a player enter known DUPR or select unknown DUPR.
+  - name: ProvisionalRatingRangeSelect
+    purpose: Reveals and validates provisional rating range options when DUPR is unknown.
+
+state_and_context:
+  selected_league_id:
+    purpose: Preserve the user's chosen league through homepage, public league page, signup, login, and profile setup.
+    preferred_storage_order:
+      - route query parameter
+      - router state
+      - sessionStorage
+    suggested_query_param: leagueId
+    cleanup_after_profile_complete: false
+  geolocation:
+    browser_api: navigator.geolocation.getCurrentPosition
+    permission_states:
+      - not_requested
+      - requesting
+      - granted
+      - denied
+      - error
+    error_handling:
+      denied: Show Location Needed state.
+      unavailable: Show Location Needed or No Nearby League Found state depending on browser response.
+      timeout: Let user retry.
+
+firestore_data_model_suggestions:
+  leagues:
+    collection: leagues
+    fields:
+      id: string
+      name: string
+      city: string
+      state: string
+      latitude: number
+      longitude: number
+      active: boolean
+      next_play_date: timestamp_or_string
+      check_in_status: string
+      league_format: string
+      description: string
+  player_profiles:
+    collection: playerProfiles
+    fields:
+      uid: string
+      display_name: string
+      selected_league_id: string
+      dupr_rating: number_or_null
+      dupr_unknown: boolean
+      provisional_rating_range_id: string_or_null
+      provisional_rating_min: number_or_null
+      provisional_rating_max: number_or_null
+      profile_complete_for_join: boolean
+      created_at: timestamp
+      updated_at: timestamp
+
+acceptance_criteria:
+  homepage:
+    - Existing homepage visual structure is preserved.
+    - Player Check-in and Admin Dashboard homepage buttons are replaced with Login and Create Account.
+    - Public league status area becomes a location-based nearby leagues card.
+    - The app asks for browser location before showing nearby leagues.
+    - The closest league is featured.
+    - Up to 3 nearby alternatives are displayed.
+    - Nearby alternatives have View League actions.
+    - Manual city or ZIP search is not shown.
+  public_league_details:
+    - /leagues/:leagueId is accessible without login.
+    - Public users can see league details and next play date information.
+    - Public users cannot see standings, player profiles, match history, or court assignments.
+    - Create Account and Login carry selected league context.
+  auth_context:
+    - Signup from a selected league preserves selected_league_id.
+    - Login from a selected league preserves selected_league_id.
+    - After signup, user is routed to /players/edit.
+  profile_setup:
+    - Profile setup uses progressive required fields.
+    - DUPR rating is supported as the primary skill input.
+    - If the user does not know DUPR, provisional rating ranges are available.
+    - Form requires either a valid DUPR rating or a provisional rating range.
+    - Optional profile details are not required for first-run completion.
+  privacy:
+    - Public users cannot access player rankings or performance data.
+    - Public league discovery does not expose individual player data.
+
+implementation_notes:
+  distance_calculation:
+    name: Haversine
+    output_unit: miles
+    suggested_display_precision: 1 decimal place
+  styling:
+    keep_current_brand: true
+    mobile_first: true
+    cards_should_feel_consistent_with_existing_homepage: true
+  testing:
+    include_tests_or_manual_checks:
+      - geolocation permission granted
+      - geolocation permission denied
+      - no active leagues returned
+      - one league returned
+      - multiple leagues returned
+      - signup with selected league context
+      - login with selected league context
+      - profile save with known DUPR
+      - profile save with unknown DUPR and provisional range
+      - profile validation failure when no rating input is provided
+
+open_questions_for_later:
+  - After profile setup, should the selected league join be automatic, confirmation-based, or admin-approval-only?
+  - Should admins be able to edit a player's initial DUPR or provisional placement before first session?
+  - Should leagues have public/private visibility settings?
+  - Should nearby league discovery eventually support manual search by city, ZIP, or league code?

@@ -365,24 +365,24 @@ export async function verifyChallengeScore(
     updatedAt: serverTimestamp(),
   });
 
-  const { applyMatchEloByUserIds } = await import("../players/write");
-  await applyMatchEloByUserIds({
-    sideA: [challenge.challengerId],
-    sideB: [challenge.challengeeId],
-    scoreA: challenge.scoreA,
-    scoreB: challenge.scoreB,
-    targetPoints: targetPoints(challenge.conditions?.format),
-    source: "challenge",
-    sourceId: challengeId,
-  });
-
-  // Mark ELO as applied so retries and the UI can check.
+  // ELO writes require admin/backend. Catch permission errors so the challenge
+  // stays COMPLETED even while backend functions are not yet deployed.
   try {
+    const { applyMatchEloByUserIds } = await import("../players/write");
+    await applyMatchEloByUserIds({
+      sideA: [challenge.challengerId],
+      sideB: [challenge.challengeeId],
+      scoreA: challenge.scoreA,
+      scoreB: challenge.scoreB,
+      targetPoints: targetPoints(challenge.conditions?.format),
+      source: "challenge",
+      sourceId: challengeId,
+    });
     await updateDoc(doc(db(), COLLECTIONS.playerChallenges, challengeId), {
       eloApplied: true,
       updatedAt: serverTimestamp(),
     });
-  } catch { /* non-critical — ELO already committed */ }
+  } catch { /* ELO pending — requires admin SDK or Cloud Function */ }
 }
 
 /**

@@ -88,3 +88,14 @@ export async function listRecentEloEvents(
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EloEventDoc);
 }
+
+/** Fetch ELO events written for a specific match/challenge by sourceId. */
+export async function getEloEventsForSource(sourceId: string): Promise<EloEventDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.eloEvents),
+      where("sourceId", "==", sourceId),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EloEventDoc);
+}

@@ -368,9 +368,8 @@ service cloud.firestore {
 
     match /audits/{id} {
       allow read: if isAdmin();
-      allow create: if isStaff()
-        // Players can create audit entries for their own actions
-        || (isSignedIn() && request.resource.data.actorId == request.auth.uid);
+      // Audit records are immutable and must only be created by trusted backend/admin.
+      allow create: if isAdmin();
       allow update, delete: if false;
     }
 
@@ -378,17 +377,16 @@ service cloud.firestore {
       // Player profiles are private — require authentication to view.
       allow read: if isSignedIn();
       allow create: if isSafePlayerCreate(uid) || isAdmin();
-      allow update: if isSafePlayerUpdate(uid) || isAdmin()
-        // Any signed-in player may write ELO + stats fields (computed client-side
-        // by applyMatchEloByUserIds after a verified challenge or ladder match).
-        || (isSignedIn() && hasOnlyChanged(["elo", "eloPeak", "stats", "updatedAt"]));
+      // ELO/stats mutations are admin-only. Client-side applyMatchEloByUserIds must
+      // fail gracefully; a trusted backend Cloud Function will own these writes.
+      allow update: if isSafePlayerUpdate(uid) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /eloEvents/{id} {
       allow read: if true;
-      // Any signed-in player may create ELO event records (written by client-side ELO logic).
-      allow create: if isSignedIn();
+      // ELO events are immutable audit records — only trusted admin/backend may create them.
+      allow create: if isAdmin();
       allow update, delete: if false;
     }
 

@@ -1,0 +1,118 @@
+meta:
+  title: "Firebase Hosting Dynamic Club Route 404 Fix"
+  created: "2026-05-04"
+  repo: "PBL"
+  owner_request: "Create a toon handoff file for fixing 404 on direct club URL navigation"
+  target_url: "https://pickleleauge.web.app/clubs/9sPxVCo8CdpVH5W8gKt4"
+  status: "ready_for_implementation"
+
+problem:
+  summary: "Direct navigation to /clubs/{clubId} returns a 404 even though the club document exists in Firestore."
+  likely_root_cause: "The app is a Next.js static export. Dynamic route files are not generated for every Firestore club id, so Firebase Hosting must rewrite /clubs/** to the generated fallback HTML shell."
+  distinction:
+    hosting_404: "Browser shows a true Firebase/Hosting 404 before the app renders."
+    app_not_found: "The app loads and displays 'Club not found'; that would be a Firestore lookup/rules/config issue instead."
+
+verified_repo_context:
+  next_config:
+    file: "next.config.mjs"
+    evidence:
+      - "output: \"export\""
+      - "trailingSlash: true"
+  generated_fallback:
+    expected_file: "out/clubs/__fallback/index.html"
+    evidence: "Local out directory contains out/clubs/__fallback/index.html after build."
+  dynamic_route:
+    page_file: "src/app/clubs/[clubId]/page.tsx"
+    fallback_static_params:
+      - "{ clubId: \"__fallback\" }"
+  client_lookup:
+    file: "src/app/clubs/[clubId]/ClubPublicClient.tsx"
+    behavior:
+      - "Reads real URL param with useParams()."
+      - "Uses getClubById(slugOrId) first."
+      - "Falls back to getClubBySlug(slugOrId)."
+  hosting_config:
+    file: "firebase.json"
+    current_rewrites:
+      - source: "/leagues/**"
+        destination: "/leagues/__fallback"
+      - source: "/clubs/manage/**"
+        destination: "/clubs/manage/__fallback"
+      - source: "/clubs/**"
+        destination: "/clubs/__fallback"
+
+implementation:
+  objective: "Point Firebase Hosting rewrites at explicit generated HTML files."
+  file_to_edit: "firebase.json"
+  replace_rewrites_with:
+    rewrites:
+      - source: "/leagues/**"
+        destination: "/leagues/__fallback/index.html"
+      - source: "/clubs/manage/**"
+        destination: "/clubs/manage/__fallback/index.html"
+      - source: "/clubs/**"
+        destination: "/clubs/__fallback/index.html"
+  notes:
+    - "Keep /clubs/manage/** before /clubs/** so manage routes are matched by the more specific rewrite first."
+    - "Do not change Firestore data for this fix."
+    - "Do not add generated club ids to generateStaticParams; that does not scale and is wrong for Firestore-created runtime documents."
+    - "Do not remove output: export unless intentionally changing the deployment architecture."
+
+verification:
+  local_commands:
+    - command: "npm run build"
+      expected: "Build succeeds and out directory is regenerated."
+    - command: "Test-Path out\\clubs\\__fallback\\index.html"
+      expected: "True"
+    - command: "Test-Path out\\clubs\\manage\\__fallback\\index.html"
+      expected: "True"
+    - command: "Test-Path out\\leagues\\__fallback\\index.html"
+      expected: "True"
+  deploy_command:
+    command: "firebase deploy --only hosting --project pickleleauge"
+    expected: "Hosting deploy succeeds."
+  production_checks:
+    - url: "https://pickleleauge.web.app/clubs/9sPxVCo8CdpVH5W8gKt4"
+      expected: "No Firebase/Hosting 404. App shell loads and club detail page attempts Firestore lookup."
+    - url: "https://pickleleauge.web.app/clubs/manage/9sPxVCo8CdpVH5W8gKt4"
+      expected: "No Firebase/Hosting 404. App shell loads and manage page attempts permission-gated lookup."
+    - url: "https://pickleleauge.web.app/leagues/example-id"
+      expected: "No Firebase/Hosting 404. App shell loads and league detail page handles lookup."
+
+expected_success_path:
+  - "Firebase Hosting receives /clubs/9sPxVCo8CdpVH5W8gKt4."
+  - "Hosting rewrites it to /clubs/__fallback/index.html."
+  - "The static Next app shell loads."
+  - "ClubPublicClient reads the actual browser URL param via useParams()."
+  - "getClubById('9sPxVCo8CdpVH5W8gKt4') reads Firestore."
+  - "If Firestore config/rules/data are valid, the club renders."
+
+fallback_debugging:
+  if_still_true_404:
+    likely_causes:
+      - "Updated firebase.json was not deployed."
+      - "Firebase project/channel is not the one serving pickleleauge.web.app."
+      - "Rewrite destination still does not match an actual file in out."
+    checks:
+      - "Confirm firebase deploy output targets project pickleleauge."
+      - "Confirm firebase.json in deployed commit has explicit /index.html destinations."
+      - "Confirm out/clubs/__fallback/index.html exists before deploy."
+  if_app_loads_but_says_club_not_found:
+    likely_causes:
+      - "Firestore document id differs from URL."
+      - "Client Firebase env points at a different Firebase project."
+      - "Firestore rules deny read."
+      - "Club document is missing expected fields or status."
+    checks:
+      - "Confirm NEXT_PUBLIC_FIREBASE_PROJECT_ID is pickleleauge in production build."
+      - "Confirm clubs/9sPxVCo8CdpVH5W8gKt4 exists in the same project."
+      - "Confirm firestore.rules allow public read for clubs."
+      - "Check browser console for Firebase permission/config errors."
+
+risk:
+  severity: "medium"
+  blast_radius: "hosting routing only"
+  data_migration_required: false
+  production_data_touch: false
+  rollback: "Revert firebase.json rewrite destinations and redeploy hosting."

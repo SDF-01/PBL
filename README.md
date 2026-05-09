@@ -95,6 +95,7 @@ Read these before implementing privileged features:
 
 - [Development Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md](Development%20Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md)
 - [automation/firebase_database_security_remediation_handoff.toon](automation/firebase_database_security_remediation_handoff.toon)
+- [automation/facility_venue_geocheckin_consolidation_handoff.toon](automation/facility_venue_geocheckin_consolidation_handoff.toon)
 
 Current rules posture:
 
@@ -228,6 +229,7 @@ The current Firebase project id used by scripts is `pickleleauge`. Keep `.fireba
 - `Development Summaries/IMPLEMENTATION_GUIDE.md` - current implementation guide and secure-backend TODOs.
 - `Development Summaries/DEPLOYMENT_SUMMARY.md` - deployment and verification notes.
 - `automation/firebase_database_security_remediation_handoff.toon` - phased security remediation handoff.
+- `automation/facility_venue_geocheckin_consolidation_handoff.toon` - Facility/Venue merge, geocoding, open-play, and GPS-assisted check-in handoff.
 - `USE_CASE_TESTING.md` - role-based manual QA script and security regression checklist.
 - `ENHANCEMENTS.md` - reviewed feature backlog and recommended improvements.
 

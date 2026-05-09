@@ -110,6 +110,8 @@ export interface LeagueDoc {
   active?: boolean;
   next_play_date?: string;
   check_in_status?: string;
+  /** When true, players should use GPS-assisted check-in for league play dates. */
+  geoLocationAssistedCheckIn?: boolean;
   league_format?: string;
   /** Club facility where this league is played (reference to clubFacilities/{id}). */
   facilityId?: string;
@@ -330,6 +332,8 @@ export interface LadderUserExtras {
 
 export interface LadderSeasonDoc {
   id: string;
+  /** League this season belongs to; denormalized for check-in geo lookup. */
+  leagueId?: string;
   name: string;
   slug: string;
   startDate: string;
@@ -359,6 +363,10 @@ export interface PlayDateDoc {
   id: string;
   seasonId: string;
   venueId: string;
+  /** Club facility for this play date (supersedes venueId when present). */
+  facilityId?: string;
+  /** Denormalized from season; used for geo check-in league flag lookup. */
+  leagueId?: string;
   /** YYYY-MM-DD in the venue's local timezone. */
   date: string;
   status: PlayDateStatus;

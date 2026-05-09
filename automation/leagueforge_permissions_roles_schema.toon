@@ -1,0 +1,678 @@
+# LeagueForge Permissions, Roles, Club Creation, and Database Schema
+# Purpose: Define role-based access control, club creation workflow, role transitions, and database schema guidance.
+# Intended use: Claude 4.6 / VS Code coding agent implementation reference.
+
+app:
+  name: LeagueForge
+  tagline: Where competition is built and champions are forged.
+  description: >
+    A modern sports league management platform for clubs, coordinators, and players.
+    The system supports club creation, league setup, player management, match scheduling,
+    round robin generation, score validation, standings, and player statistics.
+
+core_principles:
+  - SiteAdmin permissions are global across the entire application.
+  - ClubDirector permissions are scoped only to clubs they manage.
+  - LeagueCoordinator permissions are scoped only to leagues they coordinate.
+  - Player permissions are scoped to their own profile, personal stats, and league visibility.
+  - ClubCreatorProvisional is a temporary role used while a submitted club is pending approval.
+  - Club-scoped access should always be checked using club_id.
+  - League-scoped access should always be checked using league_id and parent club_id.
+  - Role changes should be auditable through role_events.
+
+roles:
+  - role_key: SiteAdmin
+    display_name: Site Administrator
+    scope: global
+    description: >
+      Highest privilege role. Can manage the full application, all clubs, all leagues,
+      all players, global settings, analytics, and approval workflows.
+    permissions:
+      users:
+        view_all: true
+        edit_all: true
+        suspend_all: true
+        assign_roles: true
+        remove_roles: true
+      clubs:
+        create: true
+        view_all: true
+        edit_all: true
+        approve_pending: true
+        reject_pending: true
+        delete_all: true
+        assign_club_director: true
+        remove_club_director: true
+      leagues:
+        create_any: true
+        view_all: true
+        edit_all: true
+        delete_all: true
+      players:
+        view_all: true
+        edit_all: true
+        suspend_all: true
+      matches:
+        view_all: true
+        edit_all: true
+        validate_all: true
+        override_scores: true
+      standings:
+        view_all: true
+        validate_all: true
+        override_all: true
+      analytics:
+        view_site_reports: true
+        view_all_club_reports: true
+        export_site_data: true
+      settings:
+        site_config: true
+        scoring_rules: true
+        ranking_algorithm: true
+        global_notifications: true
+
+  - role_key: ClubDirector
+    display_name: Club Director
+    scope: club
+    description: >
+      Club-level administrator. Can manage leagues, coordinators, players, matches,
+      schedules, scores, standings, and analytics only within assigned club boundaries.
+    permissions:
+      clubs:
+        view_own: true
+        edit_own: true
+        manage_club_profile: true
+        manage_club_logo: true
+        delete_own: false
+        approve_other_clubs: false
+      club_admins:
+        add_league_coordinator: true
+        remove_league_coordinator: true
+        assign_club_roles: true
+      leagues:
+        create_in_own_club: true
+        view_own_club_leagues: true
+        edit_own_club_leagues: true
+        delete_own_club_leagues: true
+      players:
+        view_own_club_players: true
+        add_players_to_club: true
+        remove_players_from_club: true
+        edit_player_status_in_club: true
+        suspend_player_from_club: true
+      matches:
+        schedule_in_own_club: true
+        view_own_club_matches: true
+        edit_scores_in_own_club: true
+        validate_results_in_own_club: true
+      standings:
+        view_own_club_standings: true
+        validate_own_club_standings: true
+        override_own_club_standings: true
+      analytics:
+        view_own_club_reports: true
+        export_own_club_data: true
+      settings:
+        club_settings: true
+        site_config: false
+        global_notifications: false
+
+  - role_key: LeagueCoordinator
+    display_name: League Coordinator
+    scope: league
+    description: >
+      Operational role for managing a specific league or play session. Can add/remove
+      players before a session, generate round robins, update match results, and validate standings.
+    permissions:
+      clubs:
+        view_parent_club: true
+        edit_parent_club: false
+      leagues:
+        view_assigned_league: true
+        edit_assigned_league: true
+        create_league: false
+        delete_league: false
+      league_roster:
+        view_league_players: true
+        add_players_before_session: true
+        remove_players_before_session: true
+        edit_player_assignments: true
+        lock_roster_for_session: true
+      play_sessions:
+        create_session: true
+        edit_session: true
+        open_check_in: true
+        close_check_in: true
+        generate_round_robin: true
+        regenerate_round_robin_before_start: true
+      matches:
+        view_schedule: true
+        generate_matches: true
+        update_results: true
+        correct_scores: true
+        confirm_completed_matches: true
+      standings:
+        view_league_standings: true
+        validate_league_standings: true
+        verify_standings_after_session: true
+      analytics:
+        view_league_reports: true
+        export_league_data: true
+      settings:
+        league_settings: true
+        club_settings: false
+        site_config: false
+
+  - role_key: Player
+    display_name: Player
+    scope: self_and_joined_leagues
+    description: >
+      Standard account role. Can view league standings and match schedules for leagues
+      they participate in, edit their own profile, and view advanced personal statistics.
+    permissions:
+      profile:
+        view_self: true
+        edit_self: true
+        manage_own_login: true
+      clubs:
+        view_joined_clubs: true
+        create_pending_club_submission: true
+        edit_approved_club: false
+      leagues:
+        view_joined_leagues: true
+        view_league_standings: true
+        view_league_schedule: true
+        request_to_join_league: true
+      matches:
+        view_own_matches: true
+        view_league_results: true
+        submit_score: false
+        verify_own_score_when_enabled: true
+        edit_score: false
+      standings:
+        view_joined_league_standings: true
+        validate_standings: false
+      analytics:
+        view_personal_basic_stats: true
+        view_personal_advanced_stats: true
+        view_other_player_advanced_stats: false
+        view_club_metrics: false
+        export_data: false
+
+  - role_key: ClubCreatorProvisional
+    display_name: Club Creator Provisional
+    scope: pending_club_submission
+    description: >
+      Temporary role assigned when a user submits a club for approval. The user can track
+      submission status and edit the pending club submission, but cannot create leagues or
+      manage players until approval.
+    permissions:
+      clubs:
+        create_pending: true
+        view_own_pending: true
+        edit_pending: true
+        track_approval_status: true
+        withdraw_pending_submission: true
+        view_all_pending: false
+        approve_pending: false
+        reject_pending: false
+      leagues:
+        create: false
+        edit: false
+        delete: false
+      players:
+        view_self_stats: true
+        manage_club_players: false
+      matches:
+        view: false
+        create: false
+        edit: false
+      standings:
+        view: false
+        validate: false
+      analytics:
+        view_personal_basic_stats: true
+        view_club_reports: false
+        export_data: false
+
+role_hierarchy:
+  highest_to_lowest:
+    - SiteAdmin
+    - ClubDirector
+    - LeagueCoordinator
+    - Player
+  provisional_roles:
+    - ClubCreatorProvisional
+  transition_notes:
+    - Player can submit a club creation request.
+    - After club submission, user receives ClubCreatorProvisional scoped to that pending club.
+    - If SiteAdmin approves the club, ClubCreatorProvisional transitions to ClubDirector for that club.
+    - If SiteAdmin rejects the club, user remains Player and does not gain ClubDirector access.
+
+club_creation_workflow:
+  initial_state:
+    actor_role: Player
+    action: create_club_submission
+    result:
+      create_club_record:
+        status: pending
+        creator_user_id: current_user.id
+      assign_role:
+        role_key: ClubCreatorProvisional
+        scope: club_id
+        active: true
+  required_club_fields:
+    - club_name
+    - location
+    - description
+    - logo_url_optional
+  pending_capabilities:
+    - Creator can view own pending club submission.
+    - Creator can edit own pending club submission.
+    - Creator can track approval status.
+    - Creator cannot create leagues yet.
+    - Creator cannot manage players yet.
+    - Creator cannot schedule matches yet.
+
+role_transition_events:
+  - event_key: ClubApproved
+    trigger:
+      table: clubs
+      condition: status changes from any non-approved value to approved
+    actor_allowed:
+      - SiteAdmin
+    actions:
+      - update_club_status:
+          status: approved
+      - update_user_role:
+          user_id: clubs.creator_user_id
+          club_id: clubs.club_id
+          from_role: ClubCreatorProvisional
+          to_role: ClubDirector
+          active: true
+      - insert_role_event:
+          event_type: ClubApproved
+          old_role: ClubCreatorProvisional
+          new_role: ClubDirector
+          notes: Club approval promoted user to ClubDirector.
+      - notify_user:
+          message: Your club has been approved. You now have Club Director permissions.
+
+  - event_key: ClubRejected
+    trigger:
+      table: clubs
+      condition: status changes from any non-rejected value to rejected
+    actor_allowed:
+      - SiteAdmin
+    actions:
+      - update_club_status:
+          status: rejected
+      - keep_user_role:
+          user_id: clubs.creator_user_id
+          effective_role: Player
+          no_director_access: true
+      - insert_role_event:
+          event_type: ClubRejected
+          old_role: ClubCreatorProvisional
+          new_role: null
+          notes: Club proposal rejected. User remains Player.
+      - notify_user:
+          message: Your club proposal was rejected. You remain a Player.
+
+database_schema:
+  tables:
+    users:
+      description: Stores authenticated application users.
+      fields:
+        user_id:
+          type: uuid_or_string
+          primary_key: true
+          notes: Should align with Firebase Auth uid if using Firebase.
+        username:
+          type: string
+          unique: true
+          required: true
+        email:
+          type: string
+          unique: true
+          required: true
+        password_hash:
+          type: string
+          required: false
+          notes: Do not store password_hash if using Firebase Auth. Firebase owns credential storage.
+        created_at:
+          type: timestamp
+        updated_at:
+          type: timestamp
+
+    roles:
+      description: Defines allowed system roles.
+      fields:
+        role_id:
+          type: string
+          primary_key: true
+          examples:
+            - SiteAdmin
+            - ClubDirector
+            - LeagueCoordinator
+            - Player
+            - ClubCreatorProvisional
+        role_name:
+          type: string
+          unique: true
+          required: true
+        description:
+          type: string
+
+    user_roles:
+      description: Assigns users to roles with optional club and league scope.
+      fields:
+        user_role_id:
+          type: uuid_or_string
+          primary_key: true
+        user_id:
+          type: uuid_or_string
+          foreign_key: users.user_id
+          required: true
+        role_id:
+          type: string
+          foreign_key: roles.role_id
+          required: true
+        club_id:
+          type: uuid_or_string
+          foreign_key: clubs.club_id
+          nullable: true
+          notes: Null for global roles like SiteAdmin. Required for ClubDirector and ClubCreatorProvisional.
+        league_id:
+          type: uuid_or_string
+          foreign_key: leagues.league_id
+          nullable: true
+          notes: Required for LeagueCoordinator if coordinator assignment is league-specific.
+        assigned_at:
+          type: timestamp
+        assigned_by:
+          type: uuid_or_string
+          nullable: true
+          notes: User id of assigning admin when applicable.
+        active:
+          type: boolean
+          default: true
+
+    clubs:
+      description: Stores club records and club approval status.
+      fields:
+        club_id:
+          type: uuid_or_string
+          primary_key: true
+        club_name:
+          type: string
+          unique: true
+          required: true
+        location:
+          type: string
+          required: true
+        description:
+          type: string
+          required: false
+        logo_url:
+          type: string
+          required: false
+        status:
+          type: enum
+          values:
+            - pending
+            - approved
+            - rejected
+          default: pending
+        creator_user_id:
+          type: uuid_or_string
+          foreign_key: users.user_id
+          required: true
+        created_at:
+          type: timestamp
+        updated_at:
+          type: timestamp
+
+    leagues:
+      description: Stores leagues under approved clubs.
+      fields:
+        league_id:
+          type: uuid_or_string
+          primary_key: true
+        league_name:
+          type: string
+          required: true
+        club_id:
+          type: uuid_or_string
+          foreign_key: clubs.club_id
+          required: true
+        season:
+          type: string
+          required: false
+        start_date:
+          type: date
+          required: false
+        end_date:
+          type: date
+          required: false
+        created_at:
+          type: timestamp
+        updated_at:
+          type: timestamp
+
+    league_memberships:
+      description: Connects players to leagues.
+      fields:
+        league_membership_id:
+          type: uuid_or_string
+          primary_key: true
+        league_id:
+          type: uuid_or_string
+          foreign_key: leagues.league_id
+          required: true
+        user_id:
+          type: uuid_or_string
+          foreign_key: users.user_id
+          required: true
+        status:
+          type: enum
+          values:
+            - active
+            - inactive
+            - waitlisted
+            - removed
+          default: active
+        joined_at:
+          type: timestamp
+
+    play_sessions:
+      description: Represents a scheduled play session for a league.
+      fields:
+        play_session_id:
+          type: uuid_or_string
+          primary_key: true
+        league_id:
+          type: uuid_or_string
+          foreign_key: leagues.league_id
+          required: true
+        session_date:
+          type: timestamp
+          required: true
+        status:
+          type: enum
+          values:
+            - scheduled
+            - check_in_open
+            - in_progress
+            - completed
+            - validated
+          default: scheduled
+        created_by:
+          type: uuid_or_string
+          foreign_key: users.user_id
+        created_at:
+          type: timestamp
+        updated_at:
+          type: timestamp
+
+    matches:
+      description: Stores generated or scheduled matches.
+      fields:
+        match_id:
+          type: uuid_or_string
+          primary_key: true
+        league_id:
+          type: uuid_or_string
+          foreign_key: leagues.league_id
+          required: true
+        play_session_id:
+          type: uuid_or_string
+          foreign_key: play_sessions.play_session_id
+          nullable: true
+        round_number:
+          type: integer
+          nullable: true
+        player1_id:
+          type: uuid_or_string
+          foreign_key: users.user_id
+          required: true
+        player2_id:
+          type: uuid_or_string
+          foreign_key: users.user_id
+          required: true
+        scheduled_at:
+          type: timestamp
+          nullable: true
+        score_player1:
+          type: integer
+          nullable: true
+        score_player2:
+          type: integer
+          nullable: true
+        status:
+          type: enum
+          values:
+            - scheduled
+            - in_progress
+            - completed
+            - validated
+          default: scheduled
+        created_at:
+          type: timestamp
+        updated_at:
+          type: timestamp
+
+    role_events:
+      description: Audit table for role changes and approval events.
+      fields:
+        event_id:
+          type: uuid_or_string
+          primary_key: true
+        user_id:
+          type: uuid_or_string
+          foreign_key: users.user_id
+          required: true
+        club_id:
+          type: uuid_or_string
+          foreign_key: clubs.club_id
+          nullable: true
+        league_id:
+          type: uuid_or_string
+          foreign_key: leagues.league_id
+          nullable: true
+        event_type:
+          type: string
+          examples:
+            - ClubApproved
+            - ClubRejected
+            - RoleAssigned
+            - RoleRemoved
+        old_role_id:
+          type: string
+          foreign_key: roles.role_id
+          nullable: true
+        new_role_id:
+          type: string
+          foreign_key: roles.role_id
+          nullable: true
+        event_timestamp:
+          type: timestamp
+        notes:
+          type: string
+
+access_control_rules:
+  site_admin:
+    allow_when:
+      - user has active user_roles record where role_id == SiteAdmin and club_id is null
+  club_director:
+    allow_when:
+      - user has active user_roles record where role_id == ClubDirector and club_id matches target club_id
+  league_coordinator:
+    allow_when:
+      - user has active user_roles record where role_id == LeagueCoordinator and league_id matches target league_id
+      - or user has ClubDirector role for parent club_id of target league
+      - or user has SiteAdmin role
+  player:
+    allow_when:
+      - user is viewing own profile
+      - user is viewing leagues where they have active league_memberships record
+      - user is viewing standings or schedule for joined league
+  club_creator_provisional:
+    allow_when:
+      - user has active user_roles record where role_id == ClubCreatorProvisional and club_id matches pending club_id
+      - target club status == pending
+
+implementation_notes_for_firebase:
+  firestore_collections:
+    - users
+    - roles
+    - userRoles
+    - clubs
+    - leagues
+    - leagueMemberships
+    - playSessions
+    - matches
+    - roleEvents
+  recommended_document_ids:
+    users: Firebase Auth uid
+    roles: role_key such as SiteAdmin or ClubDirector
+    clubs: auto-generated id
+    leagues: auto-generated id
+    userRoles: auto-generated id or composite userId_role_scope
+  security_rules_guidance:
+    - Never trust UI-only role checks.
+    - Enforce role checks in Firestore Security Rules or backend Cloud Functions.
+    - Use custom claims only for global roles if needed, such as SiteAdmin.
+    - Use Firestore role documents for scoped roles because ClubDirector and LeagueCoordinator are resource-specific.
+    - Validate that a ClubDirector club_id matches the requested club document.
+    - Validate that a LeagueCoordinator league_id matches the requested league document.
+    - Only SiteAdmin can approve or reject pending clubs.
+    - A pending club creator can update only limited fields on their own pending club.
+    - On club approval, use a trusted backend function to update userRoles and roleEvents atomically.
+
+agent_tasks:
+  - Create or update role constants for SiteAdmin, ClubDirector, LeagueCoordinator, Player, and ClubCreatorProvisional.
+  - Create TypeScript types for RoleKey, ClubStatus, LeagueStatus, PlaySessionStatus, MatchStatus, and scoped UserRole.
+  - Create Firestore collection helpers for users, roles, userRoles, clubs, leagues, leagueMemberships, playSessions, matches, and roleEvents.
+  - Add permission helper functions:
+      - isSiteAdmin(userId)
+      - isClubDirector(userId, clubId)
+      - isLeagueCoordinator(userId, leagueId)
+      - canApproveClub(userId)
+      - canEditPendingClub(userId, clubId)
+      - canManageLeagueRoster(userId, leagueId)
+      - canValidateStandings(userId, leagueId)
+      - canViewPlayerAdvancedStats(requestingUserId, targetUserId)
+  - Add club creation flow:
+      - Player submits club.
+      - Create clubs document with status pending.
+      - Create userRoles document for ClubCreatorProvisional scoped to club_id.
+      - Show status tracking UI.
+      - Allow edits while status is pending.
+  - Add site admin approval flow:
+      - SiteAdmin reviews pending clubs.
+      - SiteAdmin approves or rejects.
+      - Backend function updates club status.
+      - Backend function updates user role on approval.
+      - Backend function writes roleEvents audit record.
+      - Backend function creates user notification.
