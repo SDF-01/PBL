@@ -488,14 +488,18 @@ export default function ImportCourtsPage() {
             ) : (
               <>
                 {/* Column headers — sortable */}
-                <div className="grid grid-cols-[2rem_1fr_1fr_5rem_5rem] gap-2 pb-2 border-b border-obsidian-600">
+                <div className="grid grid-cols-[2rem_1.5fr_1fr_0.8fr_5rem_5rem_5rem] gap-2 pb-2 border-b border-obsidian-600">
                   <span />
                   <button type="button" className={thCls} onClick={() => toggleSort("name")}>
                     Facility <SortIcon col="name" active={sortCol} dir={sortDir} />
                   </button>
                   <button type="button" className={thCls} onClick={() => toggleSort("address")}>
-                    Address <SortIcon col="address" active={sortCol} dir={sortDir} />
+                    Street <SortIcon col="address" active={sortCol} dir={sortDir} />
                   </button>
+                  <button type="button" className={thCls} onClick={() => toggleSort("address")}>
+                    City <SortIcon col="address" active={sortCol} dir={sortDir} />
+                  </button>
+                  <span className={thCls}>Zip</span>
                   <button type="button" className={`${thCls} justify-end`} onClick={() => toggleSort("courts")}>
                     <SortIcon col="courts" active={sortCol} dir={sortDir} /> Courts
                   </button>
@@ -508,7 +512,7 @@ export default function ImportCourtsPage() {
                   {displayedRows.map((row) => (
                     <div
                       key={row.osmId}
-                      className={`grid grid-cols-[2rem_1fr_1fr_5rem_5rem] gap-2 items-start py-2.5 ${
+                      className={`grid grid-cols-[2rem_1.5fr_1fr_0.8fr_5rem_5rem_5rem] gap-2 items-start py-2.5 ${
                         row.alreadyImported ? "opacity-40" : ""
                       }`}
                     >
@@ -524,7 +528,7 @@ export default function ImportCourtsPage() {
                           : <Square className="h-4 w-4" />}
                       </button>
 
-                      {/* Name */}
+                      {/* Facility name */}
                       <div className="min-w-0">
                         <p className="text-ash-100 text-xs font-medium truncate">
                           {row.facilityName ?? <span className="text-ash-500 italic">Unnamed</span>}
@@ -544,9 +548,21 @@ export default function ImportCourtsPage() {
                         )}
                       </div>
 
-                      {/* Address */}
+                      {/* Street */}
                       <p className="text-ash-400 text-xs truncate">
-                        {row.address ?? <span className="text-ash-600 italic">No address tagged</span>}
+                        {row.streetAddress ?? <span className="text-ash-600 italic">—</span>}
+                      </p>
+
+                      {/* City + State */}
+                      <p className="text-ash-400 text-xs truncate">
+                        {row.addressCity
+                          ? [row.addressCity, row.addressState].filter(Boolean).join(", ")
+                          : <span className="text-ash-600 italic">—</span>}
+                      </p>
+
+                      {/* Zip */}
+                      <p className="text-ash-400 text-xs font-mono">
+                        {row.addressPostcode ?? <span className="text-ash-600 italic">—</span>}
                       </p>
 
                       {/* Courts */}

@@ -14,7 +14,13 @@ export interface OsmFacility {
   /** "node/12345678" or "way/12345678" — used as osmId on ClubFacility */
   osmId: string;
   facilityName: string | undefined;
+  /** Full combined address string (used for display fallback and search filtering) */
   address: string | undefined;
+  /** House number + street name */
+  streetAddress: string | undefined;
+  addressCity: string | undefined;
+  addressState: string | undefined;
+  addressPostcode: string | undefined;
   lat: number;
   lng: number;
   pickleballCourts: number | undefined;
@@ -115,6 +121,10 @@ function mapElement(el: OverpassElement): OsmFacility | null {
   const streetLine = [houseNumber, street].filter(Boolean).join(" ");
   const cityLine = [city, state, postcode].filter(Boolean).join(", ");
   const address = [streetLine, cityLine].filter(Boolean).join(", ") || undefined;
+  const streetAddress = streetLine || undefined;
+  const addressCity = city || undefined;
+  const addressState = state || undefined;
+  const addressPostcode = postcode || undefined;
 
   const courtCount =
     parseInt(tags["sport:pickleball:courts"] ?? tags["pickleball:courts"] ?? "0", 10) || undefined;
@@ -125,6 +135,10 @@ function mapElement(el: OverpassElement): OsmFacility | null {
     osmId: `${el.type}/${el.id}`,
     facilityName: tags["name"] ?? tags["official_name"] ?? undefined,
     address,
+    streetAddress,
+    addressCity,
+    addressState,
+    addressPostcode,
     lat,
     lng,
     pickleballCourts: courtCount,
