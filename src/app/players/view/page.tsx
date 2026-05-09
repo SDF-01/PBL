@@ -155,6 +155,9 @@ function PlayerView() {
         challengeeName: profile.displayName,
       });
       setChallengeSent(true);
+    } catch (err) {
+      console.error("Challenge failed:", err);
+      alert("Could not send challenge. Please try again.");
     } finally {
       setChallengePending(false);
     }

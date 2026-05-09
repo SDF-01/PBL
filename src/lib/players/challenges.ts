@@ -189,7 +189,7 @@ export async function sendChallenge(input: {
         ? `"${input.message}"`
         : `${input.challengerName} wants to play a match. Accept or decline in your dashboard.`,
       href: "/(authenticated)/dashboard",
-      kind: "GENERAL",
+      kind: "CHALLENGE",
       createdBy: input.challengerId,
     });
   } catch { /* ignore */ }
@@ -221,7 +221,7 @@ export async function respondToChallenge(
         ? "Head to your dashboard to set match conditions."
         : "Better luck next time.",
       href: `/challenges/${challengeId}`,
-      kind: "GENERAL",
+      kind: "CHALLENGE",
       createdBy: responderId,
     });
   } catch { /* ignore */ }
@@ -248,7 +248,7 @@ export async function proposeConditions(
       title: `${proposerName} proposed match conditions`,
       body: `Format: ${formatLabel(conditions.format)}${conditions.scheduledDate ? ` · ${conditions.scheduledDate}` : ""}`,
       href: `/challenges/${challengeId}`,
-      kind: "GENERAL",
+      kind: "CHALLENGE",
       createdBy: proposedById,
     });
   } catch { /* ignore */ }
@@ -273,7 +273,7 @@ export async function acceptConditions(
       title: `${acceptorName} accepted the match conditions`,
       body: "Your challenge is scheduled — time to play!",
       href: `/challenges/${challengeId}`,
-      kind: "GENERAL",
+      kind: "CHALLENGE",
       createdBy: acceptorId,
     });
   } catch { /* ignore */ }
@@ -311,7 +311,7 @@ export async function submitChallengeScore(
       title: `${submitterName} logged the match score`,
       body: `Score: ${scoreA}–${scoreB}. Please verify the result.`,
       href: `/challenges/${challengeId}`,
-      kind: "GENERAL",
+      kind: "CHALLENGE",
       createdBy: submittedById,
     });
   } catch { /* ignore */ }

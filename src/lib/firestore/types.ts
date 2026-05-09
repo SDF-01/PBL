@@ -276,6 +276,7 @@ export interface NotificationDoc {
     | "LADDER_DEMOTED"
     | "PLAYER_FOLLOWED"
     | "PLAYER_MATCH_RESULT"
+    | "CHALLENGE"
     | "GENERAL";
   read: boolean;
   createdAt: string;
