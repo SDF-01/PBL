@@ -109,6 +109,40 @@
         { "fieldPath": "active", "order": "ASCENDING" },
         { "fieldPath": "clubId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "playerChallenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "challengerId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerChallenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "challengeeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerChallenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "challengerId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerChallenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "challengeeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
