@@ -456,7 +456,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     listClubFacilities(cId).then(setFacilities).catch(() => setFacilities([]));
   }, [league]);
 
-  // Fetch 5-day weather forecast via Open-Meteo (no API key required).
+  // Fetch 5-day weather forecast via Open-Meteo forecast API (no API key required).
   useEffect(() => {
     if (!league) return;
     const hasLocation = facilities[0]?.address || league.venueAddress || league.city;
@@ -465,20 +465,38 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     setWeatherError(false);
     (async () => {
       try {
-        let lat = league.latitude;
-        let lng = league.longitude;
+        // Coordinate resolution priority:
+        // 1. League lat/lng (set when league was geocoded)
+        // 2. Facility lat/lng (set when facility was geocoded — most common)
+        // 3. Nominatim geocode of full address / zip fallback
+        let lat: number | undefined = league.latitude;
+        let lng: number | undefined = league.longitude;
+
         if (!lat || !lng) {
-          // Prefer facility zip code for geocoding (most precise), then fall back to city.
-          const facilityAddress = facilities[0]?.address ?? league.venueAddress ?? "";
-          const zipMatch = facilityAddress.match(/\b(\d{5})\b/);
-          const geoQuery = zipMatch?.[1] ?? league.city ?? facilityAddress;
-          const geoRes = await fetch(
-            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(geoQuery)}&count=1&language=en&format=json&country_code=US`,
-          );
-          const geoData = await geoRes.json() as { results?: { latitude: number; longitude: number }[] };
-          lat = geoData.results?.[0]?.latitude;
-          lng = geoData.results?.[0]?.longitude;
+          const facility = facilities[0];
+          if (facility?.lat && facility?.lng) {
+            lat = facility.lat;
+            lng = facility.lng;
+          }
         }
+
+        if (!lat || !lng) {
+          // Last resort: geocode with Nominatim using full address (handles street addresses)
+          const facilityAddress = facilities[0]?.address ?? league.venueAddress ?? "";
+          const geoQuery = facilityAddress || `${league.city ?? ""} ${league.state ?? ""}`.trim();
+          if (geoQuery) {
+            const geoRes = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery)}&format=json&limit=1`,
+              { headers: { "User-Agent": "PBL-PickleballLeagueApp/1.0 (weather-lookup)" } },
+            );
+            const geoData = await geoRes.json() as { lat: string; lon: string }[];
+            if (geoData[0]) {
+              lat = parseFloat(geoData[0].lat);
+              lng = parseFloat(geoData[0].lon);
+            }
+          }
+        }
+
         if (!lat || !lng) { setWeatherError(true); return; }
         const wxRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=5`,
