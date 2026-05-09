@@ -147,9 +147,11 @@ service cloud.firestore {
     match /divisions/{doc=**}     { allow read: if true; allow write: if isStaff(); }
 
     // Club facility information managed by Club Directors.
+    // Signed-in players may also submit community courts (clubId == "community").
     match /clubFacilities/{facilityId} {
       allow read: if true;
-      allow create: if isStaff();
+      allow create: if isStaff()
+        || (isSignedIn() && request.resource.data.clubId == "community");
       allow update: if isStaff();
       allow delete: if isStaff();
     }

@@ -14,6 +14,7 @@ import { useRoleView } from "@/lib/role-view-context";
 
 const NAV = [
   { href: "/clubs",         label: "Clubs" },
+  { href: "/courts",        label: "Courts" },
   { href: "/games",         label: "Games" },
   { href: "/players",       label: "Leaderboard" },
   { href: "/tournaments",   label: "Tournaments" },

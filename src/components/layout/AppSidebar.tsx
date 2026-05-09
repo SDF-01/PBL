@@ -16,6 +16,7 @@ const ITEMS = [
   { href: "/dashboard",         label: "Overview",    icon: LayoutDashboard },
   { href: "/games",             label: "Local Games", icon: Activity },
   { href: "/players",           label: "Leaderboard", icon: Trophy },
+  { href: "/courts",            label: "Courts",      icon: MapPin },
   { href: "/ladder/seasons",    label: "Seasons",     icon: CalendarDays },
   { href: "/ladder/play-dates", label: "Play Dates",  icon: Users },
   { href: "/ladder/check-in",   label: "Check-In",    icon: MapPin },
