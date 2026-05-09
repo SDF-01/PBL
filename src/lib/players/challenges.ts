@@ -341,18 +341,16 @@ export async function verifyChallengeScore(
     updatedAt: serverTimestamp(),
   });
 
-  try {
-    const { applyMatchEloByUserIds } = await import("../players/write");
-    await applyMatchEloByUserIds({
-      sideA: [challenge.challengerId],
-      sideB: [challenge.challengeeId],
-      scoreA: challenge.scoreA,
-      scoreB: challenge.scoreB,
-      targetPoints: targetPoints(challenge.conditions?.format),
-      source: "challenge",
-      sourceId: challengeId,
-    });
-  } catch { /* ignore ELO failure */ }
+  const { applyMatchEloByUserIds } = await import("../players/write");
+  await applyMatchEloByUserIds({
+    sideA: [challenge.challengerId],
+    sideB: [challenge.challengeeId],
+    scoreA: challenge.scoreA,
+    scoreB: challenge.scoreB,
+    targetPoints: targetPoints(challenge.conditions?.format),
+    source: "challenge",
+    sourceId: challengeId,
+  });
 }
 
 /** @deprecated Use verifyChallengeScore for the new flow. Kept for existing callers. */

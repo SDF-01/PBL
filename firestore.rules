@@ -378,13 +378,18 @@ service cloud.firestore {
       // Player profiles are private — require authentication to view.
       allow read: if isSignedIn();
       allow create: if isSafePlayerCreate(uid) || isAdmin();
-      allow update: if isSafePlayerUpdate(uid) || isAdmin();
+      allow update: if isSafePlayerUpdate(uid) || isAdmin()
+        // Any signed-in player may write ELO + stats fields (computed client-side
+        // by applyMatchEloByUserIds after a verified challenge or ladder match).
+        || (isSignedIn() && hasOnlyChanged(["elo", "eloPeak", "stats", "updatedAt"]));
       allow delete: if isAdmin();
     }
 
     match /eloEvents/{id} {
       allow read: if true;
-      allow write: if false;
+      // Any signed-in player may create ELO event records (written by client-side ELO logic).
+      allow create: if isSignedIn();
+      allow update, delete: if false;
     }
 
     match /clubs/{clubId} {
