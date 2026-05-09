@@ -65,6 +65,12 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
   const [myScore, setMyScore] = useState("");
   const [opponentScore, setOpponentScore] = useState("");
   const [showScoreForm, setShowScoreForm] = useState(false);
+  // Per-game scores for best-of-3
+  const [gameScores, setGameScores] = useState([
+    { mine: "", opp: "" },
+    { mine: "", opp: "" },
+    { mine: "", opp: "" },
+  ]);
 
   useEffect(() => {
     if (!challengeId || challengeId === "__fallback") { setLoadingChallenge(false); return; }
@@ -175,34 +181,55 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
 
   async function handleSubmitScore() {
     if (!user || myRole === "observer" || busy) return;
-    const a = parseInt(myScore, 10);
-    const b = parseInt(opponentScore, 10);
-    if (isNaN(a) || isNaN(b) || a < 0 || b < 0) { setError("Enter valid scores."); return; }
-    if (a === b) { setError("Scores cannot be tied."); return; }
-
     const fmt = challenge?.conditions?.format ?? "game-11";
-    if (fmt === "best-of-3") {
-      const winner = Math.max(a, b);
-      const loser  = Math.min(a, b);
-      if (winner !== 2) {
-        setError("Best of 3: the winner must have won exactly 2 games (e.g. 2–0 or 2–1).");
-        return;
-      }
-      if (loser > 1) {
-        setError("Best of 3: the loser can win at most 1 game.");
-        return;
-      }
-    }
 
-    setBusy(true);
-    setError(null);
-    try {
-      await submitChallengeScore(challengeId, a, b, user.uid, myRole, opponentId, user.displayName ?? "Player");
-      setShowScoreForm(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed.");
-    } finally {
-      setBusy(false);
+    if (fmt === "best-of-3") {
+      // Build completed games and tally wins
+      let myWins = 0, oppWins = 0;
+      const breakdown: Array<{ scoreA: number; scoreB: number }> = [];
+      for (let i = 0; i < 3; i++) {
+        if (myWins === 2 || oppWins === 2) break;
+        const mine = parseInt(gameScores[i]!.mine, 10);
+        const opp  = parseInt(gameScores[i]!.opp,  10);
+        if (isNaN(mine) || isNaN(opp)) {
+          setError(`Enter scores for Game ${i + 1}.`); return;
+        }
+        if (mine < 0 || opp < 0) { setError("Scores cannot be negative."); return; }
+        if (mine === opp) { setError(`Game ${i + 1} cannot end in a tie.`); return; }
+        breakdown.push({
+          scoreA: myRole === "challenger" ? mine : opp,
+          scoreB: myRole === "challengee" ? mine : opp,
+        });
+        if (mine > opp) myWins++; else oppWins++;
+      }
+      if (myWins !== 2 && oppWins !== 2) {
+        setError("Play must continue until someone wins 2 games."); return;
+      }
+      setBusy(true);
+      setError(null);
+      try {
+        await submitChallengeScore(challengeId, myWins, oppWins, user.uid, myRole, opponentId, user.displayName ?? "Player", breakdown);
+        setShowScoreForm(false);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed.");
+      } finally {
+        setBusy(false);
+      }
+    } else {
+      const a = parseInt(myScore, 10);
+      const b = parseInt(opponentScore, 10);
+      if (isNaN(a) || isNaN(b) || a < 0 || b < 0) { setError("Enter valid scores."); return; }
+      if (a === b) { setError("Scores cannot be tied."); return; }
+      setBusy(true);
+      setError(null);
+      try {
+        await submitChallengeScore(challengeId, a, b, user.uid, myRole, opponentId, user.displayName ?? "Player");
+        setShowScoreForm(false);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed.");
+      } finally {
+        setBusy(false);
+      }
     }
   }
 
@@ -485,39 +512,123 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
             {showScoreForm && (() => {
               const fmt = challenge.conditions?.format ?? "game-11";
               const isBo3 = fmt === "best-of-3";
+
+              if (isBo3) {
+                const g1mine = parseInt(gameScores[0]!.mine, 10);
+                const g1opp  = parseInt(gameScores[0]!.opp,  10);
+                const g2mine = parseInt(gameScores[1]!.mine, 10);
+                const g2opp  = parseInt(gameScores[1]!.opp,  10);
+                const g1Valid = !isNaN(g1mine) && !isNaN(g1opp) && g1mine !== g1opp;
+                const g2Valid = !isNaN(g2mine) && !isNaN(g2opp) && g2mine !== g2opp;
+                let myWinsAfter2 = 0, oppWinsAfter2 = 0;
+                if (g1Valid) { if (g1mine > g1opp) myWinsAfter2++; else oppWinsAfter2++; }
+                if (g2Valid) { if (g2mine > g2opp) myWinsAfter2++; else oppWinsAfter2++; }
+                const showGame3 = g1Valid && g2Valid && myWinsAfter2 === 1 && oppWinsAfter2 === 1;
+
+                return (
+                  <div className="space-y-4 pt-1 border-t border-obsidian-600">
+                    <div className="grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-2 items-center">
+                      <div />
+                      <p className="text-[10px] uppercase tracking-widest text-ash-500 text-center">Me</p>
+                      <p className="text-[10px] uppercase tracking-widest text-ash-500 text-center">{opponentName}</p>
+
+                      {[0, 1].map((i) => (
+                        <>
+                          <p key={`lbl-${i}`} className="text-[10px] uppercase tracking-widest text-ash-500 whitespace-nowrap">Game {i + 1}</p>
+                          <input
+                            key={`mine-${i}`}
+                            type="number"
+                            min={0}
+                            value={gameScores[i]!.mine}
+                            onChange={(e) => {
+                              const next = [...gameScores] as typeof gameScores;
+                              next[i] = { ...next[i]!, mine: e.target.value };
+                              setGameScores(next);
+                            }}
+                            placeholder="0"
+                            className={inputCls + " text-center"}
+                          />
+                          <input
+                            key={`opp-${i}`}
+                            type="number"
+                            min={0}
+                            value={gameScores[i]!.opp}
+                            onChange={(e) => {
+                              const next = [...gameScores] as typeof gameScores;
+                              next[i] = { ...next[i]!, opp: e.target.value };
+                              setGameScores(next);
+                            }}
+                            placeholder="0"
+                            className={inputCls + " text-center"}
+                          />
+                        </>
+                      ))}
+
+                      {showGame3 && (
+                        <>
+                          <p className="text-[10px] uppercase tracking-widest text-ash-500 whitespace-nowrap">Game 3</p>
+                          <input
+                            type="number"
+                            min={0}
+                            value={gameScores[2]!.mine}
+                            onChange={(e) => {
+                              const next = [...gameScores] as typeof gameScores;
+                              next[2] = { ...next[2]!, mine: e.target.value };
+                              setGameScores(next);
+                            }}
+                            placeholder="0"
+                            className={inputCls + " text-center"}
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            value={gameScores[2]!.opp}
+                            onChange={(e) => {
+                              const next = [...gameScores] as typeof gameScores;
+                              next[2] = { ...next[2]!, opp: e.target.value };
+                              setGameScores(next);
+                            }}
+                            placeholder="0"
+                            className={inputCls + " text-center"}
+                          />
+                        </>
+                      )}
+                    </div>
+
+                    {error && <p className="text-crimson-400 text-xs">{error}</p>}
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="primary" disabled={busy} onClick={handleSubmitScore}>
+                        Submit Score
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setShowScoreForm(false)}>Cancel</Button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div className="space-y-3 pt-1 border-t border-obsidian-600">
-                  <p className="text-ash-400 text-xs">
-                    {isBo3
-                      ? "Enter games won (0, 1, or 2) — winner must have exactly 2"
-                      : "Enter final point scores from your perspective"}
-                  </p>
+                  <p className="text-ash-400 text-xs">Enter final point scores from your perspective</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">
-                        {isBo3 ? "Games I Won" : "My Points"}
-                      </label>
+                      <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">My Points</label>
                       <input
                         type="number"
                         min={0}
-                        max={isBo3 ? 2 : undefined}
                         value={myScore}
                         onChange={(e) => setMyScore(e.target.value)}
-                        placeholder={isBo3 ? "0–2" : "0"}
+                        placeholder="0"
                         className={inputCls}
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">
-                        {isBo3 ? `${opponentName}’s Games Won` : `${opponentName}’s Points`}
-                      </label>
+                      <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">{opponentName}’s Points</label>
                       <input
                         type="number"
                         min={0}
-                        max={isBo3 ? 2 : undefined}
                         value={opponentScore}
                         onChange={(e) => setOpponentScore(e.target.value)}
-                        placeholder={isBo3 ? "0–2" : "0"}
+                        placeholder="0"
                         className={inputCls}
                       />
                     </div>
@@ -553,19 +664,24 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
               const isBo3 = challenge.conditions?.format === "best-of-3";
               const unit = isBo3 ? "games" : "pts";
               return (
-                <div className="flex items-center justify-center gap-6 py-3">
-                  <div className="text-center">
-                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
-                    <p className="heading-fantasy text-3xl text-ash-100">{challengerScore ?? "—"}</p>
-                    <p className="text-ash-600 text-[10px]">{unit}</p>
+                <>
+                  <div className="flex items-center justify-center gap-6 py-3">
+                    <div className="text-center">
+                      <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
+                      <p className="heading-fantasy text-3xl text-ash-100">{challengerScore ?? "—"}</p>
+                      <p className="text-ash-600 text-[10px]">{unit}</p>
+                    </div>
+                    <div className="text-ash-600 text-lg">–</div>
+                    <div className="text-center">
+                      <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
+                      <p className="heading-fantasy text-3xl text-ash-100">{challengeeScore ?? "—"}</p>
+                      <p className="text-ash-600 text-[10px]">{unit}</p>
+                    </div>
                   </div>
-                  <div className="text-ash-600 text-lg">–</div>
-                  <div className="text-center">
-                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
-                    <p className="heading-fantasy text-3xl text-ash-100">{challengeeScore ?? "—"}</p>
-                    <p className="text-ash-600 text-[10px]">{unit}</p>
-                  </div>
-                </div>
+                  {isBo3 && challenge.games && challenge.games.length > 0 && (
+                    <GameBreakdown games={challenge.games} challengerName={challenge.challengerName} challengeeName={challenge.challengeeName} />
+                  )}
+                </>
               );
             })()}
 
@@ -613,29 +729,34 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
               const isBo3 = challenge.conditions?.format === "best-of-3";
               const unit = isBo3 ? "games" : "pts";
               return (
-                <div className="flex items-center justify-center gap-6 py-4">
-                  <div className="text-center">
-                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
-                    <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challenger" ? "text-spectral-400" : "text-crimson-500"}`}>
-                      {challengerScore ?? "—"}
-                    </p>
-                    <p className="text-ash-600 text-[10px] mt-0.5">{unit}</p>
-                    {challenge.winnerSide === "challenger" && (
-                      <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
-                    )}
+                <>
+                  <div className="flex items-center justify-center gap-6 py-4">
+                    <div className="text-center">
+                      <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
+                      <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challenger" ? "text-spectral-400" : "text-crimson-500"}`}>
+                        {challengerScore ?? "—"}
+                      </p>
+                      <p className="text-ash-600 text-[10px] mt-0.5">{unit}</p>
+                      {challenge.winnerSide === "challenger" && (
+                        <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
+                      )}
+                    </div>
+                    <div className="text-ash-600 text-xl">–</div>
+                    <div className="text-center">
+                      <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
+                      <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challengee" ? "text-spectral-400" : "text-crimson-500"}`}>
+                        {challengeeScore ?? "—"}
+                      </p>
+                      <p className="text-ash-600 text-[10px] mt-0.5">{unit}</p>
+                      {challenge.winnerSide === "challengee" && (
+                        <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-ash-600 text-xl">–</div>
-                  <div className="text-center">
-                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
-                    <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challengee" ? "text-spectral-400" : "text-crimson-500"}`}>
-                      {challengeeScore ?? "—"}
-                    </p>
-                    <p className="text-ash-600 text-[10px] mt-0.5">{unit}</p>
-                    {challenge.winnerSide === "challengee" && (
-                      <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
-                    )}
-                  </div>
-                </div>
+                  {isBo3 && challenge.games && challenge.games.length > 0 && (
+                    <GameBreakdown games={challenge.games} challengerName={challenge.challengerName} challengeeName={challenge.challengeeName} />
+                  )}
+                </>
               );
             })()}
 
@@ -671,6 +792,39 @@ function ConditionsDisplay({ conditions }: { conditions: ChallengeConditions }) 
           {conditions.location}
         </RuneChip>
       )}
+    </div>
+  );
+}
+
+function GameBreakdown({
+  games,
+  challengerName,
+  challengeeName,
+}: {
+  games: Array<{ scoreA: number; scoreB: number }>;
+  challengerName: string;
+  challengeeName: string;
+}) {
+  return (
+    <div className="border-t border-obsidian-600 pt-3">
+      <p className="text-[10px] uppercase tracking-widest text-ash-600 mb-2">Per-game breakdown</p>
+      <div className="grid grid-cols-[auto_1fr_auto_1fr] gap-x-3 gap-y-1 items-center text-xs">
+        <div />
+        <p className="text-ash-500 text-[10px] text-center truncate">{challengerName}</p>
+        <div />
+        <p className="text-ash-500 text-[10px] text-center truncate">{challengeeName}</p>
+        {games.map((g, i) => {
+          const aWon = g.scoreA > g.scoreB;
+          return (
+            <>
+              <p key={`gl-${i}`} className="text-ash-600 text-[10px] whitespace-nowrap">G{i + 1}</p>
+              <p key={`ga-${i}`} className={`text-center font-mono text-sm ${aWon ? "text-ash-100" : "text-ash-500"}`}>{g.scoreA}</p>
+              <p key={`gs-${i}`} className="text-ash-600 text-center text-xs">–</p>
+              <p key={`gb-${i}`} className={`text-center font-mono text-sm ${!aWon ? "text-ash-100" : "text-ash-500"}`}>{g.scoreB}</p>
+            </>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -605,8 +605,9 @@ export interface PlayerChallengeDoc {
   conditionsProposedBy?: string;  // userId of the last proposer
 
   // Score tracking
-  scoreA?: number;           // challenger's score
+  scoreA?: number;           // challenger's score (games won for best-of-3, points for single game)
   scoreB?: number;           // challengee's score
+  games?: Array<{ scoreA: number; scoreB: number }>; // per-game breakdown (best-of-3)
   submittedBy?: string;      // userId who submitted the score
   verifiedBy?: string;       // userId who confirmed the score
   winnerSide?: "challenger" | "challengee";

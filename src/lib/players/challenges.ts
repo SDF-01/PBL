@@ -283,6 +283,7 @@ export async function acceptConditions(
  * Submit a score after the match is played.
  * myRole: "challenger" | "challengee" — determines how scores map to scoreA/scoreB.
  * myScore / opponentScore are from the submitter's perspective.
+ * gameBreakdown (optional): per-game scores in challenger/challengee order for best-of-3.
  */
 export async function submitChallengeScore(
   challengeId: string,
@@ -292,6 +293,7 @@ export async function submitChallengeScore(
   myRole: "challenger" | "challengee",
   otherPlayerId: string,
   submitterName: string,
+  gameBreakdown?: Array<{ scoreA: number; scoreB: number }>,
 ): Promise<void> {
   const scoreA = myRole === "challenger" ? myScore : opponentScore;
   const scoreB = myRole === "challengee" ? myScore : opponentScore;
@@ -300,6 +302,7 @@ export async function submitChallengeScore(
     status: "SCORE_SUBMITTED" as ChallengeStatus,
     scoreA,
     scoreB,
+    ...(gameBreakdown ? { games: gameBreakdown } : {}),
     submittedBy: submittedById,
     updatedAt: serverTimestamp(),
   });
