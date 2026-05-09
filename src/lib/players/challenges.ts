@@ -351,6 +351,42 @@ export async function verifyChallengeScore(
     source: "challenge",
     sourceId: challengeId,
   });
+
+  // Mark ELO as applied so retries and the UI can check.
+  try {
+    await updateDoc(doc(db(), COLLECTIONS.playerChallenges, challengeId), {
+      eloApplied: true,
+      updatedAt: serverTimestamp(),
+    });
+  } catch { /* non-critical — ELO already committed */ }
+}
+
+/**
+ * Re-apply ELO for a COMPLETED challenge where the initial ELO write failed.
+ * Safe to call multiple times — skips if eloApplied is already true.
+ */
+export async function reapplyChallengeElo(challengeId: string): Promise<void> {
+  const challenge = await getChallenge(challengeId);
+  if (!challenge) throw new Error("Challenge not found");
+  if (challenge.status !== "COMPLETED") throw new Error("Challenge is not completed");
+  if (challenge.scoreA == null || challenge.scoreB == null) throw new Error("Missing scores");
+  if (challenge.eloApplied) return;
+
+  const { applyMatchEloByUserIds } = await import("../players/write");
+  await applyMatchEloByUserIds({
+    sideA: [challenge.challengerId],
+    sideB: [challenge.challengeeId],
+    scoreA: challenge.scoreA,
+    scoreB: challenge.scoreB,
+    targetPoints: targetPoints(challenge.conditions?.format),
+    source: "challenge",
+    sourceId: challengeId,
+  });
+
+  await updateDoc(doc(db(), COLLECTIONS.playerChallenges, challengeId), {
+    eloApplied: true,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /** @deprecated Use verifyChallengeScore for the new flow. Kept for existing callers. */

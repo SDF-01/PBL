@@ -26,6 +26,7 @@ import {
   acceptConditions,
   submitChallengeScore,
   verifyChallengeScore,
+  reapplyChallengeElo,
   respondToChallenge,
   formatLabel,
 } from "@/lib/players/challenges";
@@ -241,6 +242,19 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
       await verifyChallengeScore(challengeId, user.uid);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReapplyElo() {
+    if (!user || myRole === "observer" || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await reapplyChallengeElo(challengeId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to apply ELO.");
     } finally {
       setBusy(false);
     }
@@ -762,8 +776,19 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
 
             {winnerName && (
               <p className="text-center text-ash-300 text-sm">
-                <span className="text-spectral-400 font-medium">{winnerName}</span> wins · ELO updated
+                <span className="text-spectral-400 font-medium">{winnerName}</span> wins
+                {challenge.eloApplied ? " · ELO updated" : ""}
               </p>
+            )}
+
+            {!challenge.eloApplied && myRole !== "observer" && (
+              <div className="space-y-2 border-t border-obsidian-600 pt-3">
+                <p className="text-amber-400 text-xs">ELO was not applied for this match.</p>
+                {error && <p className="text-crimson-400 text-xs">{error}</p>}
+                <Button size="sm" variant="primary" disabled={busy} onClick={handleReapplyElo}>
+                  Apply ELO Now
+                </Button>
+              </div>
             )}
           </Panel>
         )}

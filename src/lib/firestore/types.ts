@@ -611,6 +611,7 @@ export interface PlayerChallengeDoc {
   submittedBy?: string;      // userId who submitted the score
   verifiedBy?: string;       // userId who confirmed the score
   winnerSide?: "challenger" | "challengee";
+  eloApplied?: boolean;      // true once applyMatchEloByUserIds succeeded
 
   createdAt: string;
   updatedAt: string;
