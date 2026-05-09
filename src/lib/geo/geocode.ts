@@ -1,9 +1,9 @@
 /**
  * Geocoding helper — resolves a street address or zip code to lat/lng.
  *
- * MVP uses the Open-Meteo geocoding API (no API key required).
- * Switch to Google Places or Mapbox by implementing the respective provider
- * and setting NEXT_PUBLIC_GEOCODE_PROVIDER in the environment.
+ * Uses Nominatim (OpenStreetMap) — handles full street addresses, no API key
+ * required. Nominatim's terms of use require a descriptive User-Agent and
+ * prohibit bulk/automated requests; this is fine for single-address admin UI use.
  */
 
 export interface GeocodeResult {
@@ -13,21 +13,15 @@ export interface GeocodeResult {
   confidence: number;
 }
 
-interface OpenMeteoResult {
-  id: number;
-  name: string;
-  latitude: number;
-  longitude: number;
-  country?: string;
-  admin1?: string;
-}
-
-interface OpenMeteoResponse {
-  results?: OpenMeteoResult[];
+interface NominatimResult {
+  lat: string;
+  lon: string;
+  display_name: string;
+  importance: number;
 }
 
 /**
- * Geocode an address or zip code using the Open-Meteo geocoding API.
+ * Geocode a full street address using Nominatim (OpenStreetMap).
  * Returns null when no result is found or the input is blank.
  */
 export async function geocodeAddress(
@@ -36,25 +30,28 @@ export async function geocodeAddress(
   const query = address.trim();
   if (!query) return null;
 
-  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
-  url.searchParams.set("name", query);
-  url.searchParams.set("count", "1");
-  url.searchParams.set("language", "en");
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", query);
   url.searchParams.set("format", "json");
+  url.searchParams.set("limit", "1");
+  url.searchParams.set("addressdetails", "0");
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), {
+    headers: {
+      "User-Agent": "PBL-PickleballLeagueApp/1.0 (facility-geocoder)",
+    },
+  });
   if (!res.ok) return null;
 
-  const data = (await res.json()) as OpenMeteoResponse;
-  const hit = data.results?.[0];
+  const data = (await res.json()) as NominatimResult[];
+  const hit = data[0];
   if (!hit) return null;
 
-  const parts = [hit.name, hit.admin1, hit.country].filter(Boolean);
   return {
-    lat: hit.latitude,
-    lng: hit.longitude,
-    displayName: parts.join(", "),
-    confidence: 0.8,
+    lat: parseFloat(hit.lat),
+    lng: parseFloat(hit.lon),
+    displayName: hit.display_name,
+    confidence: hit.importance,
   };
 }
 

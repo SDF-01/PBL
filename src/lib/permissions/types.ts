@@ -113,6 +113,7 @@ export type FacilitySurfaceType =
   | "other";
 
 export type FacilityGeocodeProvider =
+  | "nominatim"
   | "open_meteo"
   | "google_places"
   | "mapbox"

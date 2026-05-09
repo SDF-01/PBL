@@ -1033,7 +1033,7 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
       address: address.trim() || undefined,
       lat: hasCoords ? latNum : undefined,
       lng: hasCoords ? lngNum : undefined,
-      geocodeProvider: hasCoords ? ("open_meteo" as const) : undefined,
+      geocodeProvider: hasCoords ? ("nominatim" as const) : undefined,
       geofenceEnabled: hasCoords ? true : undefined,
       checkInRadiusMeters: hasCoords ? 200 : undefined,
       pickleballCourts, tennisConversionCourts,
