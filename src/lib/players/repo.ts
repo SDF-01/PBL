@@ -61,6 +61,19 @@ export function subscribeLeaderboard(
   );
 }
 
+export async function listAllPlayers(
+  limitCount = 500,
+): Promise<PlayerProfileDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.players),
+      orderBy("elo", "desc"),
+      qLimit(limitCount),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PlayerProfileDoc);
+}
+
 export async function listRecentEloEvents(
   playerId: string,
   limit = 20,

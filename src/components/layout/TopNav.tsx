@@ -8,7 +8,7 @@ import { ModeToggle } from "@/components/ui/ModeToggle";
 import { useAdminMode } from "@/lib/admin-context";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { Building2, ShieldCheck } from "lucide-react";
+import { Building2, ShieldCheck, UserSearch } from "lucide-react";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useRoleView } from "@/lib/role-view-context";
 
@@ -76,6 +76,13 @@ export function TopNav() {
               {roleChip.label}
             </RuneChip>
           )}
+          <Link
+            href="/players/search"
+            aria-label="Find a player"
+            className="flex items-center justify-center h-8 w-8 rounded-pixel text-ash-400 hover:text-spectral-400 hover:bg-obsidian-600 transition-colors"
+          >
+            <UserSearch className="h-4 w-4" />
+          </Link>
           {canAccessAdmin && <ModeToggle />}
           {isSiteAdmin && (
             <Link href="/admin">

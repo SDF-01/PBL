@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { SignInButton } from "@/components/ui/SignInButton";
 import { ModeToggle } from "@/components/ui/ModeToggle";
-import { Bell } from "lucide-react";
+import { Bell, UserSearch } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useAdminMode } from "@/lib/admin-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
@@ -54,6 +54,13 @@ export function MobileTopBar() {
         </Link>
         <div className="flex items-center gap-2">
           {canAccessAdmin && <ModeToggle />}
+          <Link
+            href="/players/search"
+            aria-label="Find a player"
+            className="w-10 h-10 flex items-center justify-center text-ash-300 hover:text-spectral-400 transition-colors"
+          >
+            <UserSearch className="h-5 w-5" />
+          </Link>
           <Link
             href="/notifications"
             aria-label="Notifications"
