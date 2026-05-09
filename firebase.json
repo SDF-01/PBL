@@ -38,6 +38,10 @@
         "destination": "/leagues/__fallback/index.html"
       },
       {
+        "source": "/challenges/**",
+        "destination": "/challenges/__fallback/index.html"
+      },
+      {
         "source": "/clubs/manage/**",
         "destination": "/clubs/manage/__fallback/index.html"
       },

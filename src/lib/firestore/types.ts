@@ -576,9 +576,18 @@ export interface EloEventDoc {
 export type ChallengeStatus =
   | "PENDING"
   | "ACCEPTED"
-  | "DECLINED"
+  | "SCHEDULED"        // conditions agreed, waiting to play
+  | "SCORE_SUBMITTED"  // one player submitted score, awaiting verification
   | "COMPLETED"
+  | "DECLINED"
   | "EXPIRED";
+
+export interface ChallengeConditions {
+  format: "game-11" | "game-15" | "game-21" | "best-of-3";
+  scheduledDate?: string;  // YYYY-MM-DD
+  scheduledTime?: string;  // HH:MM
+  location?: string;
+}
 
 export interface PlayerChallengeDoc {
   id: string;
@@ -589,10 +598,18 @@ export interface PlayerChallengeDoc {
   message?: string;
   proposedDate?: string;
   status: ChallengeStatus;
-  scoreA?: number;
-  scoreB?: number;
-  /** Who was sideA (challenger = "challenger" or "challengee"). */
+
+  // Conditions negotiation
+  conditions?: ChallengeConditions;
+  conditionsProposedBy?: string;  // userId of the last proposer
+
+  // Score tracking
+  scoreA?: number;           // challenger's score
+  scoreB?: number;           // challengee's score
+  submittedBy?: string;      // userId who submitted the score
+  verifiedBy?: string;       // userId who confirmed the score
   winnerSide?: "challenger" | "challengee";
+
   createdAt: string;
   updatedAt: string;
 }

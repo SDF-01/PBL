@@ -193,11 +193,11 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
         </div>
 
         {section === "overview"     && <OverviewSection club={club} clubId={clubId} onNavigate={setSection} />}
-        {section === "leagues"      && <LeaguesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
+        {section === "leagues"      && <LeaguesSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
         {section === "facilities"   && <FacilitiesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "posts"        && <PostsSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
         {section === "members"      && <MembersSection clubId={clubId} toast={toast} />}
-        {section === "coordinators" && <CoordinatorsSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
+        {section === "coordinators" && <CoordinatorsSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
       </main>
     </ResponsiveShell>
   );
@@ -595,7 +595,7 @@ function UserLookup({
   );
 }
 
-function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
+function LeaguesSection({ clubId, clubName, userId, userDisplayName, toast }: { clubId: string; clubName: string; userId: string; userDisplayName: string; toast: ToastFn }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [facilities, setFacilities] = useState<ClubFacility[]>([]);
@@ -700,6 +700,10 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
         state: selectedFacility?.address?.split(",").slice(-1)[0]?.trim().split(" ")[0] || undefined,
         league_format: format, active: true, createdBy: userId,
       }, ...prev]);
+      createClubPost({
+        clubId, clubName, authorId: userId, authorName: userDisplayName,
+        content: `New league added: ${name.trim()}${format ? ` (${format})` : ""}`,
+      }).catch(() => {});
       resetForm();
       setShowForm(false);
       toast(`"${name.trim()}" league created.`, "success");
@@ -1509,7 +1513,7 @@ function MembersSection({ clubId, toast }: { clubId: string; toast: ToastFn }) {
 // COORDINATORS
 // ============================================================
 
-function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
+function CoordinatorsSection({ clubId, clubName, userId, userDisplayName, toast }: { clubId: string; clubName: string; userId: string; userDisplayName: string; toast: ToastFn }) {
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -1531,6 +1535,10 @@ function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId
       if (coordinators.some((c) => c.userId === found.uid)) { toast(`${found.displayName} is already a coordinator.`, "error"); return; }
       await assignRole(found.uid, "LeagueCoordinator", clubId, null, userId);
       setCoordinators((prev) => [...prev, { userRoleId: `pending-${Date.now()}`, userId: found.uid, displayName: found.displayName, assignedAt: new Date().toISOString() }]);
+      createClubPost({
+        clubId, clubName, authorId: userId, authorName: userDisplayName,
+        content: `${found.displayName} joined as Day Coordinator.`,
+      }).catch(() => {});
       setEmail("");
       toast(`${found.displayName} assigned as day coordinator.`, "success");
     } catch (err) {

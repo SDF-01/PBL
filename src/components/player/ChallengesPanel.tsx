@@ -2,17 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Swords, Check, X, ArrowRight, Trophy } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  Check,
+  Clock,
+  Hourglass,
+  Swords,
+  Trophy,
+  X,
+} from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import {
   subscribeIncomingChallenges,
-  listOutgoingChallenges,
+  listPendingSent,
+  listActiveChallenges,
   respondToChallenge,
 } from "@/lib/players/challenges";
-import { useAuth } from "@/lib/auth-context";
-import { formatDistanceToNow } from "date-fns";
 import type { PlayerChallengeDoc } from "@/lib/firestore/types";
 
 interface Props {
@@ -21,36 +29,34 @@ interface Props {
 }
 
 export function ChallengesPanel({ userId, displayName }: Props) {
-  const { user } = useAuth();
   const [incoming, setIncoming] = useState<PlayerChallengeDoc[]>([]);
-  const [outgoing, setOutgoing] = useState<PlayerChallengeDoc[]>([]);
+  const [active, setActive] = useState<PlayerChallengeDoc[]>([]);
+  const [pendingSent, setPendingSent] = useState<PlayerChallengeDoc[]>([]);
   const [responding, setResponding] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
     const unsub = subscribeIncomingChallenges(userId, setIncoming);
-    listOutgoingChallenges(userId).then(setOutgoing).catch(() => {});
+    listPendingSent(userId).then(setPendingSent).catch(() => {});
+    listActiveChallenges(userId).then(setActive).catch(() => {});
     return () => unsub();
   }, [userId]);
 
   async function handleRespond(challenge: PlayerChallengeDoc, accept: boolean) {
-    if (!user) return;
     setResponding(challenge.id);
     try {
-      await respondToChallenge(
-        challenge.id,
-        accept,
-        userId,
-        displayName,
-        challenge.challengerId,
-      );
+      await respondToChallenge(challenge.id, accept, userId, displayName, challenge.challengerId);
       setIncoming((prev) => prev.filter((c) => c.id !== challenge.id));
+      if (accept) {
+        // Move to active after accept
+        listActiveChallenges(userId).then(setActive).catch(() => {});
+      }
     } finally {
       setResponding(null);
     }
   }
 
-  const hasAny = incoming.length > 0 || outgoing.length > 0;
+  const hasAny = incoming.length > 0 || active.length > 0 || pendingSent.length > 0;
 
   return (
     <Panel variant="base" padding="md">
@@ -76,6 +82,7 @@ export function ChallengesPanel({ userId, displayName }: Props) {
         </p>
       )}
 
+      {/* ── Incoming (PENDING, challengee) ─────────────────────────────────── */}
       {incoming.length > 0 && (
         <div className="space-y-2 mb-4">
           <p className="text-[10px] uppercase tracking-widest text-ash-600">Incoming</p>
@@ -93,9 +100,6 @@ export function ChallengesPanel({ userId, displayName }: Props) {
                 </Link>
                 {c.message && (
                   <p className="text-ash-500 text-xs truncate mt-0.5">"{c.message}"</p>
-                )}
-                {c.proposedDate && (
-                  <p className="text-ash-600 text-[10px] mt-0.5">Proposed: {c.proposedDate}</p>
                 )}
               </div>
               <div className="flex gap-1.5 shrink-0">
@@ -123,10 +127,50 @@ export function ChallengesPanel({ userId, displayName }: Props) {
         </div>
       )}
 
-      {outgoing.length > 0 && (
+      {/* ── Active (ACCEPTED / SCHEDULED / SCORE_SUBMITTED) ───────────────── */}
+      {active.length > 0 && (
+        <div className="space-y-2 mb-4">
+          <p className="text-[10px] uppercase tracking-widest text-ash-600">Active</p>
+          {active.map((c) => {
+            const isChallenger = c.challengerId === userId;
+            const opponentName = isChallenger ? c.challengeeName : c.challengerName;
+            const opponentId = isChallenger ? c.challengeeId : c.challengerId;
+            const needsAction = activeNeedsAction(c, userId);
+
+            return (
+              <Link key={c.id} href={`/challenges/${c.id}`}>
+                <div className={`flex items-center gap-3 p-3 rounded-pixel border transition-colors cursor-pointer ${
+                  needsAction
+                    ? "bg-ember-950/30 border-ember-600 hover:border-ember-400"
+                    : "bg-obsidian-800/50 border-obsidian-700 hover:border-obsidian-500"
+                }`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm text-ash-200 font-medium">{opponentName}</span>
+                      <ActiveStatusIcon challenge={c} userId={userId} />
+                    </div>
+                    <p className="text-ash-500 text-[10px] mt-0.5">
+                      {activeStatusLabel(c, userId)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {needsAction && (
+                      <span className="text-[9px] text-ember-400 font-medium uppercase tracking-wide">Action needed</span>
+                    )}
+                    <ArrowRight className="h-3 w-3 text-ash-600" />
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Pending sent (PENDING, challenger) ───────────────────────────── */}
+      {pendingSent.length > 0 && (
         <div className="space-y-2">
           <p className="text-[10px] uppercase tracking-widest text-ash-600">Sent</p>
-          {outgoing.map((c) => (
+          {pendingSent.map((c) => (
             <div
               key={c.id}
               className="flex items-center gap-3 p-3 rounded-pixel bg-obsidian-800/50 border border-obsidian-700"
@@ -142,16 +186,60 @@ export function ChallengesPanel({ userId, displayName }: Props) {
                   <p className="text-ash-500 text-xs truncate mt-0.5">"{c.message}"</p>
                 )}
               </div>
-              <RuneChip
-                tone={c.status === "ACCEPTED" ? "success" : "neutral"}
-                className="text-[9px] shrink-0"
-              >
-                {c.status === "ACCEPTED" ? "Accepted" : "Pending"}
-              </RuneChip>
+              <RuneChip tone="neutral" className="text-[9px] shrink-0">Pending</RuneChip>
             </div>
           ))}
         </div>
       )}
     </Panel>
   );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Returns true if the current user needs to take an action on this challenge. */
+function activeNeedsAction(c: PlayerChallengeDoc, userId: string): boolean {
+  if (c.status === "ACCEPTED") {
+    // Needs action if conditions not yet proposed, or opponent proposed and I haven't accepted
+    if (!c.conditions) return true;
+    if (c.conditionsProposedBy !== userId) return true; // opponent proposed, I must accept
+    return false;
+  }
+  if (c.status === "SCORE_SUBMITTED") {
+    // Needs action if opponent submitted and I haven't verified
+    return c.submittedBy !== userId;
+  }
+  return false;
+}
+
+function activeStatusLabel(c: PlayerChallengeDoc, userId: string): string {
+  const isChallenger = c.challengerId === userId;
+  switch (c.status) {
+    case "ACCEPTED":
+      if (!c.conditions) return "Set match conditions";
+      if (c.conditionsProposedBy === userId) return "Conditions proposed — waiting for reply";
+      return "Conditions proposed — your response needed";
+    case "SCHEDULED":
+      return "Match scheduled — ready to play";
+    case "SCORE_SUBMITTED":
+      if (c.submittedBy === userId) return "Score submitted — awaiting verification";
+      return "Score submitted — please verify";
+    default:
+      return c.status;
+  }
+}
+
+function ActiveStatusIcon({ challenge: c, userId }: { challenge: PlayerChallengeDoc; userId: string }) {
+  if (c.status === "ACCEPTED") {
+    return <CalendarDays className="h-3 w-3 text-ember-500" />;
+  }
+  if (c.status === "SCHEDULED") {
+    return <Trophy className="h-3 w-3 text-gold-400" />;
+  }
+  if (c.status === "SCORE_SUBMITTED") {
+    return c.submittedBy === userId
+      ? <Hourglass className="h-3 w-3 text-ash-500" />
+      : <Clock className="h-3 w-3 text-ember-400" />;
+  }
+  return null;
 }

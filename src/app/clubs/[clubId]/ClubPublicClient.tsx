@@ -446,7 +446,13 @@ export function ClubPublicClient({ clubId: fallbackId }: { clubId: string }) {
                       <Panel key={post.id} variant="base" padding="md" className="space-y-1.5">
                         <p className="text-ash-200 text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
                         <p className="text-ash-600 text-[10px]">
-                          {post.authorName} · {new Date(post.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          {post.authorName} · {(() => {
+                            const ca = post.createdAt as unknown;
+                            const d = ca && typeof ca === "object" && "toDate" in ca
+                              ? (ca as { toDate(): Date }).toDate()
+                              : new Date(post.createdAt);
+                            return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                          })()}
                         </p>
                       </Panel>
                     ))}
