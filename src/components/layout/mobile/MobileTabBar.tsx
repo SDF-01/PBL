@@ -8,8 +8,9 @@ import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { useRoleView } from "@/lib/role-view-context";
 
-const ADMIN_TAB = { href: "/admin",    label: "Admin", icon: ShieldCheck } as const;
-const CLUBS_TAB = { href: "/clubs/my", label: "Clubs", icon: Building2  } as const;
+const ADMIN_TAB         = { href: "/admin",    label: "Admin", icon: ShieldCheck } as const;
+const CLUBS_STAFF_TAB   = { href: "/clubs/my", label: "Clubs", icon: Building2  } as const;
+const CLUBS_BROWSE_TAB  = { href: "/clubs",    label: "Clubs", icon: Building2  } as const;
 
 export function MobileTabBar() {
   const pathname = usePathname() ?? "/";
@@ -31,18 +32,18 @@ export function MobileTabBar() {
     (clubDirectorFor.length > 0 || coordinatorClubIds.length > 0) &&
     isStaffView;
 
-  // Site admin in staff view → 5-tab bar with Admin
-  // Club director / coordinator in staff view → 5-tab bar with Clubs
-  // Everyone else → 4-tab base bar
-  const tabs =
+  // Site admin in staff view → Admin as 5th tab
+  // Club director / coordinator in staff view → Clubs (my) as 5th tab
+  // Everyone else → Clubs (browse) as 5th tab
+  const fifthTab =
     isSiteAdmin && isStaffView
-      ? [...BASE_TABS, ADMIN_TAB]
+      ? ADMIN_TAB
       : isClubStaff
-        ? [...BASE_TABS, CLUBS_TAB]
-        : BASE_TABS;
+        ? CLUBS_STAFF_TAB
+        : CLUBS_BROWSE_TAB;
 
-  const colCount = tabs.length;
-  const gridCols = colCount === 5 ? "grid-cols-5" : "grid-cols-4";
+  const tabs = [...BASE_TABS, fifthTab];
+  const gridCols = "grid-cols-5";
 
   return (
     <nav
