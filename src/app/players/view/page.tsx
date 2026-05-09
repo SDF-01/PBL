@@ -11,7 +11,7 @@ import {
   Trophy,
   Activity,
   UserPlus,
-  UserMinus,
+  UserCheck,
   Users,
   MessageSquare,
 } from "lucide-react";
@@ -223,9 +223,10 @@ function PlayerView() {
                   variant={following ? "outline" : "primary"}
                   onClick={handleFollowToggle}
                   disabled={followPending}
+                  className={following ? "border-spectral-500 text-spectral-400 hover:border-crimson-500 hover:text-crimson-400" : ""}
                 >
                   {following ? (
-                    <><UserMinus className="h-3.5 w-3.5" /> Following</>
+                    <><UserCheck className="h-3.5 w-3.5" /> Following</>
                   ) : (
                     <><UserPlus className="h-3.5 w-3.5" /> Follow</>
                   )}

@@ -122,8 +122,13 @@ export async function listFeedPosts(clubIds: string[], limitN = 20): Promise<Clu
     ),
   );
   const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubPost);
-  // Sort newest first client-side (avoids composite index requirement).
-  posts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Sort newest first client-side. createdAt may be a Firestore Timestamp or ISO string.
+  const toMs = (v: unknown): number => {
+    if (v && typeof v === "object" && "toDate" in v) return (v as { toDate(): Date }).toDate().getTime();
+    if (typeof v === "string") return new Date(v).getTime();
+    return 0;
+  };
+  posts.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   return posts;
 }
 
