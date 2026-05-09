@@ -31,8 +31,9 @@ import {
 } from "@/lib/players/follows";
 import { ChallengesPanel } from "@/components/player/ChallengesPanel";
 import { skillBand } from "@/lib/players/elo";
+import { listChallengeHistory, formatLabel } from "@/lib/players/challenges";
 import { formatDistanceToNow, parseISO } from "date-fns";
-import type { PlayerProfileDoc, PlayDateDoc, LadderMatchDoc, EloEventDoc } from "@/lib/firestore/types";
+import type { PlayerProfileDoc, PlayDateDoc, LadderMatchDoc, EloEventDoc, PlayerChallengeDoc } from "@/lib/firestore/types";
 import type { ClubPost } from "@/lib/permissions/types";
 
 interface Props {
@@ -45,6 +46,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
   const [profile, setProfile] = useState<PlayerProfileDoc | null>(null);
   const [upcomingDates, setUpcomingDates] = useState<PlayDateDoc[]>([]);
   const [recentMatches, setRecentMatches] = useState<LadderMatchDoc[]>([]);
+  const [completedChallenges, setCompletedChallenges] = useState<PlayerChallengeDoc[]>([]);
   const [feedPosts, setFeedPosts] = useState<ClubPost[]>([]);
   const [playerActivity, setPlayerActivity] = useState<
     Array<(EloEventDoc & { followedId: string }) & { followedProfile: PlayerProfileDoc | null }>
@@ -56,7 +58,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
     (async () => {
       try {
         const today = new Date().toISOString().split("T")[0]!;
-        const [p, pd, rm, followedClubs, followedIds] = await Promise.all([
+        const [p, pd, rm, ch, followedClubs, followedIds] = await Promise.all([
           getPlayerProfile(userId),
           listPlayDates().then((dates) =>
             dates
@@ -65,12 +67,14 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
               .slice(0, 3),
           ),
           listPlayerRecentMatches(userId, 5).catch(() => [] as LadderMatchDoc[]),
+          listChallengeHistory(userId).catch(() => [] as PlayerChallengeDoc[]),
           listFollowedClubs(userId).catch(() => []),
           listFollowedPlayerIds(userId).catch(() => [] as string[]),
         ]);
         setProfile(p);
         setUpcomingDates(pd);
         setRecentMatches(rm);
+        setCompletedChallenges(ch.filter((c) => c.status === "COMPLETED"));
         if (followedClubs.length > 0) {
           const posts = await listFeedPosts(followedClubs.map((c) => c.id)).catch(() => []);
           setFeedPosts(posts);
@@ -237,7 +241,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
             </Button>
           </Link>
         </div>
-        {recentMatches.length === 0 ? (
+        {recentMatches.length === 0 && completedChallenges.length === 0 ? (
           <p className="text-ash-500 text-sm">
             No verified matches yet. Play and verify scores to see results here.
           </p>
@@ -245,6 +249,9 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
           <ul className="divide-y divide-obsidian-600">
             {recentMatches.map((m) => (
               <MatchRow key={m.id} match={m} playerId={userId} />
+            ))}
+            {completedChallenges.map((c) => (
+              <ChallengeMatchRow key={c.id} challenge={c} userId={userId} />
             ))}
           </ul>
         )}
@@ -459,6 +466,51 @@ function MatchRow({ match, playerId }: { match: LadderMatchDoc; playerId: string
         </span>
         <RuneChip tone={won ? "spectral" : isDraw ? "neutral" : "crimson"} className="text-[9px]">
           {won ? "W" : isDraw ? "D" : "L"}
+        </RuneChip>
+      </div>
+    </li>
+  );
+}
+
+function ChallengeMatchRow({ challenge: c, userId }: { challenge: PlayerChallengeDoc; userId: string }) {
+  const isChallenger = c.challengerId === userId;
+  const opponentName = isChallenger ? c.challengeeName : c.challengerName;
+  const opponentId   = isChallenger ? c.challengeeId  : c.challengerId;
+  const myScore      = isChallenger ? c.scoreA : c.scoreB;
+  const oppScore     = isChallenger ? c.scoreB : c.scoreA;
+  const won          = (myScore ?? 0) > (oppScore ?? 0);
+  const isBo3        = c.conditions?.format === "best-of-3";
+  const unit         = isBo3 ? "games" : "pts";
+  const fmtLabel     = c.conditions ? formatLabel(c.conditions.format) : "Challenge";
+
+  return (
+    <li className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+      <div className="shrink-0">
+        {won
+          ? <TrendingUp className="h-4 w-4 text-spectral-400" />
+          : <TrendingDown className="h-4 w-4 text-crimson-500" />}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <Swords className="h-3 w-3 text-ember-400 shrink-0" />
+          <Link href={`/players/view?uid=${opponentId}`} className="text-ash-200 text-sm hover:text-ash-100 transition-colors">
+            {opponentName}
+          </Link>
+        </div>
+        <p className="text-ash-500 text-[11px]">
+          {fmtLabel} ·{" "}
+          <Link href={`/challenges/${c.id}`} className="text-ash-500 hover:text-ash-300 underline-offset-2 hover:underline">
+            view match
+          </Link>
+        </p>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={`heading-fantasy text-lg ${won ? "text-spectral-400" : "text-crimson-500"}`}>
+          {myScore ?? "?"} – {oppScore ?? "?"}
+        </span>
+        <span className="text-ash-600 text-[10px]">{unit}</span>
+        <RuneChip tone={won ? "spectral" : "crimson"} className="text-[9px]">
+          {won ? "W" : "L"}
         </RuneChip>
       </div>
     </li>

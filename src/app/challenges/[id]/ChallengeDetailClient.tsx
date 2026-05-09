@@ -179,6 +179,21 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
     const b = parseInt(opponentScore, 10);
     if (isNaN(a) || isNaN(b) || a < 0 || b < 0) { setError("Enter valid scores."); return; }
     if (a === b) { setError("Scores cannot be tied."); return; }
+
+    const fmt = challenge?.conditions?.format ?? "game-11";
+    if (fmt === "best-of-3") {
+      const winner = Math.max(a, b);
+      const loser  = Math.min(a, b);
+      if (winner !== 2) {
+        setError("Best of 3: the winner must have won exactly 2 games (e.g. 2–0 or 2–1).");
+        return;
+      }
+      if (loser > 1) {
+        setError("Best of 3: the loser can win at most 1 game.");
+        return;
+      }
+    }
+
     setBusy(true);
     setError(null);
     try {
@@ -467,42 +482,56 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
               </div>
             )}
 
-            {showScoreForm && (
-              <div className="space-y-3 pt-1 border-t border-obsidian-600">
-                <p className="text-ash-400 text-xs">Enter scores from your perspective</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">My Score</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={myScore}
-                      onChange={(e) => setMyScore(e.target.value)}
-                      placeholder="0"
-                      className={inputCls}
-                    />
+            {showScoreForm && (() => {
+              const fmt = challenge.conditions?.format ?? "game-11";
+              const isBo3 = fmt === "best-of-3";
+              return (
+                <div className="space-y-3 pt-1 border-t border-obsidian-600">
+                  <p className="text-ash-400 text-xs">
+                    {isBo3
+                      ? "Enter games won (0, 1, or 2) — winner must have exactly 2"
+                      : "Enter final point scores from your perspective"}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">
+                        {isBo3 ? "Games I Won" : "My Points"}
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={isBo3 ? 2 : undefined}
+                        value={myScore}
+                        onChange={(e) => setMyScore(e.target.value)}
+                        placeholder={isBo3 ? "0–2" : "0"}
+                        className={inputCls}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">
+                        {isBo3 ? `${opponentName}’s Games Won` : `${opponentName}’s Points`}
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={isBo3 ? 2 : undefined}
+                        value={opponentScore}
+                        onChange={(e) => setOpponentScore(e.target.value)}
+                        placeholder={isBo3 ? "0–2" : "0"}
+                        className={inputCls}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[10px] uppercase tracking-widest text-ash-500 block mb-1">{opponentName}&apos;s Score</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={opponentScore}
-                      onChange={(e) => setOpponentScore(e.target.value)}
-                      placeholder="0"
-                      className={inputCls}
-                    />
+                  {error && <p className="text-crimson-400 text-xs">{error}</p>}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="primary" disabled={busy} onClick={handleSubmitScore}>
+                      Submit Score
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowScoreForm(false)}>Cancel</Button>
                   </div>
                 </div>
-                {error && <p className="text-crimson-400 text-xs">{error}</p>}
-                <div className="flex gap-2">
-                  <Button size="sm" variant="primary" disabled={busy} onClick={handleSubmitScore}>
-                    Submit Score
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowScoreForm(false)}>Cancel</Button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {myRole === "observer" && (
               <p className="text-ash-500 text-sm">Waiting for players to log their score.</p>
@@ -520,17 +549,25 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
             {challenge.conditions && <ConditionsDisplay conditions={challenge.conditions} />}
 
             {/* Score display */}
-            <div className="flex items-center justify-center gap-6 py-3">
-              <div className="text-center">
-                <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
-                <p className="heading-fantasy text-3xl text-ash-100">{challengerScore ?? "—"}</p>
-              </div>
-              <div className="text-ash-600 text-lg">–</div>
-              <div className="text-center">
-                <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
-                <p className="heading-fantasy text-3xl text-ash-100">{challengeeScore ?? "—"}</p>
-              </div>
-            </div>
+            {(() => {
+              const isBo3 = challenge.conditions?.format === "best-of-3";
+              const unit = isBo3 ? "games" : "pts";
+              return (
+                <div className="flex items-center justify-center gap-6 py-3">
+                  <div className="text-center">
+                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
+                    <p className="heading-fantasy text-3xl text-ash-100">{challengerScore ?? "—"}</p>
+                    <p className="text-ash-600 text-[10px]">{unit}</p>
+                  </div>
+                  <div className="text-ash-600 text-lg">–</div>
+                  <div className="text-center">
+                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
+                    <p className="heading-fantasy text-3xl text-ash-100">{challengeeScore ?? "—"}</p>
+                    <p className="text-ash-600 text-[10px]">{unit}</p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {myRole !== "observer" && challenge.submittedBy === user?.uid && (
               <div className="flex items-center gap-2 text-ash-500 text-sm">
@@ -572,27 +609,35 @@ export function ChallengeDetailClient({ challengeId: fallbackId }: Props) {
 
             {challenge.conditions && <ConditionsDisplay conditions={challenge.conditions} />}
 
-            <div className="flex items-center justify-center gap-6 py-4">
-              <div className="text-center">
-                <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
-                <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challenger" ? "text-spectral-400" : "text-crimson-500"}`}>
-                  {challengerScore ?? "—"}
-                </p>
-                {challenge.winnerSide === "challenger" && (
-                  <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
-                )}
-              </div>
-              <div className="text-ash-600 text-xl">–</div>
-              <div className="text-center">
-                <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
-                <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challengee" ? "text-spectral-400" : "text-crimson-500"}`}>
-                  {challengeeScore ?? "—"}
-                </p>
-                {challenge.winnerSide === "challengee" && (
-                  <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
-                )}
-              </div>
-            </div>
+            {(() => {
+              const isBo3 = challenge.conditions?.format === "best-of-3";
+              const unit = isBo3 ? "games" : "pts";
+              return (
+                <div className="flex items-center justify-center gap-6 py-4">
+                  <div className="text-center">
+                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengerName}</p>
+                    <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challenger" ? "text-spectral-400" : "text-crimson-500"}`}>
+                      {challengerScore ?? "—"}
+                    </p>
+                    <p className="text-ash-600 text-[10px] mt-0.5">{unit}</p>
+                    {challenge.winnerSide === "challenger" && (
+                      <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
+                    )}
+                  </div>
+                  <div className="text-ash-600 text-xl">–</div>
+                  <div className="text-center">
+                    <p className="text-ash-500 text-[10px] mb-1">{challenge.challengeeName}</p>
+                    <p className={`heading-fantasy text-4xl ${challenge.winnerSide === "challengee" ? "text-spectral-400" : "text-crimson-500"}`}>
+                      {challengeeScore ?? "—"}
+                    </p>
+                    <p className="text-ash-600 text-[10px] mt-0.5">{unit}</p>
+                    {challenge.winnerSide === "challengee" && (
+                      <RuneChip tone="spectral" className="mt-1 text-[9px]">Winner</RuneChip>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {winnerName && (
               <p className="text-center text-ash-300 text-sm">
