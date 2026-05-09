@@ -52,9 +52,17 @@ export async function updateClubLogo(clubId: string, logoUrl: string | null): Pr
 
 type FacilityInput = Omit<ClubFacility, "id" | "clubId" | "createdAt" | "updatedAt" | "updatedBy">;
 
-function cleanFacilityInput(data: FacilityInput) {
+// For updates: undefined → deleteField() to clear existing values
+function cleanFacilityForUpdate(data: FacilityInput) {
   return Object.fromEntries(
     Object.entries(data).map(([k, v]) => [k, v === undefined ? deleteField() : v]),
+  );
+}
+
+// For creates: undefined fields are simply omitted (addDoc rejects deleteField sentinels)
+function cleanFacilityForCreate(data: FacilityInput) {
+  return Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v !== undefined),
   );
 }
 
@@ -65,7 +73,7 @@ export async function addClubFacility(
   updatedBy: string,
 ): Promise<string> {
   const ref = await addDoc(collection(db(), COLLECTIONS.clubFacilities), {
-    ...cleanFacilityInput(data),
+    ...cleanFacilityForCreate(data),
     clubId,
     updatedBy,
     createdAt: serverTimestamp(),
@@ -81,7 +89,7 @@ export async function updateClubFacility(
   updatedBy: string,
 ): Promise<void> {
   await updateDoc(doc(db(), COLLECTIONS.clubFacilities, facilityId), {
-    ...cleanFacilityInput(data),
+    ...cleanFacilityForUpdate(data),
     updatedBy,
     updatedAt: serverTimestamp(),
   });
