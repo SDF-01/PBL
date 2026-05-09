@@ -175,7 +175,7 @@ export default function AdminHubPage() {
 
   return (
     <ResponsiveShell desktopChromeless>
-      <main className="container py-6 md:py-10 space-y-8 max-w-3xl">
+      <main className="container py-6 md:py-10 space-y-8 max-w-7xl">
 
         {/* Header */}
         <div>
@@ -196,13 +196,13 @@ export default function AdminHubPage() {
               Platform Overview
             </h2>
             {statsLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Panel key={i} variant="raised" padding="md" className="h-20 animate-pulse bg-obsidian-800" />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <StatCard
                   label="Pending Clubs"
                   value={stats?.pendingClubs ?? 0}
@@ -248,7 +248,7 @@ export default function AdminHubPage() {
           <h2 className="heading-fantasy text-xs uppercase tracking-[0.2em] text-ash-500 mb-3">
             Quick Actions
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {isSiteAdmin && (
               <>
                 <Link href="/admin/clubs">
