@@ -16,11 +16,13 @@ import { listVenues } from "@/lib/ladder/repo";
 import { upsertPlayerProfile } from "@/lib/players/write";
 import { uploadPlayerPhoto } from "@/lib/storage";
 import { resolveSelectedLeagueId } from "@/lib/selectedLeague";
+import { COMMUNITY_CLUB_ID } from "@/lib/community/constants";
 import type {
   PlayerProfileDoc,
   DominantHand,
   VenueDoc,
 } from "@/lib/firestore/types";
+import type { ClubFacility } from "@/lib/permissions/types";
 
 const PROVISIONAL_RANGES = [
   { id: "newer_player",              label: "Newer Player",              min: 2.0, max: 2.5, mid: 2.25 },
@@ -49,6 +51,10 @@ function PlayerEditInner() {
   const [loading, setLoading] = useState(true);
   const [existing, setExisting] = useState<PlayerProfileDoc | null>(null);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
+  const [communityFacilities, setCommunityFacilities] = useState<ClubFacility[]>([]);
+  const [facilitySearch, setFacilitySearch] = useState("");
+  const [homeFacilityId, setHomeFacilityId] = useState("");
+  const [homeFacilityName, setHomeFacilityName] = useState("");
 
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -81,6 +87,28 @@ function PlayerEditInner() {
           listVenues().catch(() => []),
         ]);
         setVenues(vs);
+
+        // Load community facilities for home facility picker
+        if (isFirebaseConfigured()) {
+          try {
+            const { getDocs, query, collection, where, orderBy } = await import("firebase/firestore");
+            const { db } = await import("@/lib/firebase");
+            const { COLLECTIONS } = await import("@/lib/firestore/collections");
+            const snap = await getDocs(
+              query(
+                collection(db(), COLLECTIONS.clubFacilities),
+                where("clubId", "==", COMMUNITY_CLUB_ID),
+                orderBy("facilityName"),
+              ),
+            );
+            setCommunityFacilities(
+              snap.docs.map((d) => ({ id: d.id, ...d.data() } as ClubFacility)),
+            );
+          } catch {
+            // community facilities are optional
+          }
+        }
+
         if (prof) {
           setExisting(prof);
           setPhotoURL(prof.photoURL ?? null);
@@ -89,6 +117,8 @@ function PlayerEditInner() {
           setRegion(prof.region ?? "");
           setCountry(prof.country ?? "");
           setHomeVenueId(prof.homeVenueId ?? "");
+          setHomeFacilityId(prof.homeFacilityId ?? "");
+          setHomeFacilityName(prof.homeFacilityName ?? "");
           setDominantHand((prof.dominantHand as DominantHand) ?? "");
           setPaddleBrand(prof.paddleBrand ?? "");
           setPaddleModel(prof.paddleModel ?? "");
@@ -144,6 +174,8 @@ function PlayerEditInner() {
         country,
         homeVenueId: homeVenueId || undefined,
         homeVenueName: homeVenue?.name,
+        homeFacilityId: homeFacilityId || undefined,
+        homeFacilityName: homeFacilityName || undefined,
         dominantHand: (dominantHand || undefined) as DominantHand | undefined,
         paddleBrand,
         paddleModel,
@@ -286,6 +318,71 @@ function PlayerEditInner() {
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Community home court" className="md:col-span-2">
+                {homeFacilityId ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex-1 bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100 truncate">
+                      {homeFacilityName || homeFacilityId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setHomeFacilityId(""); setHomeFacilityName(""); setFacilitySearch(""); }}
+                      className="text-xs text-ash-500 hover:text-crimson-400 transition-colors shrink-0"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <input
+                      className={fieldCls}
+                      placeholder="Search community courts…"
+                      value={facilitySearch}
+                      onChange={(e) => setFacilitySearch(e.target.value)}
+                    />
+                    {facilitySearch.trim().length > 0 && (
+                      <div className="border border-obsidian-500 rounded-pixel bg-obsidian-900 max-h-48 overflow-y-auto divide-y divide-obsidian-700">
+                        {communityFacilities
+                          .filter((f) =>
+                            (f.facilityName ?? f.address ?? "")
+                              .toLowerCase()
+                              .includes(facilitySearch.toLowerCase()),
+                          )
+                          .slice(0, 12)
+                          .map((f) => (
+                            <button
+                              key={f.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 hover:bg-obsidian-700 transition-colors"
+                              onClick={() => {
+                                setHomeFacilityId(f.id);
+                                setHomeFacilityName(f.facilityName ?? f.address ?? f.id);
+                                setFacilitySearch("");
+                              }}
+                            >
+                              <p className="text-ash-100 text-xs font-medium truncate">
+                                {f.facilityName ?? <span className="italic text-ash-500">Unnamed</span>}
+                              </p>
+                              {f.address && (
+                                <p className="text-ash-500 text-[10px] truncate">{f.address}</p>
+                              )}
+                            </button>
+                          ))}
+                        {communityFacilities.filter((f) =>
+                          (f.facilityName ?? f.address ?? "")
+                            .toLowerCase()
+                            .includes(facilitySearch.toLowerCase()),
+                        ).length === 0 && (
+                          <p className="px-3 py-2 text-ash-600 text-xs italic">No courts found</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-[11px] text-ash-600 mt-1">
+                  Public courts imported from OpenStreetMap — used as your default play location.
+                </p>
               </Field>
               <Field label="Dominant hand">
                 <select

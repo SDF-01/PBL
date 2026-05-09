@@ -536,6 +536,9 @@ export interface PlayerProfileDoc {
   /** Favored venue for quick lookup; denormalized VenueDoc.id. */
   homeVenueId?: string;
   homeVenueName?: string;
+  /** Preferred ClubFacility document ID (community or club facility). */
+  homeFacilityId?: string;
+  homeFacilityName?: string;
   dominantHand?: DominantHand;
   paddleBrand?: string;
   paddleModel?: string;

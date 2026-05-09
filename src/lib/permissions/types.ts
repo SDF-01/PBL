@@ -199,6 +199,10 @@ export interface ClubFacility {
   // Open-play schedule
   openPlaySessions?: OpenPlaySession[];
 
+  // Import provenance
+  /** OpenStreetMap element ID (e.g. "node/12345678"). Prevents duplicate imports. */
+  osmId?: string;
+
   // Audit
   createdAt?: string;
   updatedAt?: string;

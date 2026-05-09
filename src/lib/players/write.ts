@@ -46,6 +46,8 @@ export interface PlayerProfileInput {
   country?: string;
   homeVenueId?: string;
   homeVenueName?: string;
+  homeFacilityId?: string;
+  homeFacilityName?: string;
   dominantHand?: DominantHand;
   paddleBrand?: string;
   paddleModel?: string;
@@ -77,6 +79,8 @@ export async function upsertPlayerProfile(
     country: input.country?.trim() || undefined,
     homeVenueId: input.homeVenueId,
     homeVenueName: input.homeVenueName?.trim() || undefined,
+    homeFacilityId: input.homeFacilityId,
+    homeFacilityName: input.homeFacilityName?.trim() || undefined,
     dominantHand: input.dominantHand,
     paddleBrand: input.paddleBrand?.trim() || undefined,
     paddleModel: input.paddleModel?.trim() || undefined,

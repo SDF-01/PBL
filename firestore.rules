@@ -115,7 +115,8 @@ service cloud.firestore {
     function playerUpdateKeys() {
       return [
         "displayName", "photoURL", "city", "region", "country",
-        "homeVenueId", "homeVenueName", "dominantHand", "paddleBrand",
+        "homeVenueId", "homeVenueName", "homeFacilityId", "homeFacilityName",
+        "dominantHand", "paddleBrand",
         "paddleModel", "yearsPlaying", "bio", "duprRating", "duprId",
         "updatedAt"
       ];

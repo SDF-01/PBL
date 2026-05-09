@@ -17,6 +17,7 @@ import {
   Send,
   Loader2,
   FlaskConical,
+  MapPin,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
@@ -355,6 +356,27 @@ export default function AdminHubPage() {
                       </div>
                       <p className="text-ash-400 text-sm leading-relaxed">
                         Switch into a fake player account to QA the site from their perspective.
+                      </p>
+                    </div>
+                  </Panel>
+                </Link>
+
+                <Link href="/admin/import-courts">
+                  <Panel
+                    variant="quest"
+                    padding="lg"
+                    className="h-full flex items-start gap-4 hover:border-spectral-500/40 transition-colors cursor-pointer"
+                  >
+                    <div className="shrink-0 p-2 rounded-pixel bg-spectral-500/15 text-spectral-400">
+                      <MapPin className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="heading-fantasy text-ash-100 text-base">Import Courts</h3>
+                        <RuneChip tone="spectral" className="text-[9px]">Admin</RuneChip>
+                      </div>
+                      <p className="text-ash-400 text-sm leading-relaxed">
+                        Search OpenStreetMap for pickleball courts and import them as community venues.
                       </p>
                     </div>
                   </Panel>
