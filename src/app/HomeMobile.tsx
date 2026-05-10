@@ -34,7 +34,7 @@ export function HomeMobile() {
             </>
           ) : (
             <>
-              <Link href="/ladder/check-in"><Button size="md" className="w-full">Check In</Button></Link>
+              <Link href="/leagues"><Button size="md" className="w-full">My Leagues</Button></Link>
               <Link href="/dashboard"><Button variant="rune" size="md" className="w-full">Dashboard</Button></Link>
             </>
           )}

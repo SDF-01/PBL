@@ -317,7 +317,12 @@ export type CheckInStatus =
   | "PENDING"
   | "CONFIRMED"
   | "GEO_REJECTED"
-  | "ADMIN_CONFIRMED";
+  | "ADMIN_CONFIRMED"
+  | "NO_SHOW"
+  | "LATE";
+
+/** How the player established attendance. Audit-only. */
+export type CheckInMethod = "GEO" | "CODE" | "QR" | "OVERRIDE" | "MANUAL";
 
 export type MovementPattern = "ONE_UP_ONE_DOWN" | "TWO_UP_TWO_DOWN";
 
@@ -373,6 +378,8 @@ export interface PlayDateDoc {
   /** ISO check-in window bounds. */
   checkInOpensAt?: string;
   checkInClosesAt?: string;
+  /** 6-char short code coordinator shares to allow code/QR check-in. */
+  checkInCode?: string;
   sessionAId?: string;
   sessionBId?: string;
   venueLatitude?: number;
@@ -439,6 +446,8 @@ export interface CheckInDoc {
   userId: string;
   displayName: string;
   status: CheckInStatus;
+  /** How the attendance was established (geo, short code, QR scan, override). */
+  method?: CheckInMethod;
   checkedInAt?: string;
   /** Reported geolocation at check-in time. WGS84, matches VenueDoc naming. */
   lat?: number;
@@ -447,6 +456,10 @@ export interface CheckInDoc {
   distanceMeters?: number;
   geofenceResult?: string;
   adminOverrideBy?: string;
+  /** Set when a coordinator promoted a no-show back into the pool. */
+  lateArrivalAt?: string;
+  /** Set when a coordinator marked the player no-show. */
+  noShowAt?: string;
   createdAt: string;
 }
 

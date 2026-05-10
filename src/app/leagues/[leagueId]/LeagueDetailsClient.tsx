@@ -34,11 +34,12 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { listClubFacilities } from "@/lib/clubs/repo";
 import { getLeague, getUserLeagueMembership } from "@/lib/leagues/repo";
 import { joinLeague, leaveLeague, updateLeagueSettings, type UpdateLeagueInput } from "@/lib/leagues/write";
+import { listPlayDatesByLeague } from "@/lib/ladder/repo";
 import type { ClubFacility } from "@/lib/permissions/types";
 import { resolveSelectedLeagueId, storeSelectedLeagueId } from "@/lib/selectedLeague";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import type { LeagueDoc } from "@/lib/firestore/types";
+import type { LeagueDoc, PlayDateDoc } from "@/lib/firestore/types";
 
 const DAYS_OF_WEEK = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -387,6 +388,103 @@ function formatNextPlayDate(value?: string): string {
   });
 }
 
+function formatPlayDateLabel(pd: PlayDateDoc): string {
+  const d = new Date(pd.date + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return pd.date;
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function MemberPlayDatePanel({
+  playDates,
+  selectedPlayDateId,
+  onSelect,
+}: {
+  playDates: PlayDateDoc[];
+  selectedPlayDateId: string;
+  onSelect: (id: string) => void;
+}) {
+  if (playDates.length === 0) {
+    return (
+      <Panel variant="base" padding="md" className="text-xs text-ash-500">
+        No match days are scheduled yet. Check back once your coordinator
+        publishes the schedule.
+      </Panel>
+    );
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const visible = playDates.filter(
+    (pd) => pd.date >= today || pd.status === "IN_PROGRESS" || pd.status === "CHECK_IN_OPEN",
+  );
+  const list = visible.length > 0 ? visible : playDates.slice(-3);
+  const selected = list.find((pd) => pd.id === selectedPlayDateId) ?? list[0];
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[10px] uppercase tracking-[0.15em] text-ash-500 block">
+        Match day
+      </label>
+      <select
+        className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
+        value={selected?.id ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+      >
+        {list.map((pd) => (
+          <option key={pd.id} value={pd.id}>
+            {formatPlayDateLabel(pd)} — {pd.status.replace("_", " ").toLowerCase()}
+          </option>
+        ))}
+      </select>
+      {selected && <PlayDateCheckInCta playDate={selected} />}
+    </div>
+  );
+}
+
+function PlayDateCheckInCta({ playDate }: { playDate: PlayDateDoc }) {
+  const status = playDate.status;
+  if (status === "CHECK_IN_OPEN") {
+    return (
+      <Link href={`/ladder/check-in?playDate=${playDate.id}`}>
+        <Button size="sm" className="w-full">
+          <UserCheck className="h-3.5 w-3.5" /> Check In
+        </Button>
+      </Link>
+    );
+  }
+  if (status === "IN_PROGRESS") {
+    return (
+      <Link href={`/ladder/session?playDate=${playDate.id}`}>
+        <Button size="sm" className="w-full">
+          <UserCheck className="h-3.5 w-3.5" /> Go to Session
+        </Button>
+      </Link>
+    );
+  }
+  if (status === "SCHEDULED") {
+    const opens = playDate.checkInOpensAt
+      ? new Date(playDate.checkInOpensAt).toLocaleString(undefined, {
+          weekday: "short",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "soon";
+    return (
+      <Button size="sm" className="w-full" disabled>
+        <UserCheck className="h-3.5 w-3.5" /> Check-in opens {opens}
+      </Button>
+    );
+  }
+  return (
+    <Button size="sm" variant="ghost" className="w-full" disabled>
+      Match day {status.toLowerCase().replace("_", " ")}
+    </Button>
+  );
+}
+
 export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -427,6 +525,8 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   const [weather, setWeather] = useState<WeatherDay[] | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(false);
+  const [playDates, setPlayDates] = useState<PlayDateDoc[]>([]);
+  const [selectedPlayDateId, setSelectedPlayDateId] = useState<string>("");
 
   useEffect(() => {
     const preserved = resolveSelectedLeagueId(searchParams) ?? leagueId;
@@ -463,6 +563,19 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     if (!cId) return;
     listClubFacilities(cId).then(setFacilities).catch(() => setFacilities([]));
   }, [league]);
+
+  // Fetch play dates for this league and default to the nearest upcoming one.
+  useEffect(() => {
+    if (!leagueId || leagueId === "__fallback") return;
+    listPlayDatesByLeague(leagueId)
+      .then((rows) => {
+        setPlayDates(rows);
+        const today = new Date().toISOString().slice(0, 10);
+        const upcoming = rows.find((pd) => pd.date >= today);
+        setSelectedPlayDateId((current) => current || upcoming?.id || rows[0]?.id || "");
+      })
+      .catch(() => setPlayDates([]));
+  }, [leagueId]);
 
   // Fetch 5-day weather forecast via Open-Meteo forecast API (no API key required).
   useEffect(() => {
@@ -832,6 +945,13 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                           </Button>
                         </Link>
                       )}
+                      {selectedPlayDateId && (
+                        <Link href={`/ladder/coordinator/${selectedPlayDateId}`}>
+                          <Button size="sm" variant="outline" className="w-full">
+                            <ShieldCheck className="h-3.5 w-3.5" /> Live Dashboard
+                          </Button>
+                        </Link>
+                      )}
                       <Link href={`/leagues/${leagueId}/roster`}>
                         <Button size="sm" variant="outline" className="w-full">
                           <Users className="h-3.5 w-3.5" /> Roster
@@ -882,15 +1002,15 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                         You&apos;re in this league
                       </h2>
                       <p className="text-ash-500 text-xs mt-1">
-                        Check in on play date days to get your court assignment.
+                        Pick a match day to check in or view your session.
                       </p>
                     </div>
+                    <MemberPlayDatePanel
+                      playDates={playDates}
+                      selectedPlayDateId={selectedPlayDateId}
+                      onSelect={setSelectedPlayDateId}
+                    />
                     <div className="grid gap-2">
-                      <Link href="/ladder/check-in">
-                        <Button size="sm" className="w-full">
-                          <UserCheck className="h-3.5 w-3.5" /> Check In
-                        </Button>
-                      </Link>
                       <Link href={`/leagues/${leagueId}/roster`}>
                         <Button size="sm" variant="outline" className="w-full">
                           <Users className="h-3.5 w-3.5" /> Roster

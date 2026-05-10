@@ -37,6 +37,7 @@ import type {
   MovementPattern,
   CourtDistributionPlacement,
   CheckInStatus,
+  CheckInMethod,
 } from "../firestore/types";
 
 function stripUndefined<T extends Record<string, unknown>>(
@@ -196,6 +197,7 @@ export interface NewCheckIn {
   lng?: number;
   distanceMeters?: number;
   status: CheckInStatus;
+  method?: CheckInMethod;
 }
 
 export async function createCheckIn(input: NewCheckIn): Promise<string> {
@@ -207,6 +209,7 @@ export async function createCheckIn(input: NewCheckIn): Promise<string> {
       userId: input.userId,
       displayName: input.displayName,
       status: input.status,
+      method: input.method,
       lat: input.lat,
       lng: input.lng,
       distanceMeters: input.distanceMeters,
@@ -222,7 +225,86 @@ export async function adminOverrideCheckIn(
 ): Promise<void> {
   await updateDoc(doc(db(), COLLECTIONS.checkIns, checkInId), {
     status: "ADMIN_CONFIRMED" as CheckInStatus,
+    method: "OVERRIDE" as CheckInMethod,
     adminOverrideBy: adminId,
+  });
+}
+
+/**
+ * Mark a player as no-show for a play date. Writes a CheckInDoc keyed by
+ * (playDateId, userId) — same key shape as createCheckIn — so a player can
+ * later be promoted back via markLateArrival.
+ */
+export async function markNoShow(input: {
+  playDateId: string;
+  userId: string;
+  displayName: string;
+  adminId: string;
+}): Promise<void> {
+  const id = `${input.playDateId}__${input.userId}`;
+  await setDoc(
+    doc(db(), COLLECTIONS.checkIns, id),
+    stripUndefined({
+      playDateId: input.playDateId,
+      userId: input.userId,
+      displayName: input.displayName,
+      status: "NO_SHOW" as CheckInStatus,
+      adminOverrideBy: input.adminId,
+      noShowAt: new Date().toISOString(),
+      createdAt: serverTimestamp(),
+    }),
+    { merge: true },
+  );
+}
+
+/** Promote a no-show into a late arrival so they can be slotted into the next round. */
+export async function markLateArrival(
+  checkInId: string,
+  adminId: string,
+): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.checkIns, checkInId), {
+    status: "LATE" as CheckInStatus,
+    adminOverrideBy: adminId,
+    lateArrivalAt: new Date().toISOString(),
+  });
+}
+
+/** Rotate or set the short check-in code on a play date. */
+export async function setPlayDateCheckInCode(
+  playDateId: string,
+  code: string | null,
+): Promise<void> {
+  await updateDoc(doc(db(), COLLECTIONS.playDates, playDateId), {
+    checkInCode: code ?? "",
+  });
+}
+
+/**
+ * Self-service check-in using a short code shared by the coordinator.
+ * Caller must supply the code the player entered; the helper verifies
+ * it against the PlayDateDoc.checkInCode and writes CONFIRMED on match.
+ */
+export async function createCheckInByCode(input: {
+  playDateId: string;
+  userId: string;
+  displayName: string;
+  code: string;
+  method?: Extract<CheckInMethod, "CODE" | "QR">;
+}): Promise<void> {
+  const snap = await getDoc(doc(db(), COLLECTIONS.playDates, input.playDateId));
+  if (!snap.exists()) throw new Error("Play date not found.");
+  const pd = snap.data() as PlayDateDoc;
+  const expected = (pd.checkInCode ?? "").trim().toUpperCase();
+  const provided = input.code.trim().toUpperCase();
+  if (!expected || expected !== provided) {
+    throw new Error("That check-in code didn't match. Ask the coordinator.");
+  }
+  await createCheckIn({
+    playDateId: input.playDateId,
+    userId: input.userId,
+    displayName: input.displayName,
+    status: "CONFIRMED",
+    method: input.method ?? "CODE",
   });
 }
 

@@ -170,7 +170,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
             </p>
           </div>
           {upcomingDates[0].status === "CHECK_IN_OPEN" ? (
-            <Link href="/ladder/check-in">
+            <Link href={`/ladder/check-in?playDate=${upcomingDates[0].id}`}>
               <Button size="sm">
                 <CheckCircle className="h-3.5 w-3.5" /> Check In
               </Button>
@@ -185,9 +185,9 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
       <Panel variant="inventory" padding="md">
         <RuneChip tone="rune" className="mb-3">Quick Actions</RuneChip>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          <Link href="/ladder/check-in">
+          <Link href="/leagues">
             <Button size="sm" className="w-full">
-              <MapPin className="h-3.5 w-3.5" /> Check In
+              <MapPin className="h-3.5 w-3.5" /> My Leagues
             </Button>
           </Link>
           <Link href="/players">

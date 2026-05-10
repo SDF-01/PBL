@@ -60,7 +60,7 @@ import { listLeagueMembers, type LeagueMemberEntry } from "@/lib/leagues/repo";
 import { getPlayerProfile } from "@/lib/players/repo";
 import { createVenue, writeNotification } from "@/lib/ladder/write";
 import { assignRole, deactivateUserRole } from "@/lib/permissions/write";
-import { listVenues } from "@/lib/ladder/repo";
+import { listVenues, listPlayDatesByLeague } from "@/lib/ladder/repo";
 import { geocodeAddress, isValidCoordinate } from "@/lib/geo/geocode";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
@@ -875,19 +875,103 @@ function LeaguesSection({ clubId, clubName, userId, userDisplayName, toast }: { 
       ) : (
         <div className="space-y-2">
           {leagues.map((league) => (
-            <Panel key={league.id} variant="inventory" padding="md" className="flex items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="heading-fantasy text-ash-100 text-sm">{league.name}</span>
-                  {league.active !== false && <RuneChip tone="success" className="text-[10px]">Active</RuneChip>}
-                </div>
-                <p className="text-ash-500 text-xs">{[league.city, league.state].filter(Boolean).join(", ")}{league.league_format ? ` · ${league.league_format}` : ""}</p>
-              </div>
-              <Link href={`/leagues/${league.id}`}><Button size="sm" variant="ghost">View</Button></Link>
-            </Panel>
+            <LeagueStatsCard key={league.id} league={league} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LeagueStatsCard({ league }: { league: LeagueDoc }) {
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+  const [upcoming, setUpcoming] = useState<{ id: string; date: string; status: string } | null>(null);
+  const [activeOpen, setActiveOpen] = useState<{ id: string; status: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      listLeagueMembers(league.id).catch(() => []),
+      listPlayDatesByLeague(league.id).catch(() => []),
+    ]).then(([members, playDates]) => {
+      if (cancelled) return;
+      setMemberCount(members.filter((m) => m.status === "active").length);
+      const today = new Date().toISOString().slice(0, 10);
+      const upcomingPd = playDates.find((pd) => pd.date >= today);
+      setUpcoming(upcomingPd ? { id: upcomingPd.id, date: upcomingPd.date, status: upcomingPd.status } : null);
+      const live = playDates.find(
+        (pd) => pd.status === "CHECK_IN_OPEN" || pd.status === "IN_PROGRESS",
+      );
+      setActiveOpen(live ? { id: live.id, status: live.status } : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [league.id]);
+
+  return (
+    <Panel variant="inventory" padding="md" className="space-y-2">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="heading-fantasy text-ash-100 text-sm">{league.name}</span>
+            {league.active !== false && (
+              <RuneChip tone="success" className="text-[10px]">Active</RuneChip>
+            )}
+            {activeOpen && (
+              <RuneChip tone="ember" className="text-[10px]">
+                {activeOpen.status === "CHECK_IN_OPEN" ? "Check-in open" : "Live"}
+              </RuneChip>
+            )}
+          </div>
+          <p className="text-ash-500 text-xs">
+            {[league.city, league.state].filter(Boolean).join(", ")}
+            {league.league_format ? ` · ${league.league_format}` : ""}
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          {activeOpen && (
+            <Link href={`/ladder/coordinator/${activeOpen.id}`}>
+              <Button size="sm" variant="outline">Dashboard</Button>
+            </Link>
+          )}
+          <Link href={`/leagues/${league.id}`}>
+            <Button size="sm" variant="ghost">View</Button>
+          </Link>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3 text-[11px] pt-2 border-t border-obsidian-700">
+        <Stat label="Members" value={memberCount} />
+        <Stat
+          label="Coordinator"
+          value={league.coordinatorName ?? null}
+          placeholder="Unassigned"
+        />
+        <Stat
+          label="Next play date"
+          value={upcoming ? upcoming.date : null}
+          placeholder="None scheduled"
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  placeholder = "—",
+}: {
+  label: string;
+  value: number | string | null;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.15em] text-ash-600">{label}</p>
+      <p className="text-ash-200 font-medium truncate">
+        {value === null ? <span className="text-ash-600 italic">…</span> : value === "" ? placeholder : value}
+      </p>
     </div>
   );
 }

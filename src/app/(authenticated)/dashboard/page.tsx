@@ -213,7 +213,7 @@ function DashboardDesktop({ stats }: { stats: Stats }) {
           body="Open a new play date, let players check in, then generate Session A."
           actions={[
             { href: "/ladder/play-dates", label: "Play Dates", icon: CalendarDays },
-            { href: "/ladder/check-in", label: "Check-In", icon: MapPin },
+            { href: "/leagues", label: "Leagues", icon: MapPin },
           ]}
         />
         <QuickPanel
@@ -265,7 +265,7 @@ function DashboardMobile({ stats }: { stats: Stats }) {
       <Panel variant="quest" padding="md">
         <RuneChip tone="rune" className="mb-2">Quick Actions</RuneChip>
         <div className="grid grid-cols-2 gap-2">
-          <Link href="/ladder/check-in"><Button size="sm" className="w-full"><MapPin className="h-3.5 w-3.5" /> Check-In</Button></Link>
+          <Link href="/leagues"><Button size="sm" className="w-full"><MapPin className="h-3.5 w-3.5" /> Leagues</Button></Link>
           <Link href="/ladder/play-dates"><Button size="sm" variant="outline" className="w-full"><CalendarDays className="h-3.5 w-3.5" /> Dates</Button></Link>
           <Link href="/players"><Button size="sm" variant="outline" className="w-full"><Trophy className="h-3.5 w-3.5" /> Ranks</Button></Link>
           <Link href="/ladder/seasons"><Button size="sm" variant="outline" className="w-full">Seasons</Button></Link>

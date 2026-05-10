@@ -3,7 +3,10 @@
 import {
   collection,
   deleteDoc,
+  getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -17,6 +20,8 @@ import type { Entrant } from "@/domain/bracket/types";
 import type { LeagueScheduleMatchDoc } from "@/lib/firestore/types";
 
 export type { LeagueScheduleMatchDoc };
+
+const SNAPSHOT_SUBCOLLECTION = "scheduleHistory";
 
 /** Fetch all schedule matches for a league. */
 export async function listScheduleMatches(
@@ -41,13 +46,20 @@ export interface SchedulePlayer {
 /**
  * Generate and persist a full round-robin schedule for a league.
  * Clears any existing schedule first (idempotent regeneration).
+ *
+ * Before deletion, writes a snapshot under
+ * leagues/{leagueId}/scheduleHistory/{timestamp} so the prior
+ * schedule can be restored.
  */
 export async function generateLeagueSchedule(
   leagueId: string,
   players: SchedulePlayer[],
 ): Promise<LeagueScheduleMatchDoc[]> {
-  // Clear existing
+  // Snapshot + clear existing
   const existing = await listScheduleMatches(leagueId);
+  if (existing.length > 0) {
+    await snapshotSchedule(leagueId, existing);
+  }
   await Promise.allSettled(
     existing.map((m) =>
       deleteDoc(doc(db(), COLLECTIONS.leagueScheduleMatches, m.id)),
@@ -95,4 +107,127 @@ export async function generateLeagueSchedule(
   }
 
   return created;
+}
+
+// ============================================================
+// SCHEDULE HISTORY (snapshot + restore)
+// ============================================================
+
+export interface ScheduleSnapshot {
+  id: string;
+  leagueId: string;
+  matches: LeagueScheduleMatchDoc[];
+  snapshotAt: string;
+  matchCount: number;
+  completedCount: number;
+}
+
+/** Write a snapshot of the current schedule before regeneration. */
+async function snapshotSchedule(
+  leagueId: string,
+  matches: LeagueScheduleMatchDoc[],
+): Promise<string> {
+  const id = new Date().toISOString().replace(/[.:]/g, "-");
+  const completedCount = matches.filter((m) => m.status === "COMPLETED").length;
+  await setDoc(
+    doc(
+      db(),
+      COLLECTIONS.leagues,
+      leagueId,
+      SNAPSHOT_SUBCOLLECTION,
+      id,
+    ),
+    {
+      id,
+      leagueId,
+      matches,
+      snapshotAt: serverTimestamp(),
+      matchCount: matches.length,
+      completedCount,
+    },
+  );
+  return id;
+}
+
+/** Most recent snapshots first, capped to 5. */
+export async function listScheduleSnapshots(
+  leagueId: string,
+): Promise<ScheduleSnapshot[]> {
+  const snap = await getDocs(
+    query(
+      collection(
+        db(),
+        COLLECTIONS.leagues,
+        leagueId,
+        SNAPSHOT_SUBCOLLECTION,
+      ),
+      orderBy("snapshotAt", "desc"),
+      limit(5),
+    ),
+  );
+  return snap.docs.map((d) => {
+    const data = d.data() as {
+      matches: LeagueScheduleMatchDoc[];
+      matchCount: number;
+      completedCount: number;
+      snapshotAt: { toDate?: () => Date } | string;
+    };
+    const at =
+      typeof data.snapshotAt === "string"
+        ? data.snapshotAt
+        : data.snapshotAt?.toDate?.().toISOString() ?? "";
+    return {
+      id: d.id,
+      leagueId,
+      matches: data.matches ?? [],
+      matchCount: data.matchCount ?? data.matches?.length ?? 0,
+      completedCount: data.completedCount ?? 0,
+      snapshotAt: at,
+    };
+  });
+}
+
+/**
+ * Restore the schedule from a snapshot. Wipes the current schedule
+ * (taking another snapshot of *that* first, so the operation is reversible)
+ * and re-creates each match exactly as it was when the snapshot was taken.
+ */
+export async function restoreScheduleSnapshot(
+  leagueId: string,
+  snapshotId: string,
+): Promise<LeagueScheduleMatchDoc[]> {
+  const snap = await getDoc(
+    doc(
+      db(),
+      COLLECTIONS.leagues,
+      leagueId,
+      SNAPSHOT_SUBCOLLECTION,
+      snapshotId,
+    ),
+  );
+  if (!snap.exists()) throw new Error("Snapshot not found.");
+  const data = snap.data() as { matches: LeagueScheduleMatchDoc[] };
+  const matches = data.matches ?? [];
+
+  // Snapshot the current schedule (if any) before we overwrite it.
+  const current = await listScheduleMatches(leagueId);
+  if (current.length > 0) {
+    await snapshotSchedule(leagueId, current);
+    await Promise.allSettled(
+      current.map((m) =>
+        deleteDoc(doc(db(), COLLECTIONS.leagueScheduleMatches, m.id)),
+      ),
+    );
+  }
+
+  await Promise.all(
+    matches.map((m) =>
+      setDoc(doc(db(), COLLECTIONS.leagueScheduleMatches, m.id), {
+        ...m,
+        createdAt: serverTimestamp(),
+      }),
+    ),
+  );
+
+  return matches;
 }

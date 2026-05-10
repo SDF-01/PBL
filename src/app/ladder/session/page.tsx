@@ -132,9 +132,9 @@ function PlayerSessionContent() {
               Check in at your venue to join the ladder session.
             </p>
             <div className="flex gap-2">
-              <Link href="/ladder/check-in">
+              <Link href="/leagues">
                 <Button size="sm">
-                  <MapPin className="h-3.5 w-3.5" /> Check In
+                  <MapPin className="h-3.5 w-3.5" /> My Leagues
                 </Button>
               </Link>
               <Link href="/ladder/play-dates">

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MapPin, CheckCircle2, XCircle, Compass, ShieldCheck, Users } from "lucide-react";
+import { MapPin, CheckCircle2, XCircle, Compass, ShieldCheck, Users, KeyRound, Hourglass, UserPlus2 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -11,10 +11,15 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { isFirebaseConfigured } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { getPlayDate, getVenue, listPlayDates, subscribeCheckIns } from "@/lib/ladder/repo";
-import { createCheckIn, adminOverrideCheckIn } from "@/lib/ladder/write";
+import {
+  createCheckIn,
+  adminOverrideCheckIn,
+  createCheckInByCode,
+  markLateArrival,
+} from "@/lib/ladder/write";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { distanceMeters } from "@/lib/ladder/geofence";
-import { getLeague } from "@/lib/leagues/repo";
+import { getLeague, getUserLeagueMembership } from "@/lib/leagues/repo";
 import { getClubFacilityById } from "@/lib/clubs/repo";
 import type {
   CheckInDoc,
@@ -49,6 +54,7 @@ export default function CheckInPage() {
 function CheckInInner() {
   const params = useSearchParams();
   const initialId = params.get("playDate");
+  const initialCode = params.get("code") ?? "";
   const { user, ready, signIn } = useAuth();
 
   const { isSiteAdmin, leagueCoordinatorFor, coordinatorClubIds } = usePermissions();
@@ -67,11 +73,15 @@ function CheckInInner() {
   const [distance, setDistance] = useState<number | null>(null);
   const [checkIns, setCheckIns] = useState<CheckInDoc[]>([]);
   const [overriding, setOverriding] = useState<string | null>(null);
+  const [memberCheck, setMemberCheck] = useState<"idle" | "checking" | "member" | "not-member">("idle");
+  const [code, setCode] = useState<string>(initialCode);
+  const [codeBusy, setCodeBusy] = useState(false);
 
+  // Global (admin-only) selector list. Regular players never see it.
   useEffect(() => {
-    if (!isFirebaseConfigured()) return;
+    if (!isFirebaseConfigured() || !isAdmin) return;
     listPlayDates().then(setPlayDates).catch(() => setPlayDates([]));
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -79,6 +89,7 @@ function CheckInInner() {
       setVenue(null);
       setGeofence(null);
       setGeoRequired(true);
+      setMemberCheck("idle");
       return;
     }
     (async () => {
@@ -118,6 +129,53 @@ function CheckInInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  // Membership guard — non-admins must be a member of the league this play date belongs to.
+  useEffect(() => {
+    if (!user || !playDate || isAdmin) {
+      setMemberCheck("idle");
+      return;
+    }
+    if (!playDate.leagueId) {
+      // Without a league link we can't gate; trust the existing geo gate.
+      setMemberCheck("member");
+      return;
+    }
+    setMemberCheck("checking");
+    getUserLeagueMembership(playDate.leagueId, user.uid)
+      .then((m) => setMemberCheck(m?.status === "active" ? "member" : "not-member"))
+      .catch(() => setMemberCheck("not-member"));
+  }, [user, playDate, isAdmin]);
+
+  // If the QR deep link supplied a code, attempt code check-in once the play date loads.
+  useEffect(() => {
+    if (!user || !playDate || !initialCode || phase !== "idle") return;
+    if (memberCheck !== "member") return;
+    void submitCode(initialCode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, playDate, initialCode, memberCheck]);
+
+  async function submitCode(rawCode: string) {
+    if (!user || !playDate) return;
+    setCodeBusy(true);
+    setPhase("submitting");
+    setMessage(null);
+    try {
+      await createCheckInByCode({
+        playDateId: playDate.id,
+        userId: user.uid,
+        displayName: user.displayName ?? user.email ?? "Anonymous",
+        code: rawCode,
+        method: initialCode ? "QR" : "CODE",
+      });
+      setPhase("confirmed");
+    } catch (err) {
+      setPhase("error");
+      setMessage(err instanceof Error ? err.message : "Code check-in failed.");
+    } finally {
+      setCodeBusy(false);
+    }
+  }
+
   async function onCheckIn() {
     if (!user || !playDate) return;
 
@@ -131,6 +189,7 @@ function CheckInInner() {
           userId: user.uid,
           displayName: user.displayName ?? user.email ?? "Anonymous",
           status: "CONFIRMED",
+          method: "MANUAL",
         });
         setPhase("confirmed");
       } catch (err) {
@@ -170,6 +229,7 @@ function CheckInInner() {
             lng: pos.coords.longitude,
             distanceMeters: d,
             status,
+            method: "GEO",
           });
           setPhase(within ? "confirmed" : "geo-rejected");
         } catch (err) {
@@ -202,6 +262,16 @@ function CheckInInner() {
     }
   }
 
+  async function handleMarkLate(checkInId: string) {
+    if (!user) return;
+    setOverriding(checkInId);
+    try {
+      await markLateArrival(checkInId, user.uid);
+    } finally {
+      setOverriding(null);
+    }
+  }
+
   async function onRequestAdminOverride() {
     if (!user || !playDate) return;
     setPhase("submitting");
@@ -213,6 +283,7 @@ function CheckInInner() {
         displayName: user.displayName ?? user.email ?? "Anonymous",
         distanceMeters: distance ?? undefined,
         status: "PENDING",
+        method: "OVERRIDE",
       });
       setPhase("pending-admin");
     } catch (err) {
@@ -231,8 +302,8 @@ function CheckInInner() {
               <span className="heading-fantasy text-lg">Checked in</span>
             </div>
             <p className="text-ash-400 text-sm mt-1">
-              You&apos;re within the venue geofence. Wait for the admin to
-              generate Session A.
+              You&apos;re confirmed for this play date. Wait for the coordinator
+              to generate Session A.
             </p>
           </Panel>
         );
@@ -251,7 +322,8 @@ function CheckInInner() {
                 {distance != null ? Math.round(distance) : "?"}m
               </span>{" "}
               from the venue center (allowed radius{" "}
-              {geofence?.radiusMeters ?? "?"}m). Ask an admin for an override.
+              {geofence?.radiusMeters ?? "?"}m). Try the code your coordinator
+              posted, or request an override.
             </p>
             <Button
               size="sm"
@@ -290,6 +362,26 @@ function CheckInInner() {
     }
   }, [phase, distance, message, geofence?.radiusMeters]);
 
+  // ── Non-admin without a playDate query param: guide back to leagues ──
+  if (ready && user && !isAdmin && !selectedId) {
+    return (
+      <ResponsiveShell desktopChromeless>
+        <main className="container py-6 md:py-10 space-y-4 max-w-xl">
+          <h1 className="heading-fantasy text-display-md text-ash-100">Check-In</h1>
+          <Panel variant="quest" padding="lg" className="space-y-3">
+            <p className="text-ash-300 text-sm">
+              Pick a match day from your league page to check in. Check-in is
+              always tied to a specific league play date.
+            </p>
+            <Link href="/leagues">
+              <Button size="sm" className="w-full">Go to my leagues</Button>
+            </Link>
+          </Panel>
+        </main>
+      </ResponsiveShell>
+    );
+  }
+
   return (
     <ResponsiveShell desktopChromeless>
       <main className="container py-6 md:py-10 space-y-6 max-w-xl">
@@ -314,10 +406,11 @@ function CheckInInner() {
           </Panel>
         )}
 
-        {user && (
+        {/* Admin-only global play-date selector. Players come here via a deep link. */}
+        {user && isAdmin && !initialId && (
           <Panel variant="base" padding="md">
             <label className="text-xs text-ash-400 space-y-1 block">
-              <span>Play date</span>
+              <span>Play date (admin view)</span>
               <select
                 className="w-full bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100"
                 value={selectedId}
@@ -339,7 +432,21 @@ function CheckInInner() {
           </Panel>
         )}
 
-        {playDate && user && (
+        {user && playDate && memberCheck === "not-member" && (
+          <Panel variant="base" padding="md" className="space-y-2">
+            <p className="text-crimson-400 text-sm">
+              You&apos;re not registered for this league. Join from the league
+              page to check in.
+            </p>
+            {playDate.leagueId && (
+              <Link href={`/leagues/${playDate.leagueId}`}>
+                <Button size="sm" variant="outline">Go to league</Button>
+              </Link>
+            )}
+          </Panel>
+        )}
+
+        {playDate && user && (isAdmin || memberCheck === "member") && (
           <Panel variant="inventory" padding="md">
             <div className="flex items-center gap-2 text-ash-200">
               <MapPin className="h-4 w-4 text-ember-500" />
@@ -368,12 +475,42 @@ function CheckInInner() {
                       ? "Check In Now"
                       : "Confirm Attendance"}
               </Button>
-              <Link href="/ladder/play-dates">
+              <Link href={playDate.leagueId ? `/leagues/${playDate.leagueId}` : "/leagues"}>
                 <Button size="md" variant="outline">
                   Cancel
                 </Button>
               </Link>
             </div>
+          </Panel>
+        )}
+
+        {/* Short-code fallback for geofence trouble */}
+        {playDate && user && (isAdmin || memberCheck === "member") && phase !== "confirmed" && (
+          <Panel variant="base" padding="md" className="space-y-2">
+            <div className="flex items-center gap-2 text-ash-200">
+              <KeyRound className="h-4 w-4 text-spectral-400" />
+              <span className="text-sm">Have a check-in code?</span>
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="6-char code"
+                className="flex-1 bg-obsidian-900 border border-obsidian-400 rounded-pixel px-3 py-2 text-sm text-ash-100 font-mono uppercase tracking-widest"
+                maxLength={12}
+              />
+              <Button
+                size="md"
+                variant="outline"
+                disabled={!code.trim() || codeBusy}
+                onClick={() => submitCode(code)}
+              >
+                {codeBusy ? "…" : "Use code"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-ash-500">
+              Your coordinator shares this on the live session screen when GPS isn&apos;t working.
+            </p>
           </Panel>
         )}
 
@@ -401,14 +538,15 @@ function CheckInInner() {
                       <div className="flex-1 min-w-0">
                         <p className="text-ash-200 text-sm truncate">{ci.displayName}</p>
                         <p className="text-ash-500 text-[11px] font-mono">
-                          {ci.distanceMeters != null ? `${Math.round(ci.distanceMeters)}m from venue` : "No GPS"}
+                          {ci.distanceMeters != null ? `${Math.round(ci.distanceMeters)}m` : "No GPS"}
+                          {ci.method ? ` · ${ci.method}` : ""}
                         </p>
                       </div>
                       <RuneChip
                         tone={
                           ci.status === "CONFIRMED" || ci.status === "ADMIN_CONFIRMED"
                             ? "success"
-                            : ci.status === "PENDING"
+                            : ci.status === "PENDING" || ci.status === "LATE"
                             ? "warning"
                             : "crimson"
                         }
@@ -425,9 +563,29 @@ function CheckInInner() {
                           {overriding === ci.id ? "…" : "Override"}
                         </button>
                       )}
+                      {ci.status === "NO_SHOW" && (
+                        <button
+                          onClick={() => handleMarkLate(ci.id)}
+                          disabled={overriding === ci.id}
+                          className="shrink-0 text-[11px] px-2 py-1 rounded bg-spectral-500/20 border border-spectral-500/40 text-spectral-300 hover:bg-spectral-500/30 transition-colors disabled:opacity-50 inline-flex items-center gap-1"
+                        >
+                          {overriding === ci.id ? "…" : (<><UserPlus2 className="h-3 w-3" /> Late</>)}
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
+                {playDate?.leagueId && (
+                  <p className="text-[10px] text-ash-500 mt-3 flex items-center gap-1">
+                    <Hourglass className="h-3 w-3" />
+                    <Link
+                      href={`/ladder/coordinator/${selectedId}`}
+                      className="underline hover:text-ash-200"
+                    >
+                      Open live coordinator dashboard
+                    </Link>
+                  </p>
+                )}
               </Panel>
             )}
           </div>

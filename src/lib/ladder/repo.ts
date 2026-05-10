@@ -73,6 +73,23 @@ export async function listPlayDates(): Promise<PlayDateDoc[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PlayDateDoc);
 }
 
+/**
+ * List all play dates for a single league, ordered by date ascending.
+ * Requires a Firestore composite index on (leagueId, date).
+ */
+export async function listPlayDatesByLeague(
+  leagueId: string,
+): Promise<PlayDateDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.playDates),
+      where("leagueId", "==", leagueId),
+      orderBy("date", "asc"),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PlayDateDoc);
+}
+
 export async function getPlayDate(id: string): Promise<PlayDateDoc | null> {
   const snap = await getDoc(doc(db(), COLLECTIONS.playDates, id));
   return snap.exists()

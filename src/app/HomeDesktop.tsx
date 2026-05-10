@@ -40,7 +40,7 @@ export function HomeDesktop() {
             </>
           ) : (
             <>
-              <Link href="/ladder/check-in"><Button size="lg">Player Check-in</Button></Link>
+              <Link href="/leagues"><Button size="lg">My Leagues</Button></Link>
               <Link href="/dashboard"><Button variant="rune" size="lg">Dashboard</Button></Link>
             </>
           )}
