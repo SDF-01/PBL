@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CalendarDays, Plus, MapPin } from "lucide-react";
+import { RsvpButton } from "@/components/ladder/RsvpButton";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -241,12 +242,15 @@ export default function PlayDatesPage() {
                       </div>
                     )}
 
-                    <div className="flex gap-2 flex-wrap">
+                    <div className="flex gap-2 flex-wrap items-center">
                       <Link href={`/ladder/check-in?playDate=${pd.id}`}>
                         <Button size="sm" variant="outline">
                           Check-In
                         </Button>
                       </Link>
+                      {user && pd.status === "SCHEDULED" && (
+                        <RsvpButton playDateId={pd.id} />
+                      )}
                       {(sessionA || sessionB) && (
                         <Link href={`/ladder/session?playDate=${pd.id}`}>
                           <Button size="sm" variant="ghost">

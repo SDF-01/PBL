@@ -9,10 +9,12 @@ export function Toaster() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 w-full max-w-sm pointer-events-none">
+    <div className="fixed z-[200] flex flex-col gap-2 pointer-events-none bottom-24 left-2 right-2 sm:bottom-auto sm:top-4 sm:right-4 sm:left-auto sm:w-full sm:max-w-sm">
       {toasts.map((t) => (
         <div
           key={t.id}
+          role="alert"
+          aria-live={t.variant === "error" ? "assertive" : "polite"}
           className={cn(
             "pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-pixel border shadow-xl backdrop-blur-sm animate-in slide-in-from-right-4 fade-in duration-200",
             t.variant === "success" && "bg-obsidian-800/95 border-ember-500/50",
@@ -27,6 +29,7 @@ export function Toaster() {
           <button
             type="button"
             onClick={() => dismiss(t.id)}
+            aria-label="Dismiss notification"
             className="text-ash-500 hover:text-ash-300 transition-colors shrink-0"
           >
             <X className="h-3.5 w-3.5" />

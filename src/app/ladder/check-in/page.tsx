@@ -14,6 +14,8 @@ import { getPlayDate, getVenue, listPlayDates, subscribeCheckIns } from "@/lib/l
 import { createCheckIn, adminOverrideCheckIn } from "@/lib/ladder/write";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { distanceMeters } from "@/lib/ladder/geofence";
+import { getLeague } from "@/lib/leagues/repo";
+import { getClubFacilityById } from "@/lib/clubs/repo";
 import type {
   CheckInDoc,
   PlayDateDoc,
@@ -56,6 +58,10 @@ function CheckInInner() {
   const [selectedId, setSelectedId] = useState<string>(initialId ?? "");
   const [playDate, setPlayDate] = useState<PlayDateDoc | null>(null);
   const [venue, setVenue] = useState<VenueDoc | null>(null);
+  /** True when the associated league has geoLocationAssistedCheckIn disabled. */
+  const [geoRequired, setGeoRequired] = useState<boolean>(true);
+  /** Resolved geofence center + radius from venue or facility. */
+  const [geofence, setGeofence] = useState<{ lat: number; lng: number; radiusMeters: number; name: string } | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
@@ -71,20 +77,69 @@ function CheckInInner() {
     if (!selectedId) {
       setPlayDate(null);
       setVenue(null);
+      setGeofence(null);
+      setGeoRequired(true);
       return;
     }
     (async () => {
       const pd = await getPlayDate(selectedId).catch(() => null);
       setPlayDate(pd);
-      if (pd) {
-        const v = await getVenue(pd.venueId).catch(() => null);
-        setVenue(v);
+      if (!pd) return;
+
+      // Resolve geofence: prefer venue, fall back to facility coords
+      const v = await getVenue(pd.venueId).catch(() => null);
+      setVenue(v);
+
+      let resolvedGeofence: typeof geofence = null;
+      if (v && v.lat && v.lng) {
+        resolvedGeofence = { lat: v.lat, lng: v.lng, radiusMeters: v.radiusMeters, name: v.name };
+      } else if (pd.facilityId) {
+        const facility = await getClubFacilityById(pd.facilityId).catch(() => null);
+        if (facility?.lat && facility?.lng) {
+          resolvedGeofence = {
+            lat: facility.lat,
+            lng: facility.lng,
+            radiusMeters: facility.checkInRadiusMeters ?? 200,
+            name: facility.facilityName ?? facility.address ?? "Facility",
+          };
+        }
+      }
+      setGeofence(resolvedGeofence);
+
+      // Resolve league geo flag — geoRequired is true unless league explicitly disables it
+      if (pd.leagueId) {
+        const league = await getLeague(pd.leagueId).catch(() => null);
+        setGeoRequired(league?.geoLocationAssistedCheckIn !== false);
+      } else {
+        // No league link — require geo only when we have valid geofence coords
+        setGeoRequired(resolvedGeofence !== null);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
   async function onCheckIn() {
-    if (!user || !playDate || !venue) return;
+    if (!user || !playDate) return;
+
+    // Manual check-in: league has disabled GPS requirement
+    if (!geoRequired) {
+      setPhase("submitting");
+      setMessage(null);
+      try {
+        await createCheckIn({
+          playDateId: playDate.id,
+          userId: user.uid,
+          displayName: user.displayName ?? user.email ?? "Anonymous",
+          status: "CONFIRMED",
+        });
+        setPhase("confirmed");
+      } catch (err) {
+        setPhase("error");
+        setMessage(err instanceof Error ? err.message : "Check-in failed.");
+      }
+      return;
+    }
+
     if (!("geolocation" in navigator)) {
       setPhase("error");
       setMessage("Geolocation is not supported by this browser.");
@@ -94,12 +149,16 @@ function CheckInInner() {
     setMessage(null);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const d = distanceMeters(
-          { lat: pos.coords.latitude, lng: pos.coords.longitude },
-          { lat: venue.lat, lng: venue.lng },
-        );
-        setDistance(d);
-        const within = d <= venue.radiusMeters;
+        let d: number | undefined;
+        let within = true;
+        if (geofence) {
+          d = distanceMeters(
+            { lat: pos.coords.latitude, lng: pos.coords.longitude },
+            { lat: geofence.lat, lng: geofence.lng },
+          );
+          setDistance(d);
+          within = d <= geofence.radiusMeters;
+        }
         const status: CheckInStatus = within ? "CONFIRMED" : "GEO_REJECTED";
         setPhase("submitting");
         try {
@@ -192,7 +251,7 @@ function CheckInInner() {
                 {distance != null ? Math.round(distance) : "?"}m
               </span>{" "}
               from the venue center (allowed radius{" "}
-              {venue?.radiusMeters ?? "?"}m). Ask an admin for an override.
+              {geofence?.radiusMeters ?? "?"}m). Ask an admin for an override.
             </p>
             <Button
               size="sm"
@@ -229,7 +288,7 @@ function CheckInInner() {
       default:
         return null;
     }
-  }, [phase, distance, message, venue?.radiusMeters]);
+  }, [phase, distance, message, geofence?.radiusMeters]);
 
   return (
     <ResponsiveShell desktopChromeless>
@@ -280,15 +339,20 @@ function CheckInInner() {
           </Panel>
         )}
 
-        {playDate && venue && user && (
+        {playDate && user && (
           <Panel variant="inventory" padding="md">
             <div className="flex items-center gap-2 text-ash-200">
               <MapPin className="h-4 w-4 text-ember-500" />
-              <span className="heading-fantasy text-lg">{venue.name}</span>
+              <span className="heading-fantasy text-lg">
+                {geofence?.name ?? venue?.name ?? "Venue"}
+              </span>
+              {!geoRequired && (
+                <RuneChip tone="spectral" className="text-[9px]">Manual Check-in</RuneChip>
+              )}
             </div>
             <div className="text-xs text-ash-500 font-mono mt-1">
-              Play date {playDate.date} · Allowed radius{" "}
-              {venue.radiusMeters}m
+              Play date {playDate.date}
+              {geoRequired && geofence ? ` · Allowed radius ${geofence.radiusMeters}m` : " · GPS not required"}
             </div>
             <div className="mt-4 flex gap-2">
               <Button
@@ -300,7 +364,9 @@ function CheckInInner() {
                   ? "Locating…"
                   : phase === "submitting"
                     ? "Checking in…"
-                    : "Check In Now"}
+                    : geoRequired
+                      ? "Check In Now"
+                      : "Confirm Attendance"}
               </Button>
               <Link href="/ladder/play-dates">
                 <Button size="md" variant="outline">

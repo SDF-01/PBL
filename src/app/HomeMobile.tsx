@@ -5,6 +5,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useAuth } from "@/lib/auth-context";
+import { NearbyLeaguesCard } from "@/components/home/NearbyLeaguesCard";
 import { Flame, Swords, Trophy } from "lucide-react";
 
 export function HomeMobile() {
@@ -40,17 +41,7 @@ export function HomeMobile() {
         </div>
       </section>
 
-      <Panel variant="hud" padding="md" glow="rune">
-        <RuneChip tone="spectral" className="mb-2">Get Started</RuneChip>
-        <div className="heading-fantasy text-xl text-ash-100">No play dates yet</div>
-        <div className="text-xs text-ash-400 mt-1">
-          Admins: create a season and schedule a play date to open check-in.
-        </div>
-        <div className="ember-divider my-4" />
-        <Link href="/ladder/seasons">
-          <Button variant="outline" size="sm" className="w-full">Manage Seasons</Button>
-        </Link>
-      </Panel>
+      <NearbyLeaguesCard />
 
       <div className="grid grid-cols-1 gap-2">
         <FeatureRow icon={<Swords className="h-5 w-5" />} tone="ember"

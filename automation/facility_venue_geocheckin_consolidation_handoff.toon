@@ -1,0 +1,355 @@
+TOON_VERSION: 1.0
+ARTIFACT_TYPE: product_data_model_handoff
+ARTIFACT_NAME: facility_venue_geocheckin_consolidation_handoff
+FORMAT_INTENT: machine-readable implementation directive
+SOURCE_AUTHORITY: product discussion and current repository implementation
+STATUS: ready_for_incremental_implementation
+
+META {
+  project_name: "PBL Arena / Pickleball League"
+  product_area: "club facilities, league location, play-date check-in, geofencing, public facility data"
+  current_stack: ["Next.js", "TypeScript", "Firebase Auth", "Cloud Firestore", "Firebase Hosting"]
+  implementation_style: "incremental migration; preserve existing data and avoid breaking current league/check-in flows"
+  priority: "high"
+}
+
+CONTEXT {
+  current_facility_model {
+    collection: "clubFacilities"
+    type_reference: "src/lib/permissions/types.ts:ClubFacility"
+    purpose_today: "Club-owned descriptive court/facility metadata"
+    fields_today: [
+      "clubId",
+      "facilityName",
+      "address",
+      "pickleballCourts",
+      "tennisConversionCourts",
+      "hasParking",
+      "hasLights",
+      "isIndoor",
+      "surfaceType",
+      "amenities",
+      "notes"
+    ]
+    used_by: [
+      "club public page",
+      "club management facilities section",
+      "league create/settings facility selection",
+      "league details facility display"
+    ]
+  }
+
+  current_venue_model {
+    collection: "venues"
+    type_reference: "src/lib/firestore/types.ts:VenueDoc"
+    purpose_today: "GPS/geofence location for play-date check-in"
+    fields_today: ["name", "address", "lat", "lng", "radiusMeters", "createdBy", "clubId"]
+    used_by: [
+      "ladder play-date creation",
+      "ladder check-in geofence calculation",
+      "player preferred home venue"
+    ]
+    current_problem: "Club management can create venues with lat=0 and lng=0, making geofenced check-in unreliable."
+  }
+
+  current_league_checkin_setting {
+    field_added: "geoLocationAssistedCheckIn"
+    type_reference: "src/lib/firestore/types.ts:LeagueDoc"
+    write_reference: "src/lib/leagues/write.ts"
+    ui_references: [
+      "src/app/leagues/create/page.tsx",
+      "src/app/clubs/manage/[clubId]/ClubManageClient.tsx",
+      "src/app/leagues/[leagueId]/LeagueDetailsClient.tsx"
+    ]
+    behavior_today: "Captured, persisted, displayed, and editable. Check-in runtime still needs to consume it."
+  }
+}
+
+ACCEPTED_DECISIONS {
+  canonical_place_object {
+    decision: "Facility should become the canonical object for real-world places where clubs play."
+    rationale: "Facility and Venue currently represent the same real-world concept with split metadata. Keeping both causes admin confusion and inconsistent check-in behavior."
+    status: "accepted"
+  }
+
+  venue_long_term_role {
+    decision: "Do not keep Venue as a top-level peer to Facility long-term."
+    status: "accepted"
+    allowed_future_exception: "Only reintroduce a nested venue/court-zone concept if a facility must model multiple distinct geofenced areas, such as indoor courts and outdoor courts at the same property."
+  }
+
+  geocoding {
+    decision: "Facility address should be geocoded to latitude/longitude."
+    status: "accepted"
+    clarification: "Address parsing and geocoding are different. The product need is geocoding."
+    requirement: "Admins must be able to review and manually correct coordinates."
+  }
+
+  league_checkin_mode {
+    decision: "League creation must ask whether the league uses GPS-assisted check-in."
+    field_name: "geoLocationAssistedCheckIn"
+    status: "implemented_as_initial_boolean"
+  }
+
+  facility_metadata_expansion {
+    decision: "Facility should include ownership/access/operation metadata and open-play schedules."
+    status: "accepted"
+  }
+}
+
+TARGET_DATA_MODEL {
+  collection: "clubFacilities"
+  preferred_type_name: "ClubFacility"
+  identity_fields {
+    id: "string"
+    clubId: "string"
+  }
+  naming_fields {
+    facilityName: "string optional"
+    address: "string optional"
+    websiteUrl: "string optional"
+    contactName: "string optional"
+    contactEmail: "string optional"
+    contactPhone: "string optional"
+  }
+  geolocation_fields {
+    lat: "number optional"
+    lng: "number optional"
+    geocodedAddress: "string optional"
+    geocodedAt: "timestamp optional"
+    geocodeProvider: "open_meteo | google_places | mapbox | manual optional"
+    geocodeConfidence: "number optional"
+    checkInRadiusMeters: "number optional default 200"
+    geofenceEnabled: "boolean optional"
+  }
+  access_and_ownership_fields {
+    ownershipType: "public | private | club_owned | partner | school | municipal | other optional"
+    accessType: "public | members_only | reservation_required | fee_required | invite_only | other optional"
+    operatorName: "string optional"
+    operatorType: "club | city | school | private_business | parks_department | other optional"
+  }
+  court_fields {
+    pickleballCourts: "number optional"
+    indoorCourts: "number optional"
+    outdoorCourts: "number optional"
+    tennisConversionCourts: "number optional"
+    isIndoor: "boolean optional legacy"
+    surfaceType: "hard | clay | turf | indoor | acrylic | concrete | asphalt | other optional"
+    hasLights: "boolean optional"
+    hasParking: "boolean optional"
+    hasRestrooms: "boolean optional"
+    hasWater: "boolean optional"
+    hasProShop: "boolean optional"
+    amenities: "string[] optional"
+    notes: "string optional"
+  }
+  open_play_fields {
+    openPlaySessions: "array optional"
+    openPlaySession_shape: {
+      id: "string"
+      dayOfWeek: "Sunday | Monday | Tuesday | Wednesday | Thursday | Friday | Saturday"
+      startTime: "HH:mm"
+      endTime: "HH:mm"
+      skillLevel: "all | beginner | intermediate | advanced | competitive | custom optional"
+      cost: "string optional"
+      signupUrl: "string optional"
+      notes: "string optional"
+      active: "boolean"
+    }
+  }
+  audit_fields {
+    createdAt: "timestamp optional"
+    updatedAt: "timestamp optional"
+    updatedBy: "string optional"
+  }
+}
+
+TARGET_REFERENCES {
+  leagues {
+    keep_field: "facilityId"
+    add_or_keep_field: "geoLocationAssistedCheckIn"
+    remove_long_term: ["venueId", "venueName", "venueAddress"]
+    behavior: "League points to the facility where it plays. Check-in mode is controlled by league.geoLocationAssistedCheckIn."
+  }
+
+  play_dates {
+    target_field: "facilityId"
+    current_field: "venueId"
+    migration_behavior: "During transition, play dates may read venueId first and fallback to facilityId or vice versa. Final state should use facilityId."
+  }
+
+  check_ins {
+    target_behavior: "If league.geoLocationAssistedCheckIn is true, require facility coordinates and evaluate distance against facility.checkInRadiusMeters. If false, allow manual/admin-assisted check-in flow."
+    required_statuses: ["CONFIRMED", "GEO_REJECTED", "PENDING", "ADMIN_CONFIRMED"]
+  }
+
+  players {
+    legacy_fields: ["homeVenueId", "homeVenueName"]
+    target_fields: ["homeFacilityId", "homeFacilityName"]
+    migration_behavior: "Keep legacy fields readable during transition."
+  }
+
+  tournaments {
+    legacy_field: "venueId"
+    target_field: "facilityId"
+    migration_behavior: "Out of scope for first pass unless tournament location work is touched."
+  }
+}
+
+IMPLEMENTATION_PHASES {
+  phase_01_document_and_type_model {
+    title: "Expand Facility type and write helpers"
+    files_to_edit: [
+      "src/lib/permissions/types.ts",
+      "src/lib/clubs/write.ts",
+      "src/lib/leagues/write.ts",
+      "src/lib/firestore/types.ts"
+    ]
+    instructions: [
+      "Add optional geolocation, ownership/access, operator, court, and openPlaySessions fields to ClubFacility.",
+      "Allow addClubFacility and updateClubFacility to persist these new fields.",
+      "Keep existing field names backward-compatible.",
+      "Keep LeagueDoc.geoLocationAssistedCheckIn as the explicit league check-in mode."
+    ]
+    acceptance: [
+      "TypeScript compiles.",
+      "Existing facility create/edit behavior still works.",
+      "New fields can be added without breaking older facility docs."
+    ]
+  }
+
+  phase_02_facility_geocoding {
+    title: "Geocode facility addresses with manual correction"
+    files_to_add_or_edit: [
+      "src/lib/geo/geocode.ts",
+      "src/app/clubs/manage/[clubId]/ClubManageClient.tsx",
+      "src/app/leagues/create/page.tsx",
+      "src/app/leagues/[leagueId]/LeagueDetailsClient.tsx"
+    ]
+    recommended_provider_order: [
+      "MVP: Open-Meteo geocoding for no-key implementation",
+      "Preferred production: Google Places or Mapbox with API key and map/place picker"
+    ]
+    instructions: [
+      "Create a reusable geocodeAddress helper instead of copying fetch calls.",
+      "When an admin enters or changes a facility address, offer a Resolve Coordinates action.",
+      "Store lat/lng plus provider metadata on the facility.",
+      "Show lat/lng fields for manual correction.",
+      "Do not silently enable geofencing when coordinates are missing or equal to 0,0."
+    ]
+    acceptance: [
+      "A facility can save address plus valid coordinates.",
+      "Admins can manually edit coordinates.",
+      "Invalid or missing coordinates do not pass as geofence-ready."
+    ]
+  }
+
+  phase_03_runtime_checkin_behavior {
+    title: "Make check-in flow consume league check-in mode and facility geofence"
+    files_to_edit: [
+      "src/app/ladder/check-in/page.tsx",
+      "src/app/ladder/play-dates/page.tsx",
+      "src/lib/ladder/repo.ts",
+      "src/lib/ladder/write.ts",
+      "src/lib/ladder/geofence.ts"
+    ]
+    instructions: [
+      "Load the relevant league and facility for a play date.",
+      "If geoLocationAssistedCheckIn is true, require valid facility lat/lng and checkInRadiusMeters.",
+      "If geoLocationAssistedCheckIn is false, present manual/admin-assisted check-in instead of forcing geolocation.",
+      "Do not use venues with lat=0,lng=0 for geofence decisions.",
+      "Preserve existing admin override behavior."
+    ]
+    acceptance: [
+      "GPS-assisted leagues perform distance checks against facility coordinates.",
+      "Manual/admin-assisted leagues do not require browser geolocation.",
+      "Outside-geofence check-ins are still recorded/flagged according to existing status rules."
+    ]
+  }
+
+  phase_04_open_play_and_facility_operations {
+    title: "Add ownership, access, and open-play management UI"
+    files_to_edit: [
+      "src/app/clubs/manage/[clubId]/ClubManageClient.tsx",
+      "src/app/clubs/[clubId]/ClubPublicClient.tsx",
+      "src/app/leagues/[leagueId]/LeagueDetailsClient.tsx"
+    ]
+    instructions: [
+      "Add controls for ownershipType, accessType, operatorName, operatorType, indoor/outdoor court counts, restrooms, water, pro shop, and openPlaySessions.",
+      "Display public-safe facility details on club and league public pages.",
+      "Make open play sessions editable as repeat weekly schedule rows."
+    ]
+    acceptance: [
+      "Club directors can define who runs the facility and whether it is public/private.",
+      "Club directors can add open-play schedule rows.",
+      "Public club/league pages display facility details without exposing private admin-only notes."
+    ]
+  }
+
+  phase_05_venue_migration {
+    title: "Merge Venue data into Facility and retire top-level venues"
+    priority: "after facility geocoding and runtime check-in are stable"
+    instructions: [
+      "Create a migration script or admin-only migration helper that copies venues into clubFacilities when no matching facility exists.",
+      "Map VenueDoc.name to facilityName, address to address, lat/lng to lat/lng, radiusMeters to checkInRadiusMeters.",
+      "Update playDates from venueId to facilityId.",
+      "Keep read fallback for existing venueId docs until migrated.",
+      "After migration, remove venue creation from club management or convert it to facility creation."
+    ]
+    acceptance: [
+      "Existing play dates still resolve a check-in location.",
+      "No new club management path creates top-level venues.",
+      "Venue reads are legacy fallback only."
+    ]
+  }
+}
+
+FIRESTORE_RULES_NOTES {
+  clubFacilities {
+    current_rules: "Public read; staff write."
+    future_hardening: [
+      "Restrict writes to SiteAdmin or scoped ClubDirector/LeagueCoordinator for the owning club.",
+      "Protect generated/geocoded metadata from malicious broad client writes if backend geocoding is introduced.",
+      "Validate allowed fields and types in rules where feasible."
+    ]
+  }
+  leagues {
+    field: "geoLocationAssistedCheckIn"
+    rule_expectation: "Staff-only league settings writes should be permitted only for authorized club/league staff."
+  }
+}
+
+TESTING_AND_QA {
+  use_case_testing_updates: [
+    "CLUBMGT-04A covers league creation with GPS-assisted check-in enabled.",
+    "LEAGUE-09 covers toggling GPS-assisted check-in in league settings."
+  ]
+  additional_manual_cases: [
+    "Create facility with address and resolved coordinates.",
+    "Create facility with manual coordinates.",
+    "Enable GPS-assisted check-in for a league with valid facility coordinates.",
+    "Attempt GPS-assisted check-in when facility coordinates are missing.",
+    "Disable GPS-assisted check-in and verify manual/admin-assisted flow is available.",
+    "Add public/private ownership and open-play sessions, then verify public display."
+  ]
+  automated_tests_to_consider: [
+    "geocode helper handles no result and malformed result",
+    "geofence rejects 0,0 facility coordinates unless explicitly valid and expected",
+    "check-in mode branches correctly for GPS-assisted vs manual/admin-assisted leagues",
+    "facility write helpers strip undefined fields and preserve new metadata"
+  ]
+}
+
+NON_GOALS {
+  - "Do not build a full map editor in the first pass unless a map provider is already configured."
+  - "Do not remove venue reads until existing play-date data has a migration path."
+  - "Do not require GPS-assisted check-in for every league."
+  - "Do not expose private admin notes on public facility pages."
+}
+
+OPEN_QUESTIONS {
+  - "Which geocoding provider should be used for production: Google Places, Mapbox, or Open-Meteo MVP?"
+  - "Should open play sessions be global facility info or club-specific program info?"
+  - "Should check-in radius live only on Facility, or should a league/play-date override be allowed?"
+  - "Should a facility support multiple geofenced zones, such as indoor courts and outdoor courts?"
+}

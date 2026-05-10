@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Trophy, Users, Pencil, MapPin, X } from "lucide-react";
+import { Search, Trophy, Users, Pencil, MapPin, UserSearch, X } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
@@ -89,14 +89,21 @@ export default function PlayersPage() {
               higher-rated opponents.
             </p>
           </div>
-          {ready && user && (
-            <Link href="/players/edit">
-              <Button size="sm">
-                <Pencil className="h-3.5 w-3.5" />
-                {myProfile ? "Edit Profile" : "Create Profile"}
+          <div className="flex items-center gap-2">
+            <Link href="/players/search">
+              <Button size="sm" variant="ghost">
+                <UserSearch className="h-3.5 w-3.5" /> Find Player
               </Button>
             </Link>
-          )}
+            {ready && user && (
+              <Link href="/players/edit">
+                <Button size="sm">
+                  <Pencil className="h-3.5 w-3.5" />
+                  {myProfile ? "Edit Profile" : "Create Profile"}
+                </Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {error && (

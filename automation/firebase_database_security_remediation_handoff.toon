@@ -1,0 +1,412 @@
+WTOON_VERSION: 1.0
+ARTIFACT_TYPE: security_remediation_handoff
+ARTIFACT_NAME: firebase_database_security_remediation_handoff
+FORMAT_INTENT: machine-readable implementation directive
+SOURCE_DOCUMENT: FIREBASE_DATABASE_SECURITY_AUDIT.md
+SOURCE_AUTHORITY: authorized repository security audit
+STATUS: ready_for_implementation
+
+META {
+  project_name: "LeagueForge / Pickleball League"
+  product_type: "Firebase-backed SaaS for pickleball ladder leagues, clubs, tournaments, players, and admin workflows"
+  current_stack: ["Next.js static export", "TypeScript", "Firebase Auth", "Cloud Firestore", "Firebase Hosting", "Firebase Analytics", "local Firebase Admin seed script"]
+  primary_security_boundary_today: "Firestore Security Rules"
+  target_security_boundary: "Firestore Rules plus trusted backend/Admin SDK functions for privileged writes"
+  implementation_style: "fix production-blocking authorization risks before feature work"
+}
+
+NON_NEGOTIABLES {
+  rule_01: "Do not access production data."
+  rule_02: "Do not print, commit, or log secret values."
+  rule_03: "Do not weaken rules to make UI flows pass."
+  rule_04: "Do not rely on hidden UI state, localStorage, or client-only role checks for authorization."
+  rule_05: "All privilege-bearing fields must be immutable to normal clients."
+  rule_06: "Rules tests must cover every fixed escalation path."
+  rule_07: "Prefer deny-by-default and add narrow allow cases."
+  rule_08: "If a privileged workflow cannot be made safe in client-only mode, disable or hide the write path until a backend exists."
+}
+
+AUDIT_SUMMARY {
+  critical_risks: [
+    "users/{uid}.role is user-writable and is used by Firestore rules as admin source of truth",
+    "userRoles docs are user-writable and are used by client RBAC helpers",
+    "ladderSessions, ladderCourts, and ladderMatches allow any signed-in write",
+    "players ELO/stats and eloEvents are writable by signed-in users",
+    "matches and matchGames allow broad score tampering",
+    "audit collections allow signed-in users to forge audit events"
+  ]
+  high_risks: [
+    "public reads expose PII and operational data",
+    "announcements and notifications are abuse-prone client writes",
+    "core tenant/config collections allow broad signed-in writes",
+    "no App Check setup",
+    "no Firestore rules tests",
+    "no storage.rules despite Storage bucket configuration"
+  ]
+}
+
+TARGET_SECURITY_MODEL {
+  identity {
+    auth_provider: "Firebase Auth"
+    client_profile_doc: "users/{uid}"
+    safe_user_edit_fields: ["firstName", "lastName", "displayName", "phoneNumber", "photoURL", "startingSkillRating", "updatedAt"]
+    forbidden_user_client_fields: ["uid", "email", "role", "accountStatus", "clubId", "leagueIds", "createdAt", "billingStatus", "verified", "isAdmin"]
+  }
+
+  authorization_source_of_truth {
+    preferred: "Firebase custom claims set only by trusted Admin SDK backend"
+    acceptable_phase_1_fallback: "locked Firestore role docs seeded under rules-disabled tests/admin tooling; normal users cannot create/update/delete role docs"
+    not_allowed: ["users/{uid}.role as writable client authority", "localStorage role view", "client-created userRoles"]
+  }
+
+  role_scopes {
+    SiteAdmin: "global"
+    ClubDirector: "clubId"
+    LeagueCoordinator: "leagueId plus parent clubId"
+    Player: "self-owned profile, registrations, check-ins, player actions"
+    ClubCreatorProvisional: "limited pending-club edit only; cannot grant staff privileges"
+  }
+
+  trusted_backend_required_for {
+    must_be_backend_only: [
+      "role assignment and revocation",
+      "club approval and rejection",
+      "league coordinator assignment",
+      "ladder session generation persistence",
+      "ladder match verification",
+      "admin score override",
+      "session finalization",
+      "ELO and stats mutation",
+      "standings snapshot mutation",
+      "auditLog/audits/roleEvents creation",
+      "bulk notifications",
+      "achievement/trophy awards"
+    ]
+  }
+}
+
+IMPLEMENTATION_PHASES {
+  phase_00_baseline {
+    title: "Establish security test harness before rule edits"
+    priority: "must_do_first"
+    files_to_add: [
+      "tests/firebase/firestore.rules.test.ts",
+      "tests/firebase/helpers/testEnv.ts",
+      "tests/firebase/helpers/actors.ts"
+    ]
+    package_changes: [
+      "Add @firebase/rules-unit-testing as devDependency if absent",
+      "Add firebase emulator test script if absent"
+    ]
+    firebase_json_changes: [
+      "Add emulator configuration for firestore if absent"
+    ]
+    instructions: [
+      "Create tests that currently fail for critical findings DB-001 through DB-008.",
+      "Use rules-unit-testing with security rules loaded from firestore.rules.",
+      "Seed baseline docs using withSecurityRulesDisabled.",
+      "Do not connect to production Firebase."
+    ]
+    acceptance: [
+      "A normal user self-promoting via users/{uid}.role fails after fixes",
+      "A normal user creating SiteAdmin userRoles fails after fixes",
+      "A normal user writing ladderMatches fails after fixes",
+      "A normal user writing players/{otherUid}.elo fails after fixes",
+      "A normal user creating eloEvents fails after fixes"
+    ]
+  }
+
+  phase_01_emergency_firestore_lockdown {
+    title: "Patch Firestore rules to remove critical privilege escalation"
+    priority: "production_blocker"
+    files_to_edit: ["firestore.rules"]
+    instructions: [
+      "Replace userRole() dependency on users/{uid}.role with custom claims if backend claims exist, or locked role-doc helper if using phase 1 fallback.",
+      "For users/{uid}, allow owner update only for safe_user_edit_fields and deny role/accountStatus/clubId/leagueIds changes.",
+      "For userRoles/{roleDocId}, deny all normal client create/update/delete. Allow reads only for own role docs or trusted admin.",
+      "For ladderSessions, ladderCourts, ladderMatches, deny normal signed-in writes. Temporarily allow only trusted staff scoped by immutable authorization source, or deny writes completely until backend functions are implemented.",
+      "For players/{uid}, deny client updates to elo, eloPeak, stats, and stats.* fields. Allow owner profile edits only through safe player-profile fields.",
+      "For eloEvents, deny all client creates.",
+      "For matchGames, deny all client writes unless a narrowly scoped participant score-submission rule is implemented with validation.",
+      "For matches, remove broad signed-in update/delete path. No client delete. Only narrow valid score submission or trusted staff/backend.",
+      "For auditLog, audits, and roleEvents, deny client create/update/delete.",
+      "For announcements, achievements, trophies, playerAchievements, notifications, and teams, remove any signed-in write blanket rules."
+    ]
+    recommended_rule_helpers: [
+      "isSignedIn()",
+      "isSelf(uid)",
+      "isSiteAdminClaim()",
+      "hasOnlyKeys(allowed)",
+      "keepsImmutableFields(fields)",
+      "isValidTimestampOrServerTimestamp(field)",
+      "isClubDirectorFor(clubId)",
+      "isLeagueCoordinatorFor(leagueId, clubId)"
+    ]
+    acceptance: [
+      "All phase_00 critical deny tests pass",
+      "Existing public catalog reads still work only where intentionally public",
+      "No allow write: if isSignedIn() remains on privileged or shared collections",
+      "No user-writable rule can grant admin or staff authority"
+    ]
+  }
+
+  phase_02_client_code_alignment {
+    title: "Make the UI respect locked-down rules"
+    priority: "required_after_lockdown"
+    files_to_edit: [
+      "src/lib/auth-context.tsx",
+      "src/lib/firestore/userRepo.ts",
+      "src/lib/permissions/write.ts",
+      "src/lib/leagues/write.ts",
+      "src/lib/ladder/write.ts",
+      "src/lib/firestore/write.ts",
+      "src/lib/players/write.ts",
+      "src/app/admin/users/page.tsx",
+      "src/app/admin/clubs/page.tsx",
+      "src/app/leagues/create/page.tsx",
+      "src/app/ladder/session/page.tsx",
+      "src/app/(authenticated)/dashboard/page.tsx"
+    ]
+    instructions: [
+      "Remove or disable client calls that now attempt forbidden privileged writes.",
+      "Replace direct role assignment calls with placeholders for trusted backend callable functions.",
+      "Do not let admin UI show success when Firestore rules deny the write.",
+      "Ensure user signup writes only safe profile fields and default non-privileged values.",
+      "Ensure role/admin views are treated as UX only, not security authority.",
+      "Add clear unavailable/admin-backend-required states for workflows moved out of client-only mode."
+    ]
+    acceptance: [
+      "Typecheck passes",
+      "Build passes",
+      "Admin pages do not silently call forbidden client writes",
+      "Player profile edit still works for allowed fields"
+    ]
+  }
+
+  phase_03_trusted_backend_functions {
+    title: "Move privileged mutations to trusted backend"
+    priority: "required_for_real_production"
+    files_to_add_or_edit: [
+      "functions/package.json",
+      "functions/src/index.ts",
+      "functions/src/authz.ts",
+      "functions/src/rbac.ts",
+      "functions/src/ladder.ts",
+      "functions/src/tournaments.ts",
+      "functions/src/notifications.ts",
+      "firebase.json"
+    ]
+    backend_shape_options: [
+      "Firebase Cloud Functions callable functions",
+      "Firebase Cloud Functions HTTPS functions",
+      "Another trusted backend using Firebase Admin SDK"
+    ]
+    required_functions: [
+      "setUserRole",
+      "approveClub",
+      "rejectClub",
+      "assignLeagueCoordinator",
+      "createLeagueForClub",
+      "publishTournamentBracket",
+      "recordTournamentMatchScore",
+      "generateLadderSession",
+      "verifyLadderMatchScore",
+      "adminAssignMatchResult",
+      "finalizeLadderSession",
+      "createNotification",
+      "awardAchievementOrTrophy"
+    ]
+    backend_requirements: [
+      "Verify Firebase Auth ID token.",
+      "Verify App Check token where available.",
+      "Check role and scope server-side.",
+      "Validate all inputs with a schema.",
+      "Use transactions or batched writes for multi-document mutations.",
+      "Write immutable audit events from backend only.",
+      "Never accept target user role, owner id, club id, league id, score state, ELO delta, or audit actor id solely from client input.",
+      "Apply idempotency keys to score/session workflows where repeat submission is possible.",
+      "Do not return sensitive data beyond what the caller is authorized to see."
+    ]
+    acceptance: [
+      "Privileged workflows work through trusted backend only",
+      "Firestore rules deny equivalent direct client writes",
+      "Backend unit tests cover allow and deny authorization cases",
+      "Backend integration tests cover cross-tenant denial"
+    ]
+  }
+
+  phase_04_public_private_data_split {
+    title: "Reduce public read exposure"
+    priority: "privacy_hardening"
+    files_to_edit: [
+      "firestore.rules",
+      "src/lib/firestore/types.ts",
+      "src/lib/firestore/userRepo.ts",
+      "src/lib/players/repo.ts",
+      "src/app/players/page.tsx",
+      "src/app/players/view/page.tsx",
+      "src/app/notifications/page.tsx",
+      "src/app/ladder/check-in/page.tsx"
+    ]
+    target_collections: [
+      "usersPrivate/{uid}",
+      "publicProfiles/{uid}",
+      "players/{uid}",
+      "checkIns/{id}",
+      "registrations/{id}",
+      "leagueMemberships/{id}"
+    ]
+    instructions: [
+      "Separate public player display fields from private auth/contact/admin fields.",
+      "Deny public list on users/private profile data.",
+      "Restrict check-in reads to owner and scoped staff.",
+      "Restrict registration detail reads if they contain private data.",
+      "Keep only intentionally public catalog fields world-readable."
+    ]
+    acceptance: [
+      "Anonymous cannot list users or checkIns",
+      "Anonymous can read only intended public profile/catalog fields",
+      "Owners can read their own private profile",
+      "Scoped staff can read data only for their club/league scope"
+    ]
+  }
+
+  phase_05_storage_and_app_check {
+    title: "Add Storage policy and App Check enforcement plan"
+    priority: "beta_gate"
+    files_to_add_or_edit: [
+      "storage.rules",
+      "firebase.json",
+      "src/lib/firebase.ts",
+      ".env.example"
+    ]
+    storage_policy: {
+      avatars_path: "users/{uid}/avatars/{fileId}"
+      club_logos_path: "clubs/{clubId}/logos/{fileId}"
+      allowed_image_types: ["image/jpeg", "image/png", "image/webp"]
+      max_avatar_size_bytes: 5242880
+      max_logo_size_bytes: 5242880
+    }
+    app_check_requirements: [
+      "Initialize App Check in client code only when configured.",
+      "Use debug token only in local development.",
+      "Document console-side enforcement steps for Firestore, Storage, and Functions.",
+      "Do not commit debug tokens."
+    ]
+    acceptance: [
+      "storage.rules exists and is referenced by firebase.json",
+      "Storage tests deny cross-user upload and disallowed MIME/size",
+      "App Check configuration is documented and gated by env vars"
+    ]
+  }
+
+  phase_06_ci_and_environment_separation {
+    title: "Reduce deployment and environment risk"
+    priority: "beta_gate"
+    files_to_edit: [
+      ".firebaserc",
+      ".github/workflows/deploy.yml",
+      "package.json",
+      ".env.example",
+      "README.md"
+    ]
+    instructions: [
+      "Create explicit Firebase aliases for dev, staging, and production.",
+      "Move public Firebase web config out of workflow literals into GitHub environment variables.",
+      "Use protected GitHub environments for production deploy.",
+      "Ensure deploy service account is least-privilege for Hosting and rules deploy only.",
+      "Fix mismatched project names if package scripts and .firebaserc disagree.",
+      "Add CI step for Firestore rules tests."
+    ]
+    acceptance: [
+      "CI runs typecheck, unit tests, Firestore rules tests, and build",
+      "Production deploy requires protected environment approval",
+      "No real secrets are committed or echoed"
+    ]
+  }
+}
+
+REQUIRED_RULE_TESTS {
+  critical_denies: [
+    "anon cannot write any database document",
+    "player cannot update users/self.role",
+    "player cannot update users/self.accountStatus",
+    "player cannot update users/self.clubId or leagueIds",
+    "player cannot create userRoles/SiteAdmin for self",
+    "player cannot activate or edit own privileged userRole",
+    "player cannot write ladderSessions",
+    "player cannot write ladderCourts",
+    "player cannot write ladderMatches unless a narrowly validated participant score-submission rule exists",
+    "player cannot update players/other.elo",
+    "player cannot create eloEvents",
+    "player cannot create auditLog, audits, or roleEvents",
+    "player cannot create global announcement",
+    "player cannot create notification for another user",
+    "player cannot delete matches"
+  ]
+  critical_allows: [
+    "player can update safe own profile fields",
+    "player can create own registration with request.auth.uid as userId",
+    "player can create own checkIn with request.auth.uid as userId and safe initial status",
+    "trusted admin can assign role through approved backend/custom-claim path",
+    "scoped club director can manage own club only",
+    "scoped league coordinator can manage own league only"
+  ]
+  privacy_tests: [
+    "anon cannot list users",
+    "anon cannot list checkIns",
+    "anon cannot read private user contact fields",
+    "owner can read own private profile",
+    "scoped staff can read in-scope operational data"
+  ]
+}
+
+FILES_OF_INTEREST {
+  audit_report: "FIREBASE_DATABASE_SECURITY_AUDIT.md"
+  rules: "firestore.rules"
+  firebase_config: ["firebase.json", ".firebaserc", "firestore.indexes.json"]
+  auth: ["src/lib/auth-context.tsx", "src/app/auth/login/page.tsx", "src/app/auth/signup/page.tsx"]
+  rbac: [
+    "src/lib/permissions/types.ts",
+    "src/lib/permissions/usePermissions.ts",
+    "src/lib/permissions/helpers.ts",
+    "src/lib/permissions/write.ts",
+    "src/lib/firestore/userRepo.ts",
+    "src/app/admin/users/page.tsx"
+  ]
+  ladder_writes: ["src/lib/ladder/write.ts", "src/lib/ladder/repo.ts"]
+  tournament_writes: ["src/lib/firestore/write.ts", "src/lib/firestore/repo.ts"]
+  player_writes: ["src/lib/players/write.ts", "src/lib/players/repo.ts"]
+  league_writes: ["src/lib/leagues/write.ts", "src/lib/leagues/repo.ts"]
+  ci: [".github/workflows/deploy.yml", "package.json"]
+}
+
+IMPLEMENTATION_NOTES {
+  note_01: "A pure rules-only patch can reduce immediate blast radius, but it will break privileged client flows. That is correct until trusted backend functions exist."
+  note_02: "If the project must remain static-export-only temporarily, choose safety over admin convenience: deny unsafe writes and show UI messages explaining that secure admin actions require backend enablement."
+  note_03: "Do not keep duplicate role systems unless one is clearly authoritative and the other is derived/read-only."
+  note_04: "Do not make public user docs contain email, phone, accountStatus, or admin metadata."
+  note_05: "Every mutation that affects rankings, standings, roles, or audit history should be transactionally written by trusted code."
+}
+
+VALIDATION_COMMANDS {
+  local_non_destructive: [
+    "npm.cmd run typecheck",
+    "npm.cmd test",
+    "npm.cmd run build"
+  ]
+  add_after_rules_tests_exist: [
+    "npm.cmd run test:rules"
+  ]
+}
+
+DONE_DEFINITION {
+  production_ready_when: [
+    "No critical risk from FIREBASE_DATABASE_SECURITY_AUDIT.md remains open",
+    "Firestore rules tests pass for role escalation, cross-user access, cross-tenant access, ELO/stat tampering, match tampering, and audit forgery",
+    "Privileged writes are backend-only or safely disabled",
+    "App Check enforcement is configured or explicitly scheduled with documented console steps",
+    "Storage rules are present if Storage remains enabled",
+    "CI validates rules before deploy"
+  ]
+}

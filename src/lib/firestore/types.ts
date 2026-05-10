@@ -31,6 +31,7 @@ export interface UserProfile {
   clubId: string | null;
   leagueIds: string[];
   startingSkillRating?: number | null;
+  isTestAccount?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +110,8 @@ export interface LeagueDoc {
   active?: boolean;
   next_play_date?: string;
   check_in_status?: string;
+  /** When true, players should use GPS-assisted check-in for league play dates. */
+  geoLocationAssistedCheckIn?: boolean;
   league_format?: string;
   /** Club facility where this league is played (reference to clubFacilities/{id}). */
   facilityId?: string;
@@ -134,6 +137,10 @@ export interface LeagueDoc {
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Stripe Payment Link URL for league registration fee. */
+  stripePaymentLink?: string;
+  /** Registration fee in USD cents (display only; enforcement via Stripe). */
+  registrationFee?: number;
 }
 
 export interface SeasonDoc {
@@ -269,6 +276,9 @@ export interface NotificationDoc {
     | "SCORE_DISPUTED"
     | "LADDER_PROMOTED"
     | "LADDER_DEMOTED"
+    | "PLAYER_FOLLOWED"
+    | "PLAYER_MATCH_RESULT"
+    | "CHALLENGE"
     | "GENERAL";
   read: boolean;
   createdAt: string;
@@ -322,6 +332,8 @@ export interface LadderUserExtras {
 
 export interface LadderSeasonDoc {
   id: string;
+  /** League this season belongs to; denormalized for check-in geo lookup. */
+  leagueId?: string;
   name: string;
   slug: string;
   startDate: string;
@@ -351,6 +363,10 @@ export interface PlayDateDoc {
   id: string;
   seasonId: string;
   venueId: string;
+  /** Club facility for this play date (supersedes venueId when present). */
+  facilityId?: string;
+  /** Denormalized from season; used for geo check-in league flag lookup. */
+  leagueId?: string;
   /** YYYY-MM-DD in the venue's local timezone. */
   date: string;
   status: PlayDateStatus;
@@ -520,6 +536,9 @@ export interface PlayerProfileDoc {
   /** Favored venue for quick lookup; denormalized VenueDoc.id. */
   homeVenueId?: string;
   homeVenueName?: string;
+  /** Preferred ClubFacility document ID (community or club facility). */
+  homeFacilityId?: string;
+  homeFacilityName?: string;
   dominantHand?: DominantHand;
   paddleBrand?: string;
   paddleModel?: string;
@@ -558,5 +577,100 @@ export interface EloEventDoc {
   won?: boolean;
   pointsFor?: number;
   pointsAgainst?: number;
+  createdAt: string;
+}
+
+// ============================================================
+// PLAYER CHALLENGES
+// Player-to-player informal match requests.
+// ============================================================
+
+export type ChallengeStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "SCHEDULED"        // conditions agreed, waiting to play
+  | "SCORE_SUBMITTED"  // one player submitted score, awaiting verification
+  | "COMPLETED"
+  | "DECLINED"
+  | "EXPIRED";
+
+export interface ChallengeConditions {
+  format: "game-11" | "game-15" | "game-21" | "best-of-3";
+  scheduledDate?: string;  // YYYY-MM-DD
+  scheduledTime?: string;  // HH:MM
+  location?: string;
+}
+
+export interface PlayerChallengeDoc {
+  id: string;
+  challengerId: string;
+  challengerName: string;
+  challengeeId: string;
+  challengeeName: string;
+  message?: string;
+  proposedDate?: string;
+  status: ChallengeStatus;
+
+  // Conditions negotiation
+  conditions?: ChallengeConditions;
+  conditionsProposedBy?: string;  // userId of the last proposer
+
+  // Score tracking
+  scoreA?: number;           // challenger's score (games won for best-of-3, points for single game)
+  scoreB?: number;           // challengee's score
+  games?: Array<{ scoreA: number; scoreB: number }>; // per-game breakdown (best-of-3)
+  submittedBy?: string;      // userId who submitted the score
+  verifiedBy?: string;       // userId who confirmed the score
+  winnerSide?: "challenger" | "challengee";
+  eloApplied?: boolean;      // true once applyMatchEloByUserIds succeeded
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// PLAY-DATE RSVP
+// ============================================================
+
+export interface PlayDateRsvpDoc {
+  id: string;
+  playDateId: string;
+  userId: string;
+  displayName: string;
+  attending: boolean;
+  createdAt: string;
+}
+
+// ============================================================
+// FCM PUSH TOKENS
+// ============================================================
+
+export interface FcmTokenDoc {
+  id: string;
+  userId: string;
+  token: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================
+// LEAGUE ROUND-ROBIN SCHEDULE MATCHES
+// ============================================================
+
+export type ScheduleMatchStatus = "SCHEDULED" | "COMPLETED" | "FORFEIT";
+
+export interface LeagueScheduleMatchDoc {
+  id: string;
+  leagueId: string;
+  round: number;
+  playerAId: string;
+  playerAName: string;
+  playerBId: string;
+  playerBName: string;
+  status: ScheduleMatchStatus;
+  scoreA?: number;
+  scoreB?: number;
+  scheduledDate?: string;
+  completedAt?: string;
   createdAt: string;
 }

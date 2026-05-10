@@ -9,6 +9,7 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  where,
   type QueryConstraint,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -45,6 +46,17 @@ export async function listAllUsers(limitCount?: number | null): Promise<UserProf
   return snap.docs
     .map((d) => ({ uid: d.id, ...d.data() }) as UserProfile)
     .sort((a, b) => timestampMillis(b.createdAt) - timestampMillis(a.createdAt));
+}
+
+export async function listTestAccounts(): Promise<UserProfile[]> {
+  const snap = await getDocs(
+    query(collection(db(), COLLECTIONS.users), where("isTestAccount", "==", true)),
+  );
+  return snap.docs
+    .map((d) => ({ uid: d.id, ...d.data() }) as UserProfile)
+    .sort((a, b) =>
+      (a.displayName ?? "").localeCompare(b.displayName ?? ""),
+    );
 }
 
 export async function setUserRole(uid: string, role: UserRole): Promise<void> {

@@ -10,8 +10,36 @@
     "trailingSlash": true,
     "rewrites": [
       {
+        "source": "/leagues/*/roster",
+        "destination": "/leagues/__fallback/roster/index.html"
+      },
+      {
+        "source": "/leagues/*/roster/**",
+        "destination": "/leagues/__fallback/roster/index.html"
+      },
+      {
+        "source": "/leagues/*/standings",
+        "destination": "/leagues/__fallback/standings/index.html"
+      },
+      {
+        "source": "/leagues/*/standings/**",
+        "destination": "/leagues/__fallback/standings/index.html"
+      },
+      {
+        "source": "/leagues/*/schedule",
+        "destination": "/leagues/__fallback/schedule/index.html"
+      },
+      {
+        "source": "/leagues/*/schedule/**",
+        "destination": "/leagues/__fallback/schedule/index.html"
+      },
+      {
         "source": "/leagues/**",
         "destination": "/leagues/__fallback/index.html"
+      },
+      {
+        "source": "/challenges/**",
+        "destination": "/challenges/__fallback/index.html"
       },
       {
         "source": "/clubs/manage/**",

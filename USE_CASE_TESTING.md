@@ -1,10 +1,23 @@
 # Use Case Testing Document
 
 Created: 2026-05-05
+Reviewed: 2026-05-08
 
 ## Purpose
 
 This document is a role-based end-user testing script for the application. Testers should use it to verify that each major part of the site works as expected and that role-restricted actions are only available to the correct personas.
+
+## Current Implementation Notes
+
+This app is currently a static Next.js export that talks directly to Firebase. Some flows are available in the UI and allowed by current Firestore/Storage rules, while other flows remain production-risky until they move behind trusted backend commands.
+
+When testing privileged workflows, record one of these outcomes:
+
+- Pass: The workflow completes and the resulting data is correct.
+- Expected Block: The UI or Firebase rules block the action because a trusted backend is still required.
+- Security Fail: An unauthorized user can complete a restricted action, mutate another user's data, cross club/league boundaries, or alter protected fields.
+
+Production-readiness testing should treat role assignment, club approval, league administration, ladder generation/finalization, ELO/stat mutation, audit logging, push fanout, and tournament operations as security-sensitive even when the current client UI can trigger them.
 
 ## Personas
 
@@ -19,6 +32,9 @@ This document is a role-based end-user testing script for the application. Teste
 - Player actions should also be tested by League Coordinator, Club Director, and Site Admin when those roles can access player mode or player-facing pages.
 - Staff-only actions should be verified as unavailable to Player and Guest.
 - Site Admin-only actions should be verified as unavailable to Player, League Coordinator, Club Director, and Guest.
+- Cross-tenant access should be tested with at least two clubs and two leagues. A director/coordinator for Club A should not be able to manage Club B data.
+- Storage uploads should be tested for owner/scope, file type, and file size. Current known risk: club-logo paths accept any authenticated writer at the Storage rules layer.
+- Push notifications should be tested as token registration only unless a trusted server sender has been deployed.
 
 ## Tester Result Format
 
@@ -103,6 +119,7 @@ For every test case, the tester should fill in:
 | CLUBMGT-02 | Player, Guest | Attempt to open club management page. | Access is denied or user is prompted to authenticate. |  |  |  |  |
 | CLUBMGT-03 | Club Director, Site Admin | Review club overview stats. | Active leagues, players/members, and coordinators are visible. |  |  |  |  |
 | CLUBMGT-04 | Club Director, Site Admin | Create a league from club management. | League is created and appears in club league list. |  |  |  |  |
+| CLUBMGT-04A | Club Director, Site Admin | Create a league from club management with GPS-assisted check-in enabled. | League saves and displays GPS-assisted check-in mode on league details. |  |  |  |  |
 | CLUBMGT-05 | Club Director, Site Admin | Edit facility information. | Facility changes save and display on management and public club pages. |  |  |  |  |
 | CLUBMGT-06 | Club Director, Site Admin | Delete facility information. | Confirmation appears before delete; facility is removed after confirmation. |  |  |  |  |
 | CLUBMGT-07 | Club Director, Site Admin | Set facility surface type and indoor/outdoor state. | Surface and indoor/outdoor values save and display correctly. |  |  |  |  |
@@ -128,6 +145,7 @@ For every test case, the tester should fill in:
 | LEAGUE-06 | Club Director, League Coordinator, Site Admin | Open league settings editor. | Authorized staff can edit permitted league settings. |  |  |  |  |
 | LEAGUE-07 | Player, Guest | Verify league settings editor is unavailable. | Player/Guest cannot see or use staff league settings controls. |  |  |  |  |
 | LEAGUE-08 | Club Director, League Coordinator, Site Admin | Save league settings. | Changes persist and appear on league details. |  |  |  |  |
+| LEAGUE-09 | Club Director, League Coordinator, Site Admin | Toggle GPS-assisted check-in in league settings. | Check-in mode updates between GPS-assisted and manual/admin assisted on league details. |  |  |  |  |
 
 ---
 
@@ -237,7 +255,49 @@ For every test case, the tester should fill in:
 
 ---
 
-## 15. Regression Test Flow
+## 15. Storage, Push, Social, And Schedule
+
+| ID | Persona(s) | Use Case | Desired Outcome | Tester | Pass/Fail | What I Did | If Failed, Why |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MEDIA-01 | Player | Upload a player profile photo under 5 MB. | Image uploads to Storage, profile saves the URL, and the image displays after refresh. |  |  |  |  |
+| MEDIA-02 | Player | Try uploading a non-image or image larger than 5 MB as profile photo. | Upload is rejected with clear feedback and no profile URL is saved. |  |  |  |  |
+| MEDIA-03 | Club Director, Site Admin | Upload a club logo from club management. | Logo uploads and appears on the club public and management pages. |  |  |  |  |
+| MEDIA-04 | Player | Attempt to write or replace another club's logo path outside the normal UI. | Storage rules or backend scope checks deny the write. Current known risk if this succeeds before Storage hardening. |  |  |  |  |
+| PUSH-01 | Player, League Coordinator, Club Director, Site Admin | Enable push notifications from the banner. | Browser permission is requested and an FCM token is stored for the signed-in user. |  |  |  |  |
+| PUSH-02 | Player, League Coordinator, Club Director, Site Admin | Sign out after enabling push notifications. | User session ends; stale token cleanup should run where supported. |  |  |  |  |
+| PUSH-03 | Player, League Coordinator, Club Director, Site Admin | Receive a background push notification. | Only test this when a trusted server sender exists; otherwise record Expected Block / Not Implemented. |  |  |  |  |
+| SOCIAL-01 | Player | Follow another player from their profile. | Follow state updates and the followed player receives an in-app notification where rules allow it. |  |  |  |  |
+| SOCIAL-02 | Player | Unfollow another player. | Follow state is removed and the UI updates after refresh. |  |  |  |  |
+| SOCIAL-03 | Player | Challenge another player from their profile. | Challenge is created, appears in incoming/outgoing challenge lists, and sends an in-app notification. |  |  |  |  |
+| SOCIAL-04 | Player | Accept or decline an incoming challenge. | Challenge status updates and the challenger receives an in-app notification. |  |  |  |  |
+| SOCIAL-05 | Club Director | Create a club post. | Post appears on the public club page and followed-club feed. |  |  |  |  |
+| RSVP-01 | Player | RSVP attending for a play date. | RSVP saves, persists after refresh, and staff can see headcount. |  |  |  |  |
+| RSVP-02 | Player | Remove RSVP for a play date. | RSVP is deleted and the play date UI returns to the default state. |  |  |  |  |
+| SCHEDULE-01 | Club Director, League Coordinator, Site Admin | Generate round-robin league schedule from roster. | Existing schedule is replaced with generated matches ordered by round. |  |  |  |  |
+| SCHEDULE-02 | Player, Guest | Attempt to generate or overwrite a league schedule. | Unauthorized personas cannot create, delete, or overwrite schedule matches. |  |  |  |  |
+
+---
+
+## 16. Security Regression Flow
+
+Use this after Firestore or Storage rules changes, backend-command changes, or role-management changes.
+
+| ID | Persona(s) | Use Case | Desired Outcome | Tester | Pass/Fail | What I Did | If Failed, Why |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| SEC-01 | Player | Attempt to self-promote by editing `users/{uid}.role`. | Write is denied and user's role remains Player. |  |  |  |  |
+| SEC-02 | Player | Attempt to create or activate `userRoles` for self. | Write is denied. |  |  |  |  |
+| SEC-03 | Club Director | Attempt to assign a coordinator role for a club they do not manage. | Write is denied by backend or rules. |  |  |  |  |
+| SEC-04 | League Coordinator | Attempt to create or edit a league in another club. | Write is denied by backend or rules. |  |  |  |  |
+| SEC-05 | Player | Attempt to update ELO, stats, or create an `eloEvents` record. | Write is denied. |  |  |  |  |
+| SEC-06 | Player | Attempt to create confirmed check-in data with forged geolocation/status. | Backend/rules reject forged confirmed status or flag it for staff review. |  |  |  |  |
+| SEC-07 | Guest | Attempt to read private/authenticated profile surfaces. | Guest is blocked from authenticated player profile data. |  |  |  |  |
+| SEC-08 | Guest | Attempt to read operational attendance/session data. | Public operational reads should be denied after privacy hardening; record current exposure if still public. |  |  |  |  |
+| SEC-09 | Player | Attempt to edit notification title/body/href instead of marking read. | Only read-state updates are allowed after rules hardening. |  |  |  |  |
+| SEC-10 | Site Admin | Run Firestore rules test suite. | `npm run test:rules` passes in emulator environment. |  |  |  |  |
+
+---
+
+## 17. Regression Test Flow
 
 Use this as a full smoke test after major releases.
 
@@ -253,4 +313,3 @@ Use this as a full smoke test after major releases.
 | REG-08 | Player | Verify score. | Match becomes verified. |  |  |  |  |
 | REG-09 | League Coordinator | Finalize session. | Player stats/ELO update and notifications are sent. |  |  |  |  |
 | REG-10 | Site Admin | Review audit and user/admin pages. | Admin records and role controls remain functional after flow. |  |  |  |  |
-

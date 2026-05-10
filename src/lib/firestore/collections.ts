@@ -40,6 +40,15 @@ export const COLLECTIONS = {
   userRoles: "userRoles",
   leagueMemberships: "leagueMemberships",
   roleEvents: "roleEvents",
+  // ==== Player social ====
+  playerFollows: "playerFollows",
+  playerChallenges: "playerChallenges",
+  // ==== FCM push tokens ====
+  fcmTokens: "fcmTokens",
+  // ==== Play-date RSVP ====
+  playDateRsvps: "playDateRsvps",
+  // ==== League round-robin schedule ====
+  leagueScheduleMatches: "leagueScheduleMatches",
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

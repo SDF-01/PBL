@@ -5,6 +5,7 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useAuth } from "@/lib/auth-context";
+import { NearbyLeaguesCard } from "@/components/home/NearbyLeaguesCard";
 import { Flame, Swords, Trophy } from "lucide-react";
 
 // Desktop homepage — hero + empty-state CTAs. No demo content: real data
@@ -51,18 +52,9 @@ export function HomeDesktop() {
         </div>
       </div>
 
-      <Panel variant="hud" padding="lg" glow="rune" className="lg:col-span-5 relative">
-        <RuneChip tone="spectral" className="mb-3">Get Started</RuneChip>
-        <div className="heading-fantasy text-2xl text-ash-100">No play dates yet</div>
-        <div className="text-sm text-ash-400 mt-1">
-          Admins: create a season and schedule your first play date to open
-          check-in for players.
-        </div>
-        <div className="ember-divider my-6" />
-        <Link href="/ladder/seasons">
-          <Button variant="outline" size="sm">Manage Seasons →</Button>
-        </Link>
-      </Panel>
+      <div className="lg:col-span-5">
+        <NearbyLeaguesCard />
+      </div>
     </div>
   </section>
 

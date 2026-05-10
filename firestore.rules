@@ -108,7 +108,8 @@ service cloud.firestore {
     function playerUpdateKeys() {
       return [
         "displayName", "photoURL", "city", "region", "country",
-        "homeVenueId", "homeVenueName", "dominantHand", "paddleBrand",
+        "homeVenueId", "homeVenueName", "homeFacilityId", "homeFacilityName",
+        "dominantHand", "paddleBrand",
         "paddleModel", "yearsPlaying", "bio", "duprRating", "duprId",
         "updatedAt"
       ];
@@ -139,9 +140,11 @@ service cloud.firestore {
     match /divisions/{doc=**}     { allow read: if true; allow write: if isStaff(); }
 
     // Club facility information managed by Club Directors.
+    // Signed-in players may also submit community courts (clubId == "community").
     match /clubFacilities/{facilityId} {
       allow read: if true;
-      allow create: if isStaff();
+      allow create: if isStaff()
+        || (isSignedIn() && request.resource.data.clubId == "community");
       allow update: if isStaff();
       allow delete: if isStaff();
     }
@@ -252,10 +255,41 @@ service cloud.firestore {
       allow read, update, delete: if isSignedIn()
         && resource.data.userId == request.auth.uid;
       allow create: if isStaff()
-        // Players can notify other players of score events they triggered
+        // Players can notify other players of events they triggered
         || (isSignedIn()
             && request.resource.data.createdBy == request.auth.uid
-            && request.resource.data.kind in ["SCORE_SUBMITTED", "SCORE_DISPUTED"]);
+            && request.resource.data.kind in [
+              "SCORE_SUBMITTED", "SCORE_DISPUTED",
+              "CHALLENGE"   // player-to-player challenge events
+            ]);
+    }
+
+    // Player-to-player follow relationships.
+    match /playerFollows/{followId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.followerId == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.followerId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // Player-to-player challenge matches.
+    match /playerChallenges/{challengeId} {
+      // Only the two players involved may read the challenge.
+      allow read: if isSignedIn()
+        && (resource.data.challengerId == request.auth.uid
+            || resource.data.challengeeId == request.auth.uid)
+        || isAdmin();
+      // Any signed-in player can create a challenge as the challenger.
+      allow create: if isSignedIn()
+        && request.resource.data.challengerId == request.auth.uid
+        && request.resource.data.status == "PENDING";
+      // Either player may update the challenge (accept, conditions, score, verify).
+      allow update: if isSignedIn()
+        && (resource.data.challengerId == request.auth.uid
+            || resource.data.challengeeId == request.auth.uid);
+      allow delete: if isAdmin();
     }
 
     match /playerAchievements/{id} {
@@ -322,7 +356,8 @@ service cloud.firestore {
       // that need audit coverage should route through a Cloud Function (the
       // Admin SDK bypasses these rules and writes the audit row server-side).
       allow read: if isAdmin();
-      allow create: if isStaff();
+      // Audit records are immutable and must only be created by trusted backend/admin.
+      allow create: if isAdmin();
       allow update, delete: if false;
     }
 
@@ -330,20 +365,25 @@ service cloud.firestore {
       // Player profiles are private — require authentication to view.
       allow read: if isSignedIn();
       allow create: if isSafePlayerCreate(uid) || isAdmin();
+      // ELO/stats mutations are admin-only. Client-side applyMatchEloByUserIds must
+      // fail gracefully; a trusted backend Cloud Function will own these writes.
       allow update: if isSafePlayerUpdate(uid) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /eloEvents/{id} {
       allow read: if true;
-      allow write: if false;
+      // ELO events are immutable audit records — only trusted admin/backend may create them.
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /clubs/{clubId} {
       allow read: if true;
-      allow create: if isSignedIn()
-        && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.status == "pending";
+      allow create: if isAdmin()
+        || (isSignedIn()
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.status == "pending");
       allow update: if isAdmin()
         || (isSignedIn()
           && resource.data.createdBy == request.auth.uid
@@ -389,13 +429,13 @@ service cloud.firestore {
 
     match /clubPosts/{postId} {
       allow read: if true;
-      // Directors post on behalf of their clubs; authorId must match the caller.
-      allow create: if isSignedIn()
+      // Club directors (users/{uid}.role == CLUB_ADMIN) may post; authorId must match the caller.
+      allow create: if isClubDirector()
         && request.resource.data.authorId == request.auth.uid;
-      allow update: if isSignedIn()
+      allow update: if isClubDirector()
         && resource.data.authorId == request.auth.uid;
       allow delete: if isAdmin()
-        || (isSignedIn() && resource.data.authorId == request.auth.uid);
+        || (isClubDirector() && resource.data.authorId == request.auth.uid);
     }
 
     match /roleEvents/{id} {

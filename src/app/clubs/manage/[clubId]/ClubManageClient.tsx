@@ -61,9 +61,14 @@ import { getPlayerProfile } from "@/lib/players/repo";
 import { createVenue, writeNotification } from "@/lib/ladder/write";
 import { assignRole, deactivateUserRole } from "@/lib/permissions/write";
 import { listVenues } from "@/lib/ladder/repo";
+import { geocodeAddress, isValidCoordinate } from "@/lib/geo/geocode";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import type { ClubDoc, ClubFacility, ClubPost } from "@/lib/permissions/types";
+import type {
+  ClubDoc, ClubFacility, ClubPost, FacilitySurfaceType,
+  FacilityOwnershipType, FacilityAccessType, FacilityOperatorType,
+  OpenPlaySession, DayOfWeek,
+} from "@/lib/permissions/types";
 import type { LeagueDoc, VenueDoc } from "@/lib/firestore/types";
 import type { CoordinatorEntry } from "@/lib/clubs/repo";
 
@@ -193,11 +198,11 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
         </div>
 
         {section === "overview"     && <OverviewSection club={club} clubId={clubId} onNavigate={setSection} />}
-        {section === "leagues"      && <LeaguesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
+        {section === "leagues"      && <LeaguesSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
         {section === "facilities"   && <FacilitiesSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
         {section === "posts"        && <PostsSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
         {section === "members"      && <MembersSection clubId={clubId} toast={toast} />}
-        {section === "coordinators" && <CoordinatorsSection clubId={clubId} userId={user?.uid ?? ""} toast={toast} />}
+        {section === "coordinators" && <CoordinatorsSection clubId={clubId} clubName={club.clubName} userId={user?.uid ?? ""} userDisplayName={user?.displayName ?? user?.email ?? "Director"} toast={toast} />}
       </main>
     </ResponsiveShell>
   );
@@ -595,7 +600,7 @@ function UserLookup({
   );
 }
 
-function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
+function LeaguesSection({ clubId, clubName, userId, userDisplayName, toast }: { clubId: string; clubName: string; userId: string; userDisplayName: string; toast: ToastFn }) {
   const [leagues, setLeagues] = useState<LeagueDoc[]>([]);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [facilities, setFacilities] = useState<ClubFacility[]>([]);
@@ -625,6 +630,7 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
   const [registrationCloseDate, setRegistrationCloseDate] = useState("");
   const [firstSessionDate, setFirstSessionDate] = useState("");
   const [lastSessionDate, setLastSessionDate] = useState("");
+  const [geoLocationAssistedCheckIn, setGeoLocationAssistedCheckIn] = useState(false);
 
   // Staff
   const [directorId, setDirectorId] = useState("");
@@ -650,6 +656,7 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
     setVenueId("");
     setRegistrationOpenDate(""); setRegistrationCloseDate("");
     setFirstSessionDate(""); setLastSessionDate("");
+    setGeoLocationAssistedCheckIn(false);
     setDirectorId(""); setDirectorName(""); setCoordinatorId(""); setCoordinatorName("");
   }
 
@@ -680,6 +687,7 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
         facilityId,
         newFacility,
         venueId: venueId || undefined,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: registrationOpenDate || undefined,
         registrationCloseDate: registrationCloseDate || undefined,
         firstSessionDate: firstSessionDate || undefined,
@@ -698,8 +706,12 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
         description: description.trim() || undefined,
         city: selectedFacility?.address?.split(",").slice(-2, -1)[0]?.trim() || undefined,
         state: selectedFacility?.address?.split(",").slice(-1)[0]?.trim().split(" ")[0] || undefined,
-        league_format: format, active: true, createdBy: userId,
+        league_format: format, active: true, createdBy: userId, geoLocationAssistedCheckIn,
       }, ...prev]);
+      createClubPost({
+        clubId, clubName, authorId: userId, authorName: userDisplayName,
+        content: `New league added: ${name.trim()}${format ? ` (${format})` : ""}`,
+      }).catch(() => {});
       resetForm();
       setShowForm(false);
       toast(`"${name.trim()}" league created.`, "success");
@@ -813,6 +825,20 @@ function LeaguesSection({ clubId, userId, toast }: { clubId: string; userId: str
                 )}
               </div>
             )}
+            <label className="flex items-start gap-2 rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={geoLocationAssistedCheckIn}
+                onChange={(e) => setGeoLocationAssistedCheckIn(e.target.checked)}
+                className="mt-0.5 accent-ember-500"
+              />
+              <span className="min-w-0">
+                <span className="block text-ash-200 text-sm font-medium">Use GPS-assisted check-in</span>
+                <span className="block text-ash-500 text-xs mt-0.5">
+                  Players check in from their device location when play dates are active.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Staff */}
@@ -875,8 +901,12 @@ type EditingFacility = ClubFacility | "new" | null;
 function emptyFacilityState() {
   return {
     facilityName: "", address: "", pickleballCourts: 0, tennisConversionCourts: 0,
-    hasParking: false, hasLights: false, isIndoor: false, surfaceType: "" as "hard" | "clay" | "turf" | "indoor" | "",
+    hasParking: false, hasLights: false, isIndoor: false, surfaceType: "" as FacilitySurfaceType | "",
     selectedAmenities: [] as string[], notes: "",
+    ownershipType: "" as FacilityOwnershipType | "",
+    accessType: "" as FacilityAccessType | "",
+    operatorName: "", operatorType: "" as FacilityOperatorType | "",
+    openPlaySessions: [] as OpenPlaySession[],
   };
 }
 
@@ -890,18 +920,32 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   const [savingVenue, setSavingVenue] = useState(false);
   const [venues, setVenues] = useState<VenueDoc[]>([]);
   const [showVenueForm, setShowVenueForm] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationReport, setMigrationReport] = useState<import("@/lib/migrations/migrateVenuesToFacilities").MigrationReport | null>(null);
 
   // Facility form state
   const [facilityName, setFacilityName] = useState("");
   const [address, setAddress] = useState("");
+  const [lat, setLat] = useState<number | "">("");
+  const [lng, setLng] = useState<number | "">("");
+  const [geocoding, setGeocoding] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
   const [pickleballCourts, setPickleballCourts] = useState<number>(0);
   const [tennisConversionCourts, setTennisConversionCourts] = useState<number>(0);
   const [hasParking, setHasParking] = useState(false);
   const [hasLights, setHasLights] = useState(false);
   const [isIndoor, setIsIndoor] = useState(false);
-  const [surfaceType, setSurfaceType] = useState<"hard" | "clay" | "turf" | "indoor" | "">("");
+  const [surfaceType, setSurfaceType] = useState<FacilitySurfaceType | "">("");
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  // Ownership & access
+  const [ownershipType, setOwnershipType] = useState<FacilityOwnershipType | "">("");
+  const [accessType, setAccessType] = useState<FacilityAccessType | "">("");
+  const [operatorName, setOperatorName] = useState("");
+  const [operatorType, setOperatorType] = useState<FacilityOperatorType | "">("");
+  // Open-play sessions
+  const [openPlaySessions, setOpenPlaySessions] = useState<OpenPlaySession[]>([]);
+  const [editingSession, setEditingSession] = useState<OpenPlaySession | null>(null);
 
   // Venue form fields
   const [venueName, setVenueName] = useState("");
@@ -925,6 +969,9 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
   function populateForm(f: ClubFacility) {
     setFacilityName(f.facilityName ?? "");
     setAddress(f.address ?? "");
+    setLat(f.lat ?? "");
+    setLng(f.lng ?? "");
+    setGeoError(null);
     setPickleballCourts(f.pickleballCourts ?? 0);
     setTennisConversionCourts(f.tennisConversionCourts ?? 0);
     setHasParking(f.hasParking ?? false);
@@ -933,29 +980,74 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
     setSurfaceType(f.surfaceType ?? "");
     setSelectedAmenities(f.amenities ?? []);
     setNotes(f.notes ?? "");
+    setOwnershipType(f.ownershipType ?? "");
+    setAccessType(f.accessType ?? "");
+    setOperatorName(f.operatorName ?? "");
+    setOperatorType(f.operatorType ?? "");
+    setOpenPlaySessions(f.openPlaySessions ?? []);
+    setEditingSession(null);
   }
 
   function resetForm() {
     const s = emptyFacilityState();
     setFacilityName(s.facilityName); setAddress(s.address);
+    setLat(""); setLng(""); setGeoError(null);
     setPickleballCourts(s.pickleballCourts); setTennisConversionCourts(s.tennisConversionCourts);
     setHasParking(s.hasParking); setHasLights(s.hasLights); setIsIndoor(s.isIndoor);
     setSurfaceType(s.surfaceType); setSelectedAmenities(s.selectedAmenities); setNotes(s.notes);
+    setOwnershipType(s.ownershipType); setAccessType(s.accessType);
+    setOperatorName(s.operatorName); setOperatorType(s.operatorType);
+    setOpenPlaySessions(s.openPlaySessions); setEditingSession(null);
+  }
+
+  async function handleResolveCoordinates() {
+    const query = address.trim() || facilityName.trim();
+    if (!query) { setGeoError("Enter an address first."); return; }
+    setGeocoding(true);
+    setGeoError(null);
+    try {
+      const result = await geocodeAddress(query);
+      if (result) {
+        setLat(result.lat);
+        setLng(result.lng);
+      } else {
+        setGeoError("No result found. Try a more specific address or enter coordinates manually.");
+      }
+    } catch {
+      setGeoError("Geocoding failed. Check your connection or enter coordinates manually.");
+    } finally {
+      setGeocoding(false);
+    }
   }
 
   function startAdd() { resetForm(); setEditing("new"); }
   function startEdit(f: ClubFacility) { populateForm(f); setEditing(f); }
   function cancelEdit() { setEditing(null); }
 
-  const facilityPayload = () => ({
-    facilityName: facilityName.trim() || undefined,
-    address: address.trim() || undefined,
-    pickleballCourts, tennisConversionCourts,
-    hasParking, hasLights, isIndoor,
-    surfaceType: surfaceType || undefined,
-    amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
-    notes: notes.trim() || undefined,
-  });
+  const facilityPayload = () => {
+    const latNum = typeof lat === "number" ? lat : undefined;
+    const lngNum = typeof lng === "number" ? lng : undefined;
+    const hasCoords = isValidCoordinate(latNum, lngNum);
+    return {
+      facilityName: facilityName.trim() || undefined,
+      address: address.trim() || undefined,
+      lat: hasCoords ? latNum : undefined,
+      lng: hasCoords ? lngNum : undefined,
+      geocodeProvider: hasCoords ? ("nominatim" as const) : undefined,
+      geofenceEnabled: hasCoords ? true : undefined,
+      checkInRadiusMeters: hasCoords ? 200 : undefined,
+      pickleballCourts, tennisConversionCourts,
+      hasParking, hasLights, isIndoor,
+      surfaceType: surfaceType || undefined,
+      amenities: selectedAmenities.length > 0 ? selectedAmenities : undefined,
+      notes: notes.trim() || undefined,
+      ownershipType: ownershipType || undefined,
+      accessType: accessType || undefined,
+      operatorName: operatorName.trim() || undefined,
+      operatorType: operatorType || undefined,
+      openPlaySessions: openPlaySessions.length > 0 ? openPlaySessions : undefined,
+    };
+  };
 
   async function handleSave() {
     setSaving(true);
@@ -1017,6 +1109,29 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
     }
   }
 
+  async function handleMigrateVenues() {
+    setMigrating(true);
+    setMigrationReport(null);
+    try {
+      const { migrateVenuesToFacilities } = await import("@/lib/migrations/migrateVenuesToFacilities");
+      const report = await migrateVenuesToFacilities(clubId, userId);
+      setMigrationReport(report);
+      if (report.facilitiesCreated > 0) {
+        const [newFacilities] = await Promise.all([
+          (await import("@/lib/clubs/repo")).listClubFacilities(clubId),
+        ]);
+        setFacilities(newFacilities);
+        toast(`Migrated ${report.facilitiesCreated} venue(s) to facilities.`, "success");
+      } else {
+        toast("No new venues to migrate.", "success");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Migration failed.", "error");
+    } finally {
+      setMigrating(false);
+    }
+  }
+
   if (loading) {
     return <Panel variant="base" padding="lg" className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-ember-400" /></Panel>;
   }
@@ -1057,6 +1172,49 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
                 <MapPin className="h-3.5 w-3.5 text-ember-400" /> Facility Address
               </label>
               <input className={inputCls} placeholder="123 Court Ave, City, State 55555" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <div className="mt-2 flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleResolveCoordinates}
+                  disabled={geocoding}
+                  className="text-xs"
+                >
+                  {geocoding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <MapPin className="h-3 w-3 mr-1" />}
+                  {geocoding ? "Resolving…" : "Resolve Coordinates"}
+                </Button>
+                {isValidCoordinate(typeof lat === "number" ? lat : null, typeof lng === "number" ? lng : null) && (
+                  <span className="text-xs text-spectral-400">
+                    {typeof lat === "number" ? lat.toFixed(5) : ""}, {typeof lng === "number" ? lng.toFixed(5) : ""}
+                  </span>
+                )}
+              </div>
+              {geoError && <p className="text-xs text-crimson-500 mt-1">{geoError}</p>}
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div>
+                  <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Latitude (manual)</label>
+                  <input
+                    type="number"
+                    step="0.00001"
+                    className={inputCls}
+                    placeholder="e.g. 45.0232"
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Longitude (manual)</label>
+                  <input
+                    type="number"
+                    step="0.00001"
+                    className={inputCls}
+                    placeholder="e.g. -93.4601"
+                    value={lng}
+                    onChange={(e) => setLng(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                  />
+                </div>
+              </div>
             </div>
 
             <div>
@@ -1080,10 +1238,14 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
               </div>
               <select className={inputCls} value={surfaceType} onChange={(e) => setSurfaceType(e.target.value as typeof surfaceType)}>
                 <option value="">— Not specified —</option>
-                <option value="hard">Hard (Concrete / Asphalt)</option>
+                <option value="hard">Hard</option>
+                <option value="concrete">Concrete</option>
+                <option value="asphalt">Asphalt</option>
+                <option value="acrylic">Acrylic / Cushion</option>
                 <option value="clay">Clay</option>
                 <option value="turf">Turf / Synthetic</option>
                 <option value="indoor">Indoor (Gymnasium / Sport Court)</option>
+                <option value="other">Other</option>
               </select>
             </div>
 
@@ -1109,6 +1271,165 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
                   );
                 })}
               </div>
+            </div>
+
+            {/* Ownership & access */}
+            <div>
+              <label className="text-ash-300 text-xs font-medium mb-2 block">Ownership &amp; Access</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Ownership Type</label>
+                  <select className={inputCls} value={ownershipType} onChange={(e) => setOwnershipType(e.target.value as typeof ownershipType)}>
+                    <option value="">— Not specified —</option>
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                    <option value="club_owned">Club Owned</option>
+                    <option value="municipal">Municipal</option>
+                    <option value="school">School / University</option>
+                    <option value="partner">Partner Facility</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Access Type</label>
+                  <select className={inputCls} value={accessType} onChange={(e) => setAccessType(e.target.value as typeof accessType)}>
+                    <option value="">— Not specified —</option>
+                    <option value="public">Open to Public</option>
+                    <option value="members_only">Members Only</option>
+                    <option value="reservation_required">Reservation Required</option>
+                    <option value="fee_required">Fee Required</option>
+                    <option value="invite_only">Invite Only</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Operator Name</label>
+                  <input className={inputCls} placeholder="e.g. City Parks Dept." value={operatorName} onChange={(e) => setOperatorName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Operator Type</label>
+                  <select className={inputCls} value={operatorType} onChange={(e) => setOperatorType(e.target.value as typeof operatorType)}>
+                    <option value="">— Not specified —</option>
+                    <option value="club">Club</option>
+                    <option value="city">City / Municipality</option>
+                    <option value="parks_department">Parks Department</option>
+                    <option value="school">School / University</option>
+                    <option value="private_business">Private Business</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Open-play sessions */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-ash-300 text-xs font-medium">Open-Play Schedule</label>
+                <button
+                  type="button"
+                  className="text-xs text-ember-400 hover:text-ember-300 transition-colors"
+                  onClick={() => setEditingSession({
+                    id: crypto.randomUUID(),
+                    dayOfWeek: "Saturday",
+                    startTime: "09:00",
+                    endTime: "11:00",
+                    skillLevel: "all",
+                    active: true,
+                  })}
+                >
+                  + Add Session
+                </button>
+              </div>
+
+              {editingSession && (
+                <div className="rounded-pixel border border-obsidian-500 bg-obsidian-800 p-3 mb-3 space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Day</label>
+                      <select className={inputCls} value={editingSession.dayOfWeek}
+                        onChange={(e) => setEditingSession(s => s ? { ...s, dayOfWeek: e.target.value as DayOfWeek } : s)}>
+                        {(["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"] as DayOfWeek[]).map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Start</label>
+                      <input type="time" className={inputCls} value={editingSession.startTime}
+                        onChange={(e) => setEditingSession(s => s ? { ...s, startTime: e.target.value } : s)} />
+                    </div>
+                    <div>
+                      <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">End</label>
+                      <input type="time" className={inputCls} value={editingSession.endTime}
+                        onChange={(e) => setEditingSession(s => s ? { ...s, endTime: e.target.value } : s)} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Skill Level</label>
+                      <select className={inputCls} value={editingSession.skillLevel ?? "all"}
+                        onChange={(e) => setEditingSession(s => s ? { ...s, skillLevel: e.target.value as OpenPlaySession["skillLevel"] } : s)}>
+                        <option value="all">All Levels</option>
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                        <option value="competitive">Competitive</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-ash-500 text-[10px] mb-1 block uppercase tracking-wider">Cost (optional)</label>
+                      <input className={inputCls} placeholder="e.g. $5 / Free" value={editingSession.cost ?? ""}
+                        onChange={(e) => setEditingSession(s => s ? { ...s, cost: e.target.value || undefined } : s)} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" className="text-xs px-3 py-1.5 rounded bg-ember-500/20 border border-ember-500/40 text-ember-300 hover:bg-ember-500/30 transition-colors"
+                      onClick={() => {
+                        setOpenPlaySessions(prev => {
+                          const idx = prev.findIndex(s => s.id === editingSession.id);
+                          return idx >= 0
+                            ? prev.map((s, i) => i === idx ? editingSession : s)
+                            : [...prev, editingSession];
+                        });
+                        setEditingSession(null);
+                      }}>
+                      Save Session
+                    </button>
+                    <button type="button" className="text-xs px-3 py-1.5 rounded text-ash-500 hover:text-ash-300 transition-colors"
+                      onClick={() => setEditingSession(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {openPlaySessions.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {openPlaySessions.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-pixel border border-obsidian-600 bg-obsidian-800">
+                      <div className="text-xs text-ash-300">
+                        <span className="font-medium">{s.dayOfWeek}</span>
+                        <span className="text-ash-500 ml-2">{s.startTime}–{s.endTime}</span>
+                        {s.skillLevel && s.skillLevel !== "all" && (
+                          <span className="ml-2 text-ash-500 capitalize">{s.skillLevel}</span>
+                        )}
+                        {s.cost && <span className="ml-2 text-gold-400">{s.cost}</span>}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button type="button" className="text-[10px] text-ash-500 hover:text-ash-200 transition-colors"
+                          onClick={() => setEditingSession(s)}>Edit</button>
+                        <button type="button" className="text-[10px] text-crimson-500 hover:text-crimson-400 transition-colors"
+                          onClick={() => setOpenPlaySessions(prev => prev.filter(p => p.id !== s.id))}>Remove</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-ash-600 italic">No open-play sessions added yet.</p>
+              )}
             </div>
 
             <div>
@@ -1185,7 +1506,10 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
             <Plus className="h-3.5 w-3.5" /> Add Venue
           </Button>
         </div>
-        <p className="text-ash-500 text-xs">Venues are used for GPS check-in during play dates. Add your court location here.</p>
+        <p className="text-ash-500 text-xs">
+          Venues are used for GPS check-in during play dates.
+          Use <strong className="text-ash-300">Migrate to Facilities</strong> to promote existing venues into the full Facility model.
+        </p>
 
         {showVenueForm && (
           <Panel variant="quest" padding="lg" className="space-y-3">
@@ -1224,6 +1548,26 @@ function FacilitiesSection({ clubId, userId, toast }: { clubId: string; userId: 
                 </div>
               </Panel>
             ))}
+          </div>
+        )}
+
+        {venues.length > 0 && (
+          <div className="pt-1">
+            <Button size="sm" variant="outline" onClick={handleMigrateVenues} disabled={migrating}>
+              {migrating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Migrate Venues → Facilities
+            </Button>
+            {migrationReport && (
+              <div className="mt-2 rounded-pixel border border-obsidian-500 bg-obsidian-800 p-3 text-xs space-y-1 text-ash-400">
+                <p><span className="text-ash-200">{migrationReport.venuesFound}</span> venues found · <span className="text-spectral-400">{migrationReport.facilitiesCreated}</span> created · <span className="text-ash-200">{migrationReport.playDatesUpdated}</span> play dates updated</p>
+                {migrationReport.skipped.length > 0 && (
+                  <p className="text-ash-600">Skipped: {migrationReport.skipped.join(", ")}</p>
+                )}
+                {migrationReport.errors.length > 0 && (
+                  <p className="text-crimson-500">Errors: {migrationReport.errors.join("; ")}</p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1509,7 +1853,7 @@ function MembersSection({ clubId, toast }: { clubId: string; toast: ToastFn }) {
 // COORDINATORS
 // ============================================================
 
-function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId: string; toast: ToastFn }) {
+function CoordinatorsSection({ clubId, clubName, userId, userDisplayName, toast }: { clubId: string; clubName: string; userId: string; userDisplayName: string; toast: ToastFn }) {
   const [coordinators, setCoordinators] = useState<CoordinatorEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -1531,6 +1875,10 @@ function CoordinatorsSection({ clubId, userId, toast }: { clubId: string; userId
       if (coordinators.some((c) => c.userId === found.uid)) { toast(`${found.displayName} is already a coordinator.`, "error"); return; }
       await assignRole(found.uid, "LeagueCoordinator", clubId, null);
       setCoordinators((prev) => [...prev, { userRoleId: `pending-${Date.now()}`, userId: found.uid, displayName: found.displayName, assignedAt: new Date().toISOString() }]);
+      createClubPost({
+        clubId, clubName, authorId: userId, authorName: userDisplayName,
+        content: `${found.displayName} joined as Day Coordinator.`,
+      }).catch(() => {});
       setEmail("");
       toast(`${found.displayName} assigned as day coordinator.`, "success");
     } catch (err) {

@@ -16,6 +16,8 @@ import {
   Megaphone,
   Send,
   Loader2,
+  FlaskConical,
+  MapPin,
 } from "lucide-react";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
@@ -23,6 +25,7 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { useToast } from "@/lib/toast-context";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { getAdminStats, listRecentRoleEvents, type AdminStats } from "@/lib/admin/repo";
 import { listAllUsers } from "@/lib/firestore/userRepo";
 import { writeNotification } from "@/lib/ladder/write";
@@ -100,6 +103,7 @@ export default function AdminHubPage() {
   const [announceTitle, setAnnounceTitle] = useState("");
   const [announceBody, setAnnounceBody] = useState("");
   const [announcing, setAnnouncing] = useState(false);
+  const [confirmAnnounce, setConfirmAnnounce] = useState(false);
 
   useEffect(() => {
     if (permLoading || !isSiteAdmin || !isFirebaseConfigured()) {
@@ -171,7 +175,7 @@ export default function AdminHubPage() {
 
   return (
     <ResponsiveShell desktopChromeless>
-      <main className="container py-6 md:py-10 space-y-8 max-w-3xl">
+      <main className="container py-6 md:py-10 space-y-8 max-w-7xl">
 
         {/* Header */}
         <div>
@@ -192,13 +196,13 @@ export default function AdminHubPage() {
               Platform Overview
             </h2>
             {statsLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Panel key={i} variant="raised" padding="md" className="h-20 animate-pulse bg-obsidian-800" />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <StatCard
                   label="Pending Clubs"
                   value={stats?.pendingClubs ?? 0}
@@ -244,7 +248,7 @@ export default function AdminHubPage() {
           <h2 className="heading-fantasy text-xs uppercase tracking-[0.2em] text-ash-500 mb-3">
             Quick Actions
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {isSiteAdmin && (
               <>
                 <Link href="/admin/clubs">
@@ -335,6 +339,48 @@ export default function AdminHubPage() {
                     </div>
                   </Panel>
                 </Link>
+
+                <Link href="/admin/testing">
+                  <Panel
+                    variant="quest"
+                    padding="lg"
+                    className="h-full flex items-start gap-4 hover:border-rune-500/40 transition-colors cursor-pointer"
+                  >
+                    <div className="shrink-0 p-2 rounded-pixel bg-rune-500/15 text-rune-400">
+                      <FlaskConical className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="heading-fantasy text-ash-100 text-base">Test Accounts</h3>
+                        <RuneChip tone="rune" className="text-[9px]">Testing</RuneChip>
+                      </div>
+                      <p className="text-ash-400 text-sm leading-relaxed">
+                        Switch into a fake player account to QA the site from their perspective.
+                      </p>
+                    </div>
+                  </Panel>
+                </Link>
+
+                <Link href="/admin/import-courts">
+                  <Panel
+                    variant="quest"
+                    padding="lg"
+                    className="h-full flex items-start gap-4 hover:border-spectral-500/40 transition-colors cursor-pointer"
+                  >
+                    <div className="shrink-0 p-2 rounded-pixel bg-spectral-500/15 text-spectral-400">
+                      <MapPin className="h-6 w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="heading-fantasy text-ash-100 text-base">Import Courts</h3>
+                        <RuneChip tone="spectral" className="text-[9px]">Admin</RuneChip>
+                      </div>
+                      <p className="text-ash-400 text-sm leading-relaxed">
+                        Search OpenStreetMap for pickleball courts and import them as community venues.
+                      </p>
+                    </div>
+                  </Panel>
+                </Link>
               </>
             )}
 
@@ -403,7 +449,7 @@ export default function AdminHubPage() {
               />
               <Button
                 size="sm"
-                onClick={handleAnnounce}
+                onClick={() => setConfirmAnnounce(true)}
                 disabled={announcing || !announceTitle.trim() || !announceBody.trim()}
               >
                 {announcing ? (
@@ -452,6 +498,21 @@ export default function AdminHubPage() {
         )}
 
       </main>
+
+      {confirmAnnounce && (
+        <ConfirmDialog
+          title="Send Platform Announcement?"
+          description={`This will deliver a notification to every registered user. Title: "${announceTitle}"`}
+          confirmLabel="Send to All Users"
+          variant="primary"
+          submitting={announcing}
+          onConfirm={async () => {
+            await handleAnnounce();
+            setConfirmAnnounce(false);
+          }}
+          onCancel={() => setConfirmAnnounce(false)}
+        />
+      )}
     </ResponsiveShell>
   );
 }

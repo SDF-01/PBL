@@ -61,6 +61,19 @@ export function subscribeLeaderboard(
   );
 }
 
+export async function listAllPlayers(
+  limitCount = 500,
+): Promise<PlayerProfileDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.players),
+      orderBy("elo", "desc"),
+      qLimit(limitCount),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PlayerProfileDoc);
+}
+
 export async function listRecentEloEvents(
   playerId: string,
   limit = 20,
@@ -71,6 +84,17 @@ export async function listRecentEloEvents(
       where("playerId", "==", playerId),
       orderBy("createdAt", "desc"),
       qLimit(limit),
+    ),
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EloEventDoc);
+}
+
+/** Fetch ELO events written for a specific match/challenge by sourceId. */
+export async function getEloEventsForSource(sourceId: string): Promise<EloEventDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.eloEvents),
+      where("sourceId", "==", sourceId),
     ),
   );
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EloEventDoc);

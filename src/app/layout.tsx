@@ -8,7 +8,7 @@ import { RoleViewProvider } from "@/lib/role-view-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { Toaster } from "@/components/ui/Toaster";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
-import { AppCheckLoader } from "@/components/AppCheckLoader";
+import { PwaInit } from "@/components/PwaInit";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono  = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
@@ -17,12 +17,14 @@ const cinzel = Cinzel({ subsets: ["latin"], variable: "--font-heading", display:
 
 export const metadata: Metadata = {
   title: {
-    default: "Ladder League — Doubles Ladder Platform",
-    template: "%s · Ladder League",
+    default: "PBL — Pickleball League",
+    template: "%s · PBL",
   },
   description:
-    "A mobile-first doubles ladder platform — session-based play, court rotations, live standings, and admin-controlled operational flow.",
-  applicationName: "Ladder League",
+    "A mobile-first pickleball league platform — session-based play, court rotations, live standings, and admin-controlled operational flow.",
+  applicationName: "PBL",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "PBL" },
 };
 
 export const viewport: Viewport = {
@@ -52,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </AuthProvider>
         </DeviceProvider>
         <AnalyticsLoader />
+        <PwaInit />
       </body>
     </html>
   );

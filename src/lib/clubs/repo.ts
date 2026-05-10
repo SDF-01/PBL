@@ -94,6 +94,13 @@ export async function getClubFacility(clubId: string): Promise<ClubFacility | nu
   return facilities[0] ?? null;
 }
 
+/** Fetch a single facility by its document ID (cross-club lookup for play-date check-in). */
+export async function getClubFacilityById(facilityId: string): Promise<ClubFacility | null> {
+  if (!isFirebaseConfigured()) return null;
+  const snap = await getDoc(doc(db(), COLLECTIONS.clubFacilities, facilityId));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as ClubFacility) : null;
+}
+
 // ── Club posts ─────────────────────────────────────────────────────────────
 
 /** List recent posts for a single club, newest first. */
@@ -103,11 +110,17 @@ export async function listClubPosts(clubId: string, limitN = 20): Promise<ClubPo
     query(
       collection(db(), COLLECTIONS.clubPosts),
       where("clubId", "==", clubId),
-      orderBy("createdAt", "desc"),
       limit(limitN),
     ),
   );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubPost);
+  const toMs = (v: unknown): number => {
+    if (v && typeof v === "object" && "toDate" in v) return (v as { toDate(): Date }).toDate().getTime();
+    if (typeof v === "string") return new Date(v).getTime();
+    return 0;
+  };
+  const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubPost);
+  posts.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+  return posts;
 }
 
 /** List recent posts for a set of clubs (player feed). Up to 10 club IDs. */
@@ -122,8 +135,13 @@ export async function listFeedPosts(clubIds: string[], limitN = 20): Promise<Clu
     ),
   );
   const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ClubPost);
-  // Sort newest first client-side (avoids composite index requirement).
-  posts.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Sort newest first client-side. createdAt may be a Firestore Timestamp or ISO string.
+  const toMs = (v: unknown): number => {
+    if (v && typeof v === "object" && "toDate" in v) return (v as { toDate(): Date }).toDate().getTime();
+    if (typeof v === "string") return new Date(v).getTime();
+    return 0;
+  };
+  posts.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   return posts;
 }
 

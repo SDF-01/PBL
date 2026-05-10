@@ -150,6 +150,8 @@ export async function createVenue(input: NewVenue): Promise<string> {
 export interface NewPlayDate {
   seasonId: string;
   venueId: string;
+  facilityId?: string;
+  leagueId?: string;
   date: string;
   checkInOpensAt?: string;
   checkInClosesAt?: string;
@@ -162,6 +164,8 @@ export async function createPlayDate(input: NewPlayDate): Promise<string> {
     stripUndefined({
       seasonId: input.seasonId,
       venueId: input.venueId,
+      facilityId: input.facilityId,
+      leagueId: input.leagueId,
       date: input.date,
       status: "SCHEDULED" as const,
       checkInOpensAt: input.checkInOpensAt,

@@ -77,20 +77,133 @@ export interface CreateClubInput {
   logoUrl?: string;
 }
 
+export type FacilityOwnershipType =
+  | "public"
+  | "private"
+  | "club_owned"
+  | "partner"
+  | "school"
+  | "municipal"
+  | "other";
+
+export type FacilityAccessType =
+  | "public"
+  | "members_only"
+  | "reservation_required"
+  | "fee_required"
+  | "invite_only"
+  | "other";
+
+export type FacilityOperatorType =
+  | "club"
+  | "city"
+  | "school"
+  | "private_business"
+  | "parks_department"
+  | "other";
+
+export type FacilitySurfaceType =
+  | "hard"
+  | "clay"
+  | "turf"
+  | "indoor"
+  | "acrylic"
+  | "concrete"
+  | "asphalt"
+  | "other";
+
+export type FacilityGeocodeProvider =
+  | "nominatim"
+  | "open_meteo"
+  | "google_places"
+  | "mapbox"
+  | "manual";
+
+export type OpenPlaySkillLevel =
+  | "all"
+  | "beginner"
+  | "intermediate"
+  | "advanced"
+  | "competitive"
+  | "custom";
+
+export type DayOfWeek =
+  | "Sunday"
+  | "Monday"
+  | "Tuesday"
+  | "Wednesday"
+  | "Thursday"
+  | "Friday"
+  | "Saturday";
+
+export interface OpenPlaySession {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  /** HH:mm local time */
+  startTime: string;
+  /** HH:mm local time */
+  endTime: string;
+  skillLevel?: OpenPlaySkillLevel;
+  cost?: string;
+  signupUrl?: string;
+  notes?: string;
+  active: boolean;
+}
+
 export interface ClubFacility {
   /** Firestore document ID — populated by repo, not stored in the document itself. */
   id: string;
   clubId: string;
+
+  // Naming & contact
   facilityName?: string;
   address?: string;
+  websiteUrl?: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+
+  // Geolocation / geofence
+  lat?: number;
+  lng?: number;
+  geocodedAddress?: string;
+  geocodedAt?: string;
+  geocodeProvider?: FacilityGeocodeProvider;
+  geocodeConfidence?: number;
+  /** Default 200 m. Used by check-in geofence when geoLocationAssistedCheckIn is true. */
+  checkInRadiusMeters?: number;
+  geofenceEnabled?: boolean;
+
+  // Ownership & access
+  ownershipType?: FacilityOwnershipType;
+  accessType?: FacilityAccessType;
+  operatorName?: string;
+  operatorType?: FacilityOperatorType;
+
+  // Court details
   pickleballCourts?: number;
+  indoorCourts?: number;
+  outdoorCourts?: number;
   tennisConversionCourts?: number;
-  hasParking?: boolean;
-  hasLights?: boolean;
+  /** @deprecated Use indoorCourts/outdoorCourts instead. */
   isIndoor?: boolean;
-  surfaceType?: "hard" | "clay" | "turf" | "indoor";
+  surfaceType?: FacilitySurfaceType;
+  hasLights?: boolean;
+  hasParking?: boolean;
+  hasRestrooms?: boolean;
+  hasWater?: boolean;
+  hasProShop?: boolean;
   amenities?: string[];
   notes?: string;
+
+  // Open-play schedule
+  openPlaySessions?: OpenPlaySession[];
+
+  // Import provenance
+  /** OpenStreetMap element ID (e.g. "node/12345678"). Prevents duplicate imports. */
+  osmId?: string;
+
+  // Audit
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;

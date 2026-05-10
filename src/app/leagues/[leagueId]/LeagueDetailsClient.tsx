@@ -55,6 +55,10 @@ function calcSessionCount(first: string, last: string): number {
   return Math.floor((d2 - d1) / (7 * 24 * 60 * 60 * 1000)) + 1;
 }
 
+function finiteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function LeagueSettingsEditor({
   league,
   leagueId,
@@ -75,6 +79,7 @@ function LeagueSettingsEditor({
   const [state, setState] = useState(league.state ?? "");
   const [format, setFormat] = useState(league.league_format ?? "Doubles Ladder");
   const [active, setActive] = useState(league.active !== false);
+  const [geoLocationAssistedCheckIn, setGeoLocationAssistedCheckIn] = useState(league.geoLocationAssistedCheckIn === true);
   const [regOpen, setRegOpen] = useState(league.registrationOpenDate ?? "");
   const [regClose, setRegClose] = useState(league.registrationCloseDate ?? "");
   const [firstSession, setFirstSession] = useState(league.firstSessionDate ?? "");
@@ -126,6 +131,7 @@ function LeagueSettingsEditor({
       const updates: UpdateLeagueInput = {
         name, description, city, state, leagueFormat: format, active,
         facilityId: resolvedFacilityId,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: regOpen || undefined,
         registrationCloseDate: regClose || undefined,
         firstSessionDate: firstSession || undefined,
@@ -137,6 +143,7 @@ function LeagueSettingsEditor({
       onSaved({
         name, description, city, state, league_format: format, active,
         facilityId: resolvedFacilityId ?? undefined,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: regOpen || undefined,
         registrationCloseDate: regClose || undefined,
         firstSessionDate: firstSession || undefined,
@@ -205,6 +212,20 @@ function LeagueSettingsEditor({
             className="rounded"
           />
           <span className="text-sm text-ash-300">League is active</span>
+        </label>
+        <label className="flex items-start gap-2 cursor-pointer rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2">
+          <input
+            type="checkbox"
+            checked={geoLocationAssistedCheckIn}
+            onChange={(e) => setGeoLocationAssistedCheckIn(e.target.checked)}
+            className="mt-0.5 accent-ember-500"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm text-ash-300">Use GPS-assisted check-in</span>
+            <span className="block text-xs text-ash-500 mt-0.5">
+              Players check in from their device location when play dates are active.
+            </span>
+          </span>
         </label>
 
         <div className="pt-3 border-t border-obsidian-600 space-y-3">
@@ -399,6 +420,10 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
   const [joinError, setJoinError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [facilities, setFacilities] = useState<ClubFacility[]>([]);
+  const leagueFacility = league?.facilityId
+    ? facilities.find((facility) => facility.id === league.facilityId)
+    : undefined;
+  const weatherFacility = leagueFacility ?? facilities[0];
   const [weather, setWeather] = useState<WeatherDay[] | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(false);
@@ -439,28 +464,54 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
     listClubFacilities(cId).then(setFacilities).catch(() => setFacilities([]));
   }, [league]);
 
-  // Fetch 5-day weather forecast via Open-Meteo (no API key required).
+  // Fetch 5-day weather forecast via Open-Meteo forecast API (no API key required).
   useEffect(() => {
     if (!league) return;
-    const hasLocation = facilities[0]?.address || league.venueAddress || league.city;
+    const hasLeagueCoordinates = finiteNumber(league.latitude) && finiteNumber(league.longitude);
+    const hasFacilityCoordinates = finiteNumber(weatherFacility?.lat) && finiteNumber(weatherFacility?.lng);
+    const hasLocation =
+      hasLeagueCoordinates ||
+      hasFacilityCoordinates ||
+      weatherFacility?.address ||
+      league.venueAddress ||
+      league.city;
     if (!hasLocation) return;
     setWeatherLoading(true);
     setWeatherError(false);
     (async () => {
       try {
-        let lat = league.latitude;
-        let lng = league.longitude;
-        if (!lat || !lng) {
-          // Prefer facility address for geocoding; fall back to league city.
-          const cityName = league.city ?? facilities[0]?.address ?? league.venueAddress ?? "";
-          const geoRes = await fetch(
-            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json&country_code=US`,
-          );
-          const geoData = await geoRes.json() as { results?: { latitude: number; longitude: number }[] };
-          lat = geoData.results?.[0]?.latitude;
-          lng = geoData.results?.[0]?.longitude;
+        // Coordinate resolution priority:
+        // 1. League lat/lng (set when league was geocoded)
+        // 2. Facility lat/lng (set when facility was geocoded — most common)
+        // 3. Nominatim geocode of full address / zip fallback
+        let lat: number | undefined = finiteNumber(league.latitude) ? league.latitude : undefined;
+        let lng: number | undefined = finiteNumber(league.longitude) ? league.longitude : undefined;
+
+        if (!finiteNumber(lat) || !finiteNumber(lng)) {
+          if (finiteNumber(weatherFacility?.lat) && finiteNumber(weatherFacility?.lng)) {
+            lat = weatherFacility.lat;
+            lng = weatherFacility.lng;
+          }
         }
-        if (!lat || !lng) { setWeatherError(true); return; }
+
+        if (!finiteNumber(lat) || !finiteNumber(lng)) {
+          // Last resort: geocode with Nominatim using full address (handles street addresses)
+          const facilityAddress = weatherFacility?.address ?? league.venueAddress ?? "";
+          const geoQuery = facilityAddress || `${league.city ?? ""} ${league.state ?? ""}`.trim();
+          if (geoQuery) {
+            const geoRes = await fetch(
+              `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(geoQuery)}&format=json&limit=1`,
+              { headers: { "User-Agent": "PBL-PickleballLeagueApp/1.0 (weather-lookup)" } },
+            );
+            const geoData = await geoRes.json() as { lat: string; lon: string }[];
+            if (geoData[0]) {
+              lat = parseFloat(geoData[0].lat);
+              lng = parseFloat(geoData[0].lon);
+            }
+          }
+        }
+
+        if (!finiteNumber(lat) || !finiteNumber(lng)) { setWeatherError(true); return; }
         const wxRes = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode&temperature_unit=fahrenheit&timezone=auto&forecast_days=5`,
         );
@@ -488,7 +539,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
         setWeatherLoading(false);
       }
     })();
-  }, [league, facilities]);
+  }, [league, weatherFacility]);
 
   const clubId = league?.clubId ?? league?.orgId ?? "";
   const isDirector = !permLoading && (isSiteAdmin || clubDirectorFor.includes(clubId));
@@ -580,6 +631,10 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                         {league.check_in_status}
                       </div>
                     )}
+                    <div>
+                      <span className="text-ash-100">Check-in mode:</span>{" "}
+                      {league.geoLocationAssistedCheckIn ? "GPS-assisted" : "Manual/admin assisted"}
+                    </div>
                   </div>
 
                   {/* Schedule */}
@@ -718,7 +773,7 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
               <div className="space-y-4">
 
                 {/* ── Weather forecast ── */}
-                {(facilities[0]?.address || league.venueAddress || league.city) && (
+                {(weatherFacility?.address || weatherFacility?.lat || league.venueAddress || league.city) && (
                   <Panel variant="base" padding="lg" className="space-y-3">
                     <p className="text-[10px] uppercase tracking-[0.15em] text-ash-500">Weather Forecast</p>
                     {weatherLoading ? (
@@ -846,9 +901,14 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                           <CalendarDays className="h-3.5 w-3.5" /> Play Dates
                         </Button>
                       </Link>
-                      <Link href="/ladder/standings">
+                      <Link href={`/leagues/${leagueId}/standings`}>
                         <Button size="sm" variant="outline" className="w-full">
                           <Layers className="h-3.5 w-3.5" /> Standings
+                        </Button>
+                      </Link>
+                      <Link href={`/leagues/${leagueId}/schedule`}>
+                        <Button size="sm" variant="outline" className="w-full">
+                          <CalendarDays className="h-3.5 w-3.5" /> Schedule
                         </Button>
                       </Link>
                       <Button
@@ -877,20 +937,50 @@ export function LeagueDetailsClient({ leagueId: fallbackId }: { leagueId: string
                       </h2>
                     </div>
                     {joinError && <p className="text-crimson-400 text-xs">{joinError}</p>}
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      onClick={handleJoin}
-                      disabled={joining}
-                    >
-                      {joining ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Joining…
-                        </>
-                      ) : (
-                        "Join League"
-                      )}
-                    </Button>
+                    {league.stripePaymentLink ? (
+                      <div className="space-y-2">
+                        {typeof league.registrationFee === "number" && (
+                          <p className="text-ash-400 text-sm font-mono">
+                            Registration fee:{" "}
+                            <span className="text-gold-400 heading-fantasy">
+                              ${(league.registrationFee / 100).toFixed(2)}
+                            </span>
+                          </p>
+                        )}
+                        <a
+                          href={league.stripePaymentLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block w-full"
+                        >
+                          <Button size="sm" variant="primary" className="w-full">
+                            Pay &amp; Register →
+                          </Button>
+                        </a>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full text-ash-500"
+                          onClick={handleJoin}
+                          disabled={joining}
+                        >
+                          {joining ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Joining…</> : "Join without paying"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        onClick={handleJoin}
+                        disabled={joining}
+                      >
+                        {joining ? (
+                          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Joining…</>
+                        ) : (
+                          "Join League"
+                        )}
+                      </Button>
+                    )}
                   </Panel>
                 )}
 

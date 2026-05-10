@@ -9,6 +9,8 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MobileTopBar } from "@/components/layout/mobile/MobileTopBar";
 import { MobileTabBar } from "@/components/layout/mobile/MobileTabBar";
 import { BackToHome } from "@/components/layout/BackToHome";
+import { PushNotificationBanner } from "@/components/PushNotificationBanner";
+import { TestModeBanner } from "@/components/ui/TestModeBanner";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isMobile, ready: deviceReady } = useDevice();
@@ -34,6 +36,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (isMobile) {
     return (
       <div className="min-h-screen flex flex-col">
+        <TestModeBanner />
         <MobileTopBar />
         <div className="pt-14 flex-1 flex flex-col pb-20">
           <BackToHome />
@@ -46,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <>
+      <TestModeBanner />
       <TopNav />
       <div className="flex min-h-[calc(100vh-3.5rem)]">
         <AppSidebar />
@@ -54,6 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+      <PushNotificationBanner />
     </>
   );
 }

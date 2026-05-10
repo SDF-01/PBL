@@ -157,10 +157,15 @@ export default function LeagueCreatePage() {
   const [registrationCloseDate, setRegistrationCloseDate] = useState("");
   const [firstSessionDate, setFirstSessionDate] = useState("");
   const [lastSessionDate, setLastSessionDate] = useState("");
+  const [geoLocationAssistedCheckIn, setGeoLocationAssistedCheckIn] = useState(false);
 
   // Staff
   const [director, setDirector] = useState<ResolvedUser | null>(null);
   const [coordinator, setCoordinator] = useState<ResolvedUser | null>(null);
+
+  // Payments
+  const [stripePaymentLink, setStripePaymentLink] = useState("");
+  const [registrationFee, setRegistrationFee] = useState("");
 
   // UI
   const [openSection, setOpenSection] = useState<"location" | "schedule" | "staff" | null>(null);
@@ -238,6 +243,7 @@ export default function LeagueCreatePage() {
         leagueFormat: leagueFormat.trim() || undefined,
         facilityId,
         newFacility,
+        geoLocationAssistedCheckIn,
         registrationOpenDate: registrationOpenDate || undefined,
         registrationCloseDate: registrationCloseDate || undefined,
         firstSessionDate: firstSessionDate || undefined,
@@ -251,6 +257,8 @@ export default function LeagueCreatePage() {
         // Derive city/state from selected facility address for weather/display.
         city: selectedFacility?.address?.split(",").slice(-2, -1)[0]?.trim() || undefined,
         state: selectedFacility?.address?.split(",").slice(-1)[0]?.trim().split(" ")[0] || undefined,
+        stripePaymentLink: stripePaymentLink.trim() || undefined,
+        registrationFee: registrationFee ? Math.round(Number(registrationFee) * 100) : undefined,
       };
       const leagueId = await createLeague(user.uid, input);
       setSuccess(true);
@@ -574,6 +582,21 @@ export default function LeagueCreatePage() {
                 {firstSessionDate && lastSessionDate && lastSessionDate < firstSessionDate && (
                   <p className="text-crimson-400 text-xs">Last session must be on or after the first session.</p>
                 )}
+
+                <label className="flex items-start gap-2 rounded-pixel bg-obsidian-800 border border-ash-700 px-3 py-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={geoLocationAssistedCheckIn}
+                    onChange={(e) => setGeoLocationAssistedCheckIn(e.target.checked)}
+                    className="mt-0.5 accent-ember-500"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-ash-200 text-sm font-medium">Use GPS-assisted check-in</span>
+                    <span className="block text-ash-500 text-xs mt-0.5">
+                      Players check in from their device location when play dates are active.
+                    </span>
+                  </span>
+                </label>
               </div>
             )}
           </Panel>
@@ -619,6 +642,45 @@ export default function LeagueCreatePage() {
                 </div>
               </div>
             )}
+          </Panel>
+
+          {/* ── Payments (optional) ── */}
+          <Panel variant="base" padding="lg" className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="heading-fantasy text-ash-100 text-sm uppercase tracking-widest">
+                Registration Fee
+              </h2>
+              <span className="text-[10px] text-ash-600 font-mono">optional</span>
+            </div>
+            <p className="text-xs text-ash-500 leading-relaxed">
+              Create a{" "}
+              <a href="https://dashboard.stripe.com/payment-links" target="_blank" rel="noopener noreferrer" className="text-spectral-500 hover:underline">
+                Stripe Payment Link
+              </a>{" "}
+              in your Stripe dashboard and paste it here. Players will be redirected to it when they join.
+            </p>
+            <label className="text-xs text-ash-400 space-y-1 block">
+              <span>Fee amount (USD)</span>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                className={fieldCls}
+                value={registrationFee}
+                onChange={(e) => setRegistrationFee(e.target.value)}
+                placeholder="e.g. 49.99"
+              />
+            </label>
+            <label className="text-xs text-ash-400 space-y-1 block">
+              <span>Stripe Payment Link URL</span>
+              <input
+                type="url"
+                className={fieldCls}
+                value={stripePaymentLink}
+                onChange={(e) => setStripePaymentLink(e.target.value)}
+                placeholder="https://buy.stripe.com/…"
+              />
+            </label>
           </Panel>
 
           {error && (
