@@ -42,7 +42,7 @@ export function ClubApprovalQueue({
     if (!user) return;
     setProcessing(club.id);
     try {
-      await approveClub(club.id, user.uid, club.createdBy);
+      await approveClub(club.id, club.createdBy);
       toast(`"${club.clubName}" approved. Director role assigned.`, "success");
       onApproved?.(club.id);
     } catch (err) {
@@ -70,7 +70,7 @@ export function ClubApprovalQueue({
     setRejectError(null);
     setProcessing(club.id);
     try {
-      await rejectClub(club.id, user.uid, club.createdBy, notes);
+      await rejectClub(club.id, club.createdBy, notes);
       toast(`"${club.clubName}" rejected.`, "info");
       onRejected?.(club.id);
     } catch (err) {

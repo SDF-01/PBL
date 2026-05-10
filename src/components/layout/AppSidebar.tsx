@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { useRoleView } from "@/lib/role-view-context";
+import { useUnreadNotifications } from "@/lib/notifications/useUnreadNotifications";
 
 const ITEMS = [
   { href: "/dashboard",         label: "Overview",    icon: LayoutDashboard },
@@ -27,8 +28,14 @@ export function AppSidebar() {
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
   const { isStaffView, isAdminView } = useRoleView();
   const isStaff = !permLoading && (isSiteAdmin || clubDirectorFor.length > 0) && isStaffView;
+  const unread = useUnreadNotifications();
 
-  function navLink(href: string, label: string, Icon: React.ComponentType<{ className?: string }>) {
+  function navLink(
+    href: string,
+    label: string,
+    Icon: React.ComponentType<{ className?: string }>,
+    badge?: number,
+  ) {
     const active = pathname === href || pathname.startsWith(href + "/");
     return (
       <li key={href}>
@@ -42,7 +49,12 @@ export function AppSidebar() {
           )}
         >
           <Icon className="h-4 w-4" />
-          {label}
+          <span className="flex-1">{label}</span>
+          {badge && badge > 0 ? (
+            <span className="min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center text-[10px] font-mono rounded-full bg-ember-500 text-obsidian-900">
+              {badge > 9 ? "9+" : badge}
+            </span>
+          ) : null}
         </Link>
       </li>
     );
@@ -55,7 +67,14 @@ export function AppSidebar() {
           Navigate
         </div>
         <ul className="space-y-0.5">
-          {ITEMS.map((item) => navLink(item.href, item.label, item.icon))}
+          {ITEMS.map((item) =>
+            navLink(
+              item.href,
+              item.label,
+              item.icon,
+              item.href === "/notifications" ? unread : undefined,
+            ),
+          )}
         </ul>
       </div>
 

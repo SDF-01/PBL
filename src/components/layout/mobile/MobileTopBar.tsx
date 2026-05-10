@@ -1,30 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { SignInButton } from "@/components/ui/SignInButton";
 import { ModeToggle } from "@/components/ui/ModeToggle";
 import { Bell } from "lucide-react";
-import { useAuth } from "@/lib/auth-context";
 import { useAdminMode } from "@/lib/admin-context";
-import { subscribeNotifications } from "@/lib/firestore/repo";
+import { useUnreadNotifications } from "@/lib/notifications/useUnreadNotifications";
 
 export function MobileTopBar() {
-  const { user } = useAuth();
   const { canAccessAdmin } = useAdminMode();
-  const [unread, setUnread] = useState(0);
-
-  useEffect(() => {
-    if (!user) {
-      setUnread(0);
-      return;
-    }
-    const unsub = subscribeNotifications(user.uid, (items) => {
-      setUnread(items.filter((n) => !n.read).length);
-    });
-    return () => unsub();
-  }, [user]);
+  const unread = useUnreadNotifications();
 
   return (
     <header className="fixed top-0 inset-x-0 z-40 bg-obsidian-900/90 backdrop-blur-md ember-divider">

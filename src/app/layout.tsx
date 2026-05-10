@@ -8,6 +8,7 @@ import { RoleViewProvider } from "@/lib/role-view-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { Toaster } from "@/components/ui/Toaster";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
+import { AppCheckLoader } from "@/components/AppCheckLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono  = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
@@ -37,6 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${pixel.variable} ${cinzel.variable}`}>
       <body className="antialiased">
+        {/* App Check must mount before any Firebase product call so the
+            first request from this session carries an attestation token. */}
+        <AppCheckLoader />
         <DeviceProvider>
           <AuthProvider>
             <ToastProvider>

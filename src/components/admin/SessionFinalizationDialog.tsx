@@ -43,7 +43,7 @@ export function SessionFinalizationDialog({
   async function handleAssignResult(matchId: string, scoreA: number, scoreB: number) {
     if (!user) return;
     try {
-      await adminAssignMatchResult(matchId, scoreA, scoreB, user.uid);
+      await adminAssignMatchResult(matchId, scoreA, scoreB);
       setAssignedResults((prev) => ({ ...prev, [matchId]: { scoreA, scoreB } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to assign result.");
@@ -85,7 +85,7 @@ export function SessionFinalizationDialog({
         };
         return acc;
       }, {} as Record<string, unknown>);
-      await finalizeSession(session.id, standingsSnapshot, updatedPlayerStats, user.uid);
+      await finalizeSession(session.id, standingsSnapshot, updatedPlayerStats);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Finalization failed.");

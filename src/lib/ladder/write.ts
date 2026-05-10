@@ -1,6 +1,10 @@
-// Ladder League write helpers — client-side Firestore writes for the
-// doubles-ladder MVP (spec v4). Pure write layer, no rendering.
-// TODO: Admin write operations should migrate to Firebase Cloud Functions once one is deployed.
+// Ladder League write helpers.
+//
+// Privileged + multi-document writes (score submission, score verification,
+// disputes, admin overrides, session generation, finalization) are routed
+// through Cloud Functions for atomicity and authoritative audit logging.
+// Self-service writes (check-in, season/venue/play-date creation by staff
+// at the rule layer) remain client-side.
 
 "use client";
 
@@ -17,19 +21,22 @@ import {
 import { db } from "../firebase";
 import { COLLECTIONS } from "../firestore/collections";
 import { slugify } from "../firestore/write";
-import { applyMatchEloByUserIds } from "../players/write";
 import { listLadderCourts, listLadderMatches } from "./repo";
+import {
+  callSubmitMatchScore,
+  callVerifyMatchScore,
+  callDisputeMatch,
+  callAdminAssignMatchResult,
+  callPersistGeneratedSession,
+  callFinalizeSession,
+} from "@/lib/functions/callables";
 import type {
   LadderSeasonDoc,
-  VenueDoc,
   PlayDateDoc,
-  CheckInDoc,
-  LadderMatchDoc,
   LadderSessionDoc,
   MovementPattern,
   CourtDistributionPlacement,
   CheckInStatus,
-  AuditDoc,
 } from "../firestore/types";
 
 function stripUndefined<T extends Record<string, unknown>>(
@@ -58,7 +65,6 @@ export interface NewLadderSeason {
 export async function createLadderSeason(
   input: NewLadderSeason,
 ): Promise<string> {
-
   const slug = input.slug?.trim() || slugify(input.name);
   if (!slug) throw new Error("Season slug is required.");
   const payload: Omit<LadderSeasonDoc, "id" | "createdAt"> & {
@@ -79,7 +85,6 @@ export async function createLadderSeason(
   return slug;
 }
 
-/** Clone a season's settings into a new season with updated dates. */
 export async function copyLadderSeason(
   sourceSeasonId: string,
   newName: string,
@@ -116,7 +121,6 @@ export interface NewVenue {
 }
 
 export async function createVenue(input: NewVenue): Promise<string> {
-
   if (!Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
     throw new Error("Venue lat/lng must be finite numbers.");
   }
@@ -153,7 +157,6 @@ export interface NewPlayDate {
 }
 
 export async function createPlayDate(input: NewPlayDate): Promise<string> {
-
   const ref = await addDoc(
     collection(db(), COLLECTIONS.playDates),
     stripUndefined({
@@ -174,12 +177,11 @@ export async function updatePlayDateStatus(
   playDateId: string,
   status: PlayDateDoc["status"],
 ): Promise<void> {
-
   await updateDoc(doc(db(), COLLECTIONS.playDates, playDateId), { status });
 }
 
 // ============================================================
-// CHECK-INS
+// CHECK-INS (still client-side; see DI-009 for future migration)
 // ============================================================
 
 export interface NewCheckIn {
@@ -192,10 +194,6 @@ export interface NewCheckIn {
   status: CheckInStatus;
 }
 
-/**
- * Deterministic check-in id so a player cannot check in twice to the same
- * play date. Callers compute geofence validation first and pass the status.
- */
 export async function createCheckIn(input: NewCheckIn): Promise<string> {
   const id = `${input.playDateId}__${input.userId}`;
   await setDoc(
@@ -218,7 +216,6 @@ export async function adminOverrideCheckIn(
   checkInId: string,
   adminId: string,
 ): Promise<void> {
-
   await updateDoc(doc(db(), COLLECTIONS.checkIns, checkInId), {
     status: "ADMIN_CONFIRMED" as CheckInStatus,
     adminOverrideBy: adminId,
@@ -226,111 +223,51 @@ export async function adminOverrideCheckIn(
 }
 
 // ============================================================
-// AUDIT LOG (append-only, per spec directive 04)
-// ============================================================
-
-export async function writeAudit(
-  entry: Omit<AuditDoc, "id" | "createdAt">,
-): Promise<void> {
-
-  await addDoc(
-    collection(db(), COLLECTIONS.audits),
-    stripUndefined({ ...entry, createdAt: serverTimestamp() }),
-  );
-}
-
-// ============================================================
-// LADDER MATCHES — score submission + ELO application
+// LADDER MATCHES — score submission + ELO application (atomic via Function)
 // ============================================================
 
 export interface SubmitLadderMatchScoreInput {
   matchId: string;
   scoreA: number;
   scoreB: number;
-  submittedBy: string;
 }
 
-/**
- * Finalize a ladder match by writing its score and applying ELO deltas
- * to all four players. The match doc must already exist (created during
- * session generation). ELO application is best-effort — a failure does
- * not reject the score since the score itself commits first.
- */
 export async function submitLadderMatchScore(
   input: SubmitLadderMatchScoreInput,
 ): Promise<void> {
-
-  const { matchId, scoreA, scoreB, submittedBy } = input;
-  if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB)) {
+  if (!Number.isInteger(input.scoreA) || !Number.isInteger(input.scoreB)) {
     throw new Error("Scores must be integers.");
   }
-  if (scoreA < 0 || scoreB < 0) {
+  if (input.scoreA < 0 || input.scoreB < 0) {
     throw new Error("Scores cannot be negative.");
   }
-  if (scoreA === scoreB) {
+  if (input.scoreA === input.scoreB) {
     throw new Error("Ladder matches cannot end in a tie.");
   }
-  const mRef = doc(db(), COLLECTIONS.ladderMatches, matchId);
-  const mSnap = await getDoc(mRef);
-  if (!mSnap.exists()) throw new Error("Ladder match not found.");
-  const match = mSnap.data() as LadderMatchDoc;
+  await callSubmitMatchScore(input);
+}
 
-  await updateDoc(
-    mRef,
-    stripUndefined({
-      scoreA,
-      scoreB,
-      submittedBy,
-      submittedAt: serverTimestamp(),
-    }),
-  );
+export async function verifyLadderMatchScore(matchId: string): Promise<void> {
+  await callVerifyMatchScore({ matchId });
+}
 
-  // Resolve target points via the session.
-  let targetPoints = 11;
-  try {
-    const sSnap = await getDoc(
-      doc(db(), COLLECTIONS.ladderSessions, match.sessionId),
-    );
-    if (sSnap.exists()) {
-      targetPoints =
-        (sSnap.data() as LadderSessionDoc).targetPoints ?? targetPoints;
-    }
-  } catch {
-    /* keep default */
-  }
+export async function disputeLadderMatch(
+  matchId: string,
+  reason?: string,
+): Promise<void> {
+  await callDisputeMatch({ matchId, reason });
+}
 
-  try {
-    await applyMatchEloByUserIds({
-      sideA: [match.sideA[0], match.sideA[1]],
-      sideB: [match.sideB[0], match.sideB[1]],
-      scoreA,
-      scoreB,
-      targetPoints,
-      source: "ladderMatch",
-      sourceId: matchId,
-    });
-  } catch (err) {
-    console.warn("[elo] ladder ELO apply failed", err);
-  }
-
-  // Notify the opposing side that a score has been submitted and needs verification.
-  const submitterOnSideA = match.sideA.includes(submittedBy);
-  const opposingSide = submitterOnSideA ? match.sideB : match.sideA;
-  const notifyPromises = opposingSide.map((uid) =>
-    writeNotification({
-      userId: uid,
-      title: "Score submitted — verify now",
-      body: `Game ${match.gameNumber} score: ${scoreA}–${scoreB}. Tap to confirm or dispute.`,
-      kind: "SCORE_SUBMITTED",
-      href: "/dashboard",
-      createdBy: submittedBy,
-    }).catch(() => { /* best-effort */ }),
-  );
-  await Promise.all(notifyPromises);
+export async function adminAssignMatchResult(
+  matchId: string,
+  scoreA: number,
+  scoreB: number,
+): Promise<void> {
+  await callAdminAssignMatchResult({ matchId, scoreA, scoreB });
 }
 
 // ============================================================
-// SESSION GENERATION & FINALIZATION
+// SESSION GENERATION & FINALIZATION (atomic via Function)
 // ============================================================
 
 export interface GenerateSessionInput {
@@ -348,114 +285,37 @@ export interface GenerateSessionInput {
   generatedBy: string;
 }
 
-/**
- * Persist a generated session, courts, and matches to Firestore
- * This creates the complete session structure and locks it from further modification
- */
-export async function persistGeneratedSession(input: GenerateSessionInput): Promise<void> {
-
-  const { sessionDoc, courts, matches, generatedBy } = input;
-
-  try {
-    // Write session document
-    await setDoc(doc(db(), COLLECTIONS.ladderSessions, sessionDoc.id), {
-      ...(stripUndefined(sessionDoc as unknown as Record<string, unknown>)),
-      generatedBy,
-      status: "GENERATED",
-    });
-
-    // Write court documents
-    for (const court of courts) {
-      await setDoc(doc(db(), COLLECTIONS.ladderCourts, court.id), {
-        ...court,
-        status: "active",
-      });
-    }
-
-    // Write match documents
-    for (const match of matches) {
-      await setDoc(doc(db(), COLLECTIONS.ladderMatches, match.id), {
-        ...stripUndefined(match),
-        status: "SCHEDULED",
-        createdAt: serverTimestamp(),
-      });
-    }
-
-    // Write generation audit
-    await writeAudit({
-      kind: "SESSION_GENERATED",
-      targetId: sessionDoc.id,
-      targetKind: "session",
-      actorId: generatedBy,
-      payload: {
-        kind: sessionDoc.kind,
-        courtCount: courts.length,
-        playerCount: courts.reduce((sum, c) => sum + c.playerIds.length, 0),
-        matchCount: matches.length,
-      },
-    });
-  } catch (err) {
-    console.error("[ladder] session generation persistence failed", err);
-    throw err;
-  }
-}
-
-/**
- * Verify score to update match status from submitted → verified
- */
-export async function verifyLadderMatchScore(
-  matchId: string,
-  verifiedBy: string,
+export async function persistGeneratedSession(
+  input: GenerateSessionInput,
 ): Promise<void> {
-
-  await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
-    verifiedBy,
-    verifiedAt: serverTimestamp(),
-    status: "VERIFIED",
-  });
-
-  await writeAudit({
-    kind: "MATCH_VERIFIED",
-    targetId: matchId,
-    targetKind: "match",
-    actorId: verifiedBy,
-  });
-}
-
-/**
- * Flag a match score as disputed. Admins resolve via the dispute panel.
- */
-export async function disputeLadderMatch(
-  matchId: string,
-  disputedBy: string,
-  reason?: string,
-): Promise<void> {
-
-  await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
-    status: "DISPUTED",
-    disputedBy,
-    disputedAt: serverTimestamp(),
-    disputeReason: reason ?? null,
-  });
-
-  await writeAudit({
-    kind: "MATCH_DISPUTED",
-    targetId: matchId,
-    targetKind: "match",
-    actorId: disputedBy,
-    payload: { reason: reason ?? null },
+  await callPersistGeneratedSession({
+    sessionDoc: input.sessionDoc as unknown as Record<string, unknown> & {
+      id: string;
+      playDateId: string;
+      seasonId: string;
+      kind: "A" | "B";
+    },
+    courts: input.courts,
+    matches: input.matches,
   });
 }
 
 // ============================================================
-// NOTIFICATIONS
+// NOTIFICATIONS (general-purpose helper, used by admin tools)
 // ============================================================
 
 export async function writeNotification(input: {
   userId: string;
   title: string;
   body: string;
-  kind: "SCORE_SUBMITTED" | "SCORE_DISPUTED" | "LADDER_PROMOTED" | "LADDER_DEMOTED" | "MATCH_READY" | "ANNOUNCEMENT" | "GENERAL";
+  kind:
+    | "SCORE_SUBMITTED"
+    | "SCORE_DISPUTED"
+    | "LADDER_PROMOTED"
+    | "LADDER_DEMOTED"
+    | "MATCH_READY"
+    | "ANNOUNCEMENT"
+    | "GENERAL";
   href?: string;
   createdBy?: string;
 }): Promise<void> {
@@ -474,46 +334,17 @@ export async function writeNotification(input: {
   );
 }
 
-/**
- * Admin assign result to an incomplete match
- */
-export async function adminAssignMatchResult(
-  matchId: string,
-  scoreA: number,
-  scoreB: number,
-  adminId: string,
-): Promise<void> {
+// ============================================================
+// SESSION B GENERATION (orchestrator: domain code + persist callable + notify)
+// ============================================================
 
-  await updateDoc(doc(db(), COLLECTIONS.ladderMatches, matchId), {
-    scoreA,
-    scoreB,
-    adminOverride: {
-      assignedBy: adminId,
-      assignedAt: serverTimestamp(),
-      reason: "incomplete_match_admin_assignment",
-    },
-    status: "ADMIN_ASSIGNED",
-  });
-
-  await writeAudit({
-    kind: "MATCH_ADMIN_ASSIGNED",
-    targetId: matchId,
-    targetKind: "match",
-    actorId: adminId,
-    payload: { scoreA, scoreB },
-  });
-}
-
-/**
- * Generate Session B from finalized Session A
- */
 export async function generateSessionB(
   sessionAId: string,
   generatedBy: string,
 ): Promise<string> {
-
-  // Get Session A data
-  const sessionASnap = await getDoc(doc(db(), COLLECTIONS.ladderSessions, sessionAId));
+  const sessionASnap = await getDoc(
+    doc(db(), COLLECTIONS.ladderSessions, sessionAId),
+  );
   if (!sessionASnap.exists()) throw new Error("Session A not found");
 
   const sessionA = sessionASnap.data() as LadderSessionDoc;
@@ -521,25 +352,33 @@ export async function generateSessionB(
     throw new Error("Session A must be finalized before generating Session B");
   }
 
-  // Get play date and season
-  const playDateSnap = await getDoc(doc(db(), COLLECTIONS.playDates, sessionA.playDateId));
+  const playDateSnap = await getDoc(
+    doc(db(), COLLECTIONS.playDates, sessionA.playDateId),
+  );
   if (!playDateSnap.exists()) throw new Error("Play date not found");
 
-  const seasonSnap = await getDoc(doc(db(), COLLECTIONS.seasons, sessionA.seasonId));
+  const seasonSnap = await getDoc(
+    doc(db(), COLLECTIONS.seasons, sessionA.seasonId),
+  );
   if (!seasonSnap.exists()) throw new Error("Season not found");
 
   const playDate = { id: playDateSnap.id, ...playDateSnap.data() } as PlayDateDoc;
   const season = { id: seasonSnap.id, ...seasonSnap.data() } as LadderSeasonDoc;
 
-  // Get Session A courts and matches
   const courtsA = await listLadderCourts(sessionAId);
   const matchesA = await listLadderMatches(sessionAId);
 
-  // Generate Session B
-  const { generateSessionBFromSessionA } = await import("../../domain/ladder/generation");
-  const sessionBData = generateSessionBFromSessionA(sessionA, courtsA, matchesA, playDate, season);
+  const { generateSessionBFromSessionA } = await import(
+    "../../domain/ladder/generation"
+  );
+  const sessionBData = generateSessionBFromSessionA(
+    sessionA,
+    courtsA,
+    matchesA,
+    playDate,
+    season,
+  );
 
-  // Persist Session B
   const mappedMatches = sessionBData.matches.map((match) => ({
     id: match.id,
     courtId: match.courtId,
@@ -557,12 +396,13 @@ export async function generateSessionB(
     generatedBy,
   });
 
-  // Update play date with Session B ID
+  // Update play date with Session B id (small client-side write).
   await updateDoc(doc(db(), COLLECTIONS.playDates, playDate.id), {
     sessionBId: sessionBData.session.id,
   });
 
-  // Notify players of promotion/demotion
+  // Movement notifications (best-effort; not in the persist transaction
+  // since the affected user set is derived after the session is committed).
   const courtAMap = new Map<string, number>();
   for (const court of courtsA) {
     for (const pid of court.playerIds) courtAMap.set(pid, court.courtNumber);
@@ -602,53 +442,26 @@ export async function generateSessionB(
   return sessionBData.session.id;
 }
 
-/**
- * Finalize session: locks scores, computes movement, prepares Season B
- */
+// ============================================================
+// SESSION FINALIZATION (atomic via Function)
+// ============================================================
+
 export async function finalizeSession(
   sessionId: string,
-  standingsSnapshot: any, // StandingsSnapshotDoc
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  standingsSnapshot: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updatedPlayerStats: Record<string, any>,
-  adminId: string,
 ): Promise<void> {
-
-  try {
-    // Update session status
-    await updateDoc(doc(db(), COLLECTIONS.ladderSessions, sessionId), {
-      status: "FINALIZED",
-      finalizedAt: serverTimestamp(),
-      finalizedBy: adminId,
-    });
-
-    // Persist standings snapshot
-    await setDoc(
-      doc(db(), COLLECTIONS.standingsSnapshots, standingsSnapshot.id),
-      stripUndefined({
-        ...standingsSnapshot,
-        createdAt: serverTimestamp(),
-      })
-    );
-
-    // Update player cumulative stats
-    for (const [playerId, stats] of Object.entries(updatedPlayerStats)) {
-      await updateDoc(doc(db(), COLLECTIONS.players, playerId), {
-        stats: stripUndefined(stats),
-        updatedAt: serverTimestamp(),
-      });
-    }
-
-    // Write finalization audit
-    await writeAudit({
-      kind: "SESSION_FINALIZED",
-      targetId: sessionId,
-      targetKind: "session",
-      actorId: adminId,
-      payload: {
-        playersAffected: Object.keys(updatedPlayerStats).length,
-      },
-    });
-  } catch (err) {
-    console.error("[ladder] session finalization failed", err);
-    throw err;
-  }
+  await callFinalizeSession({
+    sessionId,
+    standingsSnapshot: standingsSnapshot as { id: string } & Record<
+      string,
+      unknown
+    >,
+    updatedPlayerStats: updatedPlayerStats as Record<
+      string,
+      Record<string, number | undefined>
+    >,
+  });
 }

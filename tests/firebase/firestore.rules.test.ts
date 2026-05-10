@@ -170,6 +170,101 @@ describe("critical Firestore security rules", () => {
     );
   });
 
+  test("users.role alone no longer grants staff power (custom claim required)", async () => {
+    // Seed alice as SITE_ADMIN in the legacy mirror only — no custom claim.
+    await seed("users/alice", {
+      uid: "alice",
+      email: "alice@example.test",
+      displayName: "Alice",
+      role: "SITE_ADMIN",
+      accountStatus: "ACTIVE",
+      clubId: null,
+      leagueIds: [],
+    });
+    const db = dbFor("alice"); // no token claims
+
+    await assertFails(
+      setDoc(doc(db, "announcements/a1"), { title: "x", body: "y" }),
+    );
+  });
+
+  test("custom claim role: SITE_ADMIN grants staff power on rule-allowed collections", async () => {
+    const db = dbFor("admin", { role: "SITE_ADMIN" });
+
+    await assertSucceeds(
+      setDoc(doc(db, "announcements/a1"), { title: "ok", body: "ok" }),
+    );
+  });
+
+  test("ladder operational docs are Cloud-Function-only (even SITE_ADMIN denied direct writes)", async () => {
+    const db = dbFor("admin", { role: "SITE_ADMIN" });
+
+    await assertFails(
+      setDoc(doc(db, "ladderSessions/s1"), { status: "GENERATED" }),
+    );
+    await assertFails(
+      setDoc(doc(db, "ladderCourts/c1"), { sessionId: "s1" }),
+    );
+    await assertFails(
+      setDoc(doc(db, "ladderMatches/m1"), { sessionId: "s1", scoreA: 11, scoreB: 3 }),
+    );
+    await assertFails(
+      setDoc(doc(db, "standingsSnapshots/snap1"), { sessionId: "s1" }),
+    );
+  });
+
+  test("match participant can no longer write their own ladderMatch score directly", async () => {
+    // Pre-A3 the rules let a participant patch scoreA/scoreB. With submitMatchScore
+    // owning that flow, even the player cannot write the doc directly anymore.
+    await seed("ladderMatches/m1", {
+      sessionId: "s1",
+      sideA: ["alice", "bob"],
+      sideB: ["carol", "dan"],
+      status: "SCHEDULED",
+    });
+    const db = dbFor("alice");
+
+    await assertFails(
+      updateDoc(doc(db, "ladderMatches/m1"), {
+        scoreA: 11,
+        scoreB: 9,
+        submittedBy: "alice",
+        status: "SUBMITTED",
+      }),
+    );
+  });
+
+  test("custom claim role: CLUB_ADMIN grants club-director power", async () => {
+    const db = dbFor("director", { role: "CLUB_ADMIN" });
+
+    await assertSucceeds(
+      setDoc(doc(db, "userRoles/coord-1"), {
+        userId: "coord",
+        roleId: "LeagueCoordinator",
+        clubId: "club-a",
+        leagueId: null,
+        active: true,
+      }),
+    );
+  });
+
+  test("club director can no longer write users.role from the client", async () => {
+    await seed("users/target", {
+      uid: "target",
+      email: "target@example.test",
+      displayName: "T",
+      role: "PLAYER",
+      accountStatus: "ACTIVE",
+      clubId: null,
+      leagueIds: [],
+    });
+    const db = dbFor("director", { role: "CLUB_ADMIN" });
+
+    await assertFails(
+      updateDoc(doc(db, "users/target"), { role: "LEAGUE_COORDINATOR" }),
+    );
+  });
+
   test("normal players cannot tamper with matches, match games, announcements, or audit logs", async () => {
     await seed("matches/match-a", {
       tournamentId: "tournament-a",

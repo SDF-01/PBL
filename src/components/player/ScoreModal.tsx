@@ -43,14 +43,14 @@ export function ScoreModal({ match, action, onClose, onSuccess, targetPoints }: 
   async function handleSubmitScore(scoreA: number, scoreB: number) {
     if (!user) return;
     setError(null);
-    await submitLadderMatchScore({ matchId: match.id, scoreA, scoreB, submittedBy: user.uid });
+    await submitLadderMatchScore({ matchId: match.id, scoreA, scoreB });
     onSuccess();
   }
 
   async function handleVerifyScore() {
     if (!user) return;
     setError(null);
-    await verifyLadderMatchScore(match.id, user.uid);
+    await verifyLadderMatchScore(match.id);
     onSuccess();
   }
 
@@ -58,7 +58,7 @@ export function ScoreModal({ match, action, onClose, onSuccess, targetPoints }: 
     if (!user) return;
     setDispute((d) => ({ ...d, saving: true, error: null }));
     try {
-      await disputeLadderMatch(match.id, user.uid, dispute.reason.trim() || undefined);
+      await disputeLadderMatch(match.id, dispute.reason.trim() || undefined);
       onSuccess();
     } catch (err) {
       setDispute((d) => ({
