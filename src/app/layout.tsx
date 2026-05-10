@@ -9,6 +9,7 @@ import { ToastProvider } from "@/lib/toast-context";
 import { Toaster } from "@/components/ui/Toaster";
 import { AnalyticsLoader } from "@/components/AnalyticsLoader";
 import { PwaInit } from "@/components/PwaInit";
+import { AppCheckLoader } from "@/components/AppCheckLoader";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono  = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });

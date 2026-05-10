@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CrestLogo } from "@/components/brand/CrestLogo";
 import { SignInButton } from "@/components/ui/SignInButton";
@@ -13,6 +14,7 @@ import { RuneChip } from "@/components/ui/RuneChip";
 import { subscribeNotifications } from "@/lib/firestore/repo";
 
 export function MobileTopBar() {
+  const { user } = useAuth();
   const { canAccessAdmin } = useAdminMode();
   const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, loading } = usePermissions();
   const { isStaffView } = useRoleView();
