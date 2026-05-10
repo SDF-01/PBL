@@ -184,7 +184,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
       {/* Quick actions */}
       <Panel variant="inventory" padding="md">
         <RuneChip tone="rune" className="mb-3">Quick Actions</RuneChip>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           <Link href="/ladder/check-in">
             <Button size="sm" className="w-full">
               <MapPin className="h-3.5 w-3.5" /> Check In
@@ -205,7 +205,7 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
               <Swords className="h-3.5 w-3.5" /> My Profile
             </Button>
           </Link>
-          <Link href="/leagues" className="col-span-2">
+          <Link href="/leagues" className="col-span-2 lg:col-span-4">
             <Button size="sm" variant="ghost" className="w-full border border-obsidian-500 hover:border-spectral-500/50">
               <Search className="h-3.5 w-3.5" /> Find a League
             </Button>
@@ -213,80 +213,84 @@ export function PlayerDashboardFallback({ userId, leaderboardRank, totalPlayers 
         </div>
       </Panel>
 
-      {/* Upcoming play dates */}
-      <Panel variant="base" padding="md">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="heading-fantasy text-ash-100 text-base">Upcoming Play Dates</h2>
-          <Link href="/ladder/play-dates">
-            <Button size="sm" variant="ghost" className="gap-1">
-              All <ArrowRight className="h-3 w-3" />
-            </Button>
-          </Link>
-        </div>
-        {upcomingDates.length === 0 ? (
-          <p className="text-ash-500 text-sm">No upcoming play dates scheduled.</p>
-        ) : (
-          <ul className="divide-y divide-obsidian-600">
-            {upcomingDates.map((pd) => (
-              <PlayDateRow key={pd.id} pd={pd} />
-            ))}
-          </ul>
-        )}
-      </Panel>
+      {/* Two-column dashboard grid at lg+: stays vertical stack on mobile.
+          Each pair shares a row on desktop to recover vertical space. */}
+      <div className="grid lg:grid-cols-2 gap-5">
+        {/* Upcoming play dates */}
+        <Panel variant="base" padding="md">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="heading-fantasy text-ash-100 text-base">Upcoming Play Dates</h2>
+            <Link href="/ladder/play-dates">
+              <Button size="sm" variant="ghost" className="gap-1">
+                All <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
+          </div>
+          {upcomingDates.length === 0 ? (
+            <p className="text-ash-500 text-sm">No upcoming play dates scheduled.</p>
+          ) : (
+            <ul className="divide-y divide-obsidian-600">
+              {upcomingDates.map((pd) => (
+                <PlayDateRow key={pd.id} pd={pd} />
+              ))}
+            </ul>
+          )}
+        </Panel>
 
-      {/* Recent match results */}
-      <Panel variant="base" padding="md">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="heading-fantasy text-ash-100 text-base">Recent Matches</h2>
-          <Link href={`/players/view?uid=${userId}`}>
-            <Button size="sm" variant="ghost" className="gap-1">
-              Profile <ArrowRight className="h-3 w-3" />
-            </Button>
-          </Link>
-        </div>
-        {recentMatches.length === 0 && completedChallenges.length === 0 ? (
-          <p className="text-ash-500 text-sm">
-            No verified matches yet. Play and verify scores to see results here.
-          </p>
-        ) : (
-          <ul className="divide-y divide-obsidian-600">
-            {recentMatches.map((m) => (
-              <MatchRow key={m.id} match={m} playerId={userId} eloDelta={eloBySourceId.get(m.id)} />
-            ))}
-            {completedChallenges.map((c) => (
-              <ChallengeMatchRow key={c.id} challenge={c} userId={userId} eloDelta={eloBySourceId.get(c.id)} />
-            ))}
-          </ul>
-        )}
-      </Panel>
+        {/* Recent match results */}
+        <Panel variant="base" padding="md">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="heading-fantasy text-ash-100 text-base">Recent Matches</h2>
+            <Link href={`/players/view?uid=${userId}`}>
+              <Button size="sm" variant="ghost" className="gap-1">
+                Profile <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
+          </div>
+          {recentMatches.length === 0 && completedChallenges.length === 0 ? (
+            <p className="text-ash-500 text-sm">
+              No verified matches yet. Play and verify scores to see results here.
+            </p>
+          ) : (
+            <ul className="divide-y divide-obsidian-600">
+              {recentMatches.map((m) => (
+                <MatchRow key={m.id} match={m} playerId={userId} eloDelta={eloBySourceId.get(m.id)} />
+              ))}
+              {completedChallenges.map((c) => (
+                <ChallengeMatchRow key={c.id} challenge={c} userId={userId} eloDelta={eloBySourceId.get(c.id)} />
+              ))}
+            </ul>
+          )}
+        </Panel>
 
-      {/* Challenges inbox */}
-      <ChallengesPanel userId={userId} displayName={profile?.displayName ?? "Player"} />
+        {/* Challenges inbox */}
+        <ChallengesPanel userId={userId} displayName={profile?.displayName ?? "Player"} />
 
-      {/* Player activity feed */}
-      <Panel variant="base" padding="md">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="heading-fantasy text-ash-100 text-base flex items-center gap-2">
-            <Users className="h-4 w-4 text-rune-400" /> Following Activity
-          </h2>
-          <Link href="/players">
-            <button className="text-[11px] text-ash-500 hover:text-ash-300 transition-colors flex items-center gap-0.5">
-              Find players <ArrowRight className="h-3 w-3" />
-            </button>
-          </Link>
-        </div>
-        {playerActivity.length === 0 ? (
-          <p className="text-ash-500 text-sm">
-            Follow players to see their match results here.
-          </p>
-        ) : (
-          <ul className="divide-y divide-obsidian-700">
-            {playerActivity.map((item) => (
-              <ActivityRow key={item.id} item={item} />
-            ))}
-          </ul>
-        )}
-      </Panel>
+        {/* Player activity feed */}
+        <Panel variant="base" padding="md">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="heading-fantasy text-ash-100 text-base flex items-center gap-2">
+              <Users className="h-4 w-4 text-rune-400" /> Following Activity
+            </h2>
+            <Link href="/players">
+              <button className="text-[11px] text-ash-500 hover:text-ash-300 transition-colors flex items-center gap-0.5">
+                Find players <ArrowRight className="h-3 w-3" />
+              </button>
+            </Link>
+          </div>
+          {playerActivity.length === 0 ? (
+            <p className="text-ash-500 text-sm">
+              Follow players to see their match results here.
+            </p>
+          ) : (
+            <ul className="divide-y divide-obsidian-700">
+              {playerActivity.map((item) => (
+                <ActivityRow key={item.id} item={item} />
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
 
       {/* Club feed */}
       {feedPosts.length > 0 && (

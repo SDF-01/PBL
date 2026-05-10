@@ -76,7 +76,7 @@ export default function ClubsPage() {
 
   return (
     <ResponsiveShell desktopChromeless>
-      <main className="container py-6 md:py-10 space-y-8 max-w-5xl">
+      <main className="container py-6 md:py-10 space-y-8">
 
         {/* ── Header ── */}
         <div className="space-y-1">
@@ -155,7 +155,7 @@ export default function ClubsPage() {
 
         {/* ── Club grid ── */}
         {loading ? (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[...Array(6)].map((_, i) => (
               <Panel key={i} variant="base" padding="lg" className="animate-pulse space-y-3">
                 <div className="h-4 bg-obsidian-600 rounded w-2/3" />
@@ -184,7 +184,7 @@ export default function ClubsPage() {
             )}
           </Panel>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((club) => (
               <ClubCard key={club.id} club={club} />
             ))}

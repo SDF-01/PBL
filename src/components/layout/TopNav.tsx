@@ -12,13 +12,12 @@ import { Building2, ShieldCheck, UserSearch } from "lucide-react";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { useRoleView } from "@/lib/role-view-context";
 
-const NAV = [
+const DISCOVERY_NAV = [
   { href: "/clubs",         label: "Clubs" },
   { href: "/courts",        label: "Courts" },
   { href: "/games",         label: "Games" },
   { href: "/players",       label: "Leaderboard" },
   { href: "/tournaments",   label: "Tournaments" },
-  { href: "/dashboard",     label: "Dashboard" },
 ] as const;
 
 export function TopNav() {
@@ -51,7 +50,27 @@ export function TopNav() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-1 text-sm">
-          {NAV.map((n) => (
+          {user && (
+            <>
+              <Link
+                href="/dashboard"
+                className="px-3 py-1.5 text-ash-300 hover:text-ash-100 hover:bg-obsidian-600 rounded-pixel transition-colors"
+              >
+                Dashboard
+              </Link>
+              {hasClubAccess && (
+                <Link
+                  href="/clubs/my"
+                  className="px-3 py-1.5 text-ash-300 hover:text-ash-100 hover:bg-obsidian-600 rounded-pixel transition-colors flex items-center gap-1.5"
+                >
+                  <Building2 className="h-3.5 w-3.5 text-ember-400" />
+                  My Clubs
+                </Link>
+              )}
+              <span aria-hidden className="mx-2 h-5 w-px bg-obsidian-500" />
+            </>
+          )}
+          {DISCOVERY_NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
@@ -60,15 +79,6 @@ export function TopNav() {
               {n.label}
             </Link>
           ))}
-          {user && hasClubAccess && (
-            <Link
-              href="/clubs/my"
-              className="px-3 py-1.5 text-ash-300 hover:text-ash-100 hover:bg-obsidian-600 rounded-pixel transition-colors flex items-center gap-1.5"
-            >
-              <Building2 className="h-3.5 w-3.5 text-ember-400" />
-              My Clubs
-            </Link>
-          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">

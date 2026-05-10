@@ -78,7 +78,7 @@ export default function CourtsPage() {
 
   return (
     <ResponsiveShell desktopChromeless>
-      <main className="container py-6 md:py-10 space-y-6 max-w-6xl">
+      <main className="container py-6 md:py-10 space-y-6">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -211,7 +211,7 @@ export default function CourtsPage() {
             </button>
           </Panel>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {displayed.map((court) => (
               <CourtCard key={court.id} court={court} />
             ))}

@@ -54,8 +54,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-[calc(100vh-3.5rem)]">
         <AppSidebar />
         <main className="flex-1 p-6 md:p-8">
-          <BackToHome container={false} className="!pt-0" />
-          {children}
+          <div className="mx-auto w-full max-w-screen-2xl">
+            <BackToHome container={false} className="!pt-0" />
+            {children}
+          </div>
         </main>
       </div>
       <PushNotificationBanner />

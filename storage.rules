@@ -11,12 +11,26 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*');
     }
 
-    // Club logos (approved clubs use clubId path; pending use pending/{uid} path).
-    // Write is allowed for any authenticated user — director-only access is
-    // enforced at the application level (canManage check in ClubManageClient).
-    match /clubs/{rest=**} {
+    // Pending club logos — uploaded during club creation before a clubId exists.
+    // The {uid} path segment must match the uploader's auth uid.
+    match /clubs/pending/{uid}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Approved club logos — only site admins or club directors may write.
+    // Per-club scoping (CLUB_ADMIN writes only their own club) is enforced at
+    // the application level via canManage in ClubManageClient. The rule below
+    // requires elevated role rather than just authentication so a casual
+    // signed-in player cannot overwrite any club's logo.
+    match /clubs/{clubId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && (request.auth.token.role == "SITE_ADMIN"
+                       || request.auth.token.role == "CLUB_ADMIN")
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }

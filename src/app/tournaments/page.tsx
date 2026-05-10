@@ -93,7 +93,7 @@ export default function TournamentsPage() {
             )}
           </Panel>
         ) : (
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
             {tournaments.map((t) => (
               <Panel key={t.id} variant="inventory" padding="lg" className="group">
                 <div className="flex items-start justify-between gap-3 mb-3">

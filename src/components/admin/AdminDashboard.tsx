@@ -100,7 +100,7 @@ export function AdminDashboard(_props: AdminDashboardProps) {
   }
 
   return (
-    <div className="w-full max-w-[920px] space-y-8">
+    <div className="w-full space-y-8">
       <header>
         <RuneChip tone="ember" className="mb-3 inline-flex items-center gap-1">
           <ShieldCheck className="h-3 w-3" />
@@ -129,7 +129,7 @@ export function AdminDashboard(_props: AdminDashboardProps) {
             Platform Overview
           </h2>
           {statsLoading ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {Array.from({ length: 5 }).map((_, index) => (
                 <Panel
                   key={index}
@@ -140,7 +140,7 @@ export function AdminDashboard(_props: AdminDashboardProps) {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <StatCard
                 label="Pending Clubs"
                 value={stats?.pendingClubs ?? 0}
@@ -185,7 +185,7 @@ export function AdminDashboard(_props: AdminDashboardProps) {
         <h2 className="heading-fantasy mb-3 text-xs uppercase tracking-[0.2em] text-ash-500">
           Quick Actions
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {isSiteAdmin && (
             <>
               <ActionCard
