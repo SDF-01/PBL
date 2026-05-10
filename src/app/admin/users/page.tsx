@@ -73,12 +73,7 @@ export default function AdminUsersPage() {
     if (!pending || !adminUser) return;
     setSaving(true);
     try {
-      await setUserRoleWithAudit(
-        pending.user.uid,
-        pending.newRole,
-        pending.user.role ?? "PLAYER",
-        adminUser.uid,
-      );
+      await setUserRoleWithAudit(pending.user.uid, pending.newRole);
       setUsers((prev) =>
         prev.map((u) => (u.uid === pending.user.uid ? { ...u, role: pending.newRole } : u)),
       );

@@ -188,13 +188,13 @@ function PlayerView() {
     SITE_ADMIN: "Site Admin",
     CLUB_ADMIN: "Club Director",
     LEAGUE_COORDINATOR: "League Coordinator",
-    PLAYER: "",
+    PLAYER: "Player",
   };
-  const roleTone: Record<UserRole, "ember" | "gold" | "spectral" | "neutral"> = {
+  const roleTone: Record<UserRole, "ember" | "gold" | "spectral" | "rune"> = {
     SITE_ADMIN: "ember",
     CLUB_ADMIN: "gold",
     LEAGUE_COORDINATOR: "spectral",
-    PLAYER: "neutral",
+    PLAYER: "rune",
   };
   const winRate =
     profile.stats.matches > 0
@@ -268,7 +268,7 @@ function PlayerView() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <RuneChip tone="ember">{band}</RuneChip>
-                {role && role !== "PLAYER" && (
+                {role && (
                   <RuneChip tone={roleTone[role]}>{roleLabel[role]}</RuneChip>
                 )}
                 {profile.dominantHand && (

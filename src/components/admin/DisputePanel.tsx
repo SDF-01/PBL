@@ -36,7 +36,7 @@ export function DisputePanel() {
     if (!user) return;
     setResolving(match.id);
     try {
-      await verifyLadderMatchScore(match.id, user.uid);
+      await verifyLadderMatchScore(match.id);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to accept score");
@@ -49,7 +49,7 @@ export function DisputePanel() {
     if (!user) return;
     setResolving(match.id);
     try {
-      await adminAssignMatchResult(match.id, scoreA, scoreB, user.uid);
+      await adminAssignMatchResult(match.id, scoreA, scoreB);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to override score");

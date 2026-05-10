@@ -1873,7 +1873,7 @@ function CoordinatorsSection({ clubId, clubName, userId, userDisplayName, toast 
       const found = await getUserByEmail(email.trim());
       if (!found) { toast(`No account found for ${email.trim()}.`, "error"); return; }
       if (coordinators.some((c) => c.userId === found.uid)) { toast(`${found.displayName} is already a coordinator.`, "error"); return; }
-      await assignRole(found.uid, "LeagueCoordinator", clubId, null, userId);
+      await assignRole(found.uid, "LeagueCoordinator", clubId, null);
       setCoordinators((prev) => [...prev, { userRoleId: `pending-${Date.now()}`, userId: found.uid, displayName: found.displayName, assignedAt: new Date().toISOString() }]);
       createClubPost({
         clubId, clubName, authorId: userId, authorName: userDisplayName,

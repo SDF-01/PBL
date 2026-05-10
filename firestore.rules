@@ -2,11 +2,17 @@ rules_version = '2';
 
 // Pickleball League - Firestore security rules.
 //
-// Role checks fall back to the Firestore users/{uid}.role field when no
-// Firebase Auth custom claim is set. The isSiteAdmin() helper has always had
-// this fallback; isClubDirector() and isLeagueCoordinator() now do too so
-// Club Directors and Coordinators can write leagues, venues, and play dates
-// from the client without requiring custom claims to be deployed first.
+// Authority comes exclusively from the Firebase Auth custom claim
+// `request.auth.token.role`. The legacy users/{uid}.role field is no longer
+// trusted for authorization — it now exists only as a UI cache mirrored by
+// the role-mutation Cloud Functions (assignRole, deactivateUserRole,
+// setUserGlobalRole). Custom claims are provisioned by those functions or
+// by scripts/grant-site-admin.ts.
+//
+// IMPORTANT: deploying these rules requires that at least one user has the
+// SITE_ADMIN custom claim already set. Run scripts/grant-site-admin.ts on
+// your own account FIRST, then re-authenticate so your token carries the
+// claim. Otherwise admin write paths will be unreachable.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -19,24 +25,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function userRole() {
-      // Read the Firestore role field — used as fallback when custom claims absent.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
-
     function isSiteAdmin() {
-      return isSignedIn() && (
-        request.auth.token.role == "SITE_ADMIN" ||
-        userRole() == "SITE_ADMIN"
-      );
+      return isSignedIn() && request.auth.token.role == "SITE_ADMIN";
     }
 
     function isClubDirector() {
       return isSignedIn() && (
         request.auth.token.role == "SITE_ADMIN" ||
-        request.auth.token.role == "CLUB_ADMIN" ||
-        userRole() == "SITE_ADMIN" ||
-        userRole() == "CLUB_ADMIN"
+        request.auth.token.role == "CLUB_ADMIN"
       );
     }
 
@@ -44,10 +40,7 @@ service cloud.firestore {
       return isSignedIn() && (
         request.auth.token.role == "SITE_ADMIN" ||
         request.auth.token.role == "CLUB_ADMIN" ||
-        request.auth.token.role == "LEAGUE_COORDINATOR" ||
-        userRole() == "SITE_ADMIN" ||
-        userRole() == "CLUB_ADMIN" ||
-        userRole() == "LEAGUE_COORDINATOR"
+        request.auth.token.role == "LEAGUE_COORDINATOR"
       );
     }
 
@@ -229,15 +222,10 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if true;
       allow create: if isSafeUserCreate(userId) || isAdmin();
-      allow update: if isSafeUserUpdate(userId)
-        || isAdmin()
-        // Club directors may promote a PLAYER to LEAGUE_COORDINATOR so that
-        // the assigned coordinator is recognised by Firestore security rules
-        // when they perform writes (isLeagueCoordinator() checks userRole()).
-        || (isClubDirector()
-          && hasOnlyChanged(["role", "updatedAt"])
-          && request.resource.data.role == "LEAGUE_COORDINATOR"
-          && (resource.data.role == "PLAYER" || resource.data.role == "LEAGUE_COORDINATOR"));
+      // users.role is mirrored by Cloud Functions (which run as Admin SDK
+      // and bypass these rules). Clients may only update their own
+      // non-privileged profile fields.
+      allow update: if isSafeUserUpdate(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -325,35 +313,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ladderSessions / ladderCourts / ladderMatches / standingsSnapshots
+    // are now write-only via Cloud Functions (Admin SDK bypasses rules).
+    // No direct client writes — even for staff — so a misbehaving client
+    // cannot bypass the transactional/audit guarantees of the callables.
+    //
+    // Score submission, verification, dispute, and admin override flows
+    // route through submitMatchScore / verifyMatchScore / disputeMatch /
+    // adminAssignMatchResult (functions/src/commands).
+
     match /ladderSessions/{id} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if false;
     }
 
     match /ladderCourts/{id} {
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if false;
     }
 
     match /ladderMatches/{id} {
       allow read: if true;
-      allow create: if isStaff();
-      allow delete: if isStaff();
-      allow update: if isStaff()
-        // Players can submit their own score as a match participant
-        || (isSignedIn()
-            && (request.auth.uid in resource.data.sideA || request.auth.uid in resource.data.sideB)
-            && hasOnlyChanged(["scoreA", "scoreB", "submittedBy", "submittedAt"]))
-        // Players can verify an opposing team's submission
-        || (isSignedIn()
-            && (request.auth.uid in resource.data.sideA || request.auth.uid in resource.data.sideB)
-            && hasOnlyChanged(["verifiedBy", "verifiedAt", "status"])
-            && request.resource.data.status == "VERIFIED")
-        // Players can dispute a score as a match participant
-        || (isSignedIn()
-            && (request.auth.uid in resource.data.sideA || request.auth.uid in resource.data.sideB)
-            && hasOnlyChanged(["status", "disputedBy", "disputedAt", "disputeReason"])
-            && request.resource.data.status == "DISPUTED");
+      allow write: if false;
     }
 
     match /checkIns/{id} {
@@ -365,11 +346,15 @@ service cloud.firestore {
     }
 
     match /standingsSnapshots/{id} {
+      // Written exclusively by the finalizeSession Cloud Function.
       allow read: if true;
-      allow write: if isStaff();
+      allow write: if false;
     }
 
     match /audits/{id} {
+      // Audit log is staff-write-only; admin-read-only. Player-driven flows
+      // that need audit coverage should route through a Cloud Function (the
+      // Admin SDK bypasses these rules and writes the audit row server-side).
       allow read: if isAdmin();
       // Audit records are immutable and must only be created by trusted backend/admin.
       allow create: if isAdmin();

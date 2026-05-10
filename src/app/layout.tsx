@@ -40,6 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable} ${pixel.variable} ${cinzel.variable}`}>
       <body className="antialiased">
+        {/* App Check must mount before any Firebase product call so the
+            first request from this session carries an attestation token. */}
+        <AppCheckLoader />
         <DeviceProvider>
           <AuthProvider>
             <ToastProvider>

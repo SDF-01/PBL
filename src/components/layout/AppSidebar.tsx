@@ -11,6 +11,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { useRoleView } from "@/lib/role-view-context";
+import { useUnreadNotifications } from "@/lib/notifications/useUnreadNotifications";
 
 const ITEMS = [
   { href: "/dashboard",         label: "Overview",    icon: LayoutDashboard },
@@ -32,6 +33,7 @@ export function AppSidebar() {
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
   const { isStaffView, isAdminView } = useRoleView();
   const isStaff = !permLoading && (isSiteAdmin || clubDirectorFor.length > 0) && isStaffView;
+  const unread = useUnreadNotifications();
 
   const [collapsed, setCollapsed] = useState(false);
 
