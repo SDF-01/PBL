@@ -67,3 +67,25 @@ export async function getUserLeagueMembership(
   const d = snap.docs[0]!;
   return { id: d.id, status: d.data().status as string };
 }
+
+/**
+ * Return every active league a user is a member of, with the league docs
+ * resolved. Used by the /leagues index page.
+ */
+export async function listUserLeagues(userId: string): Promise<LeagueDoc[]> {
+  const memberSnap = await getDocs(
+    query(
+      collection(db(), COLLECTIONS.leagueMemberships),
+      where("userId", "==", userId),
+      where("status", "==", "active"),
+    ),
+  );
+  if (memberSnap.empty) return [];
+  const leagueIds = memberSnap.docs
+    .map((d) => (d.data().leagueId as string) ?? null)
+    .filter((id): id is string => Boolean(id));
+  const leagues = await Promise.all(
+    leagueIds.map((id) => getLeague(id).catch(() => null)),
+  );
+  return leagues.filter((l): l is LeagueDoc => l !== null);
+}
