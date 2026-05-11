@@ -237,15 +237,49 @@ describe("critical Firestore security rules", () => {
     );
   });
 
-  test("custom claim role: CLUB_ADMIN grants club-director power", async () => {
+  test("CLUB_ADMIN can no longer write userRoles directly — must route through assignRole CF", async () => {
+    // Previously CLUB_ADMIN could create any userRoles doc, which allowed a
+    // club director to escalate to SiteAdmin by writing a SiteAdmin row for
+    // themselves and then calling syncMyClaims. The rule now denies all
+    // client writes to userRoles except (1) self-service
+    // ClubCreatorProvisional and (2) SiteAdmin updates/deletes; role
+    // assignment is routed through the assignRole Cloud Function which
+    // enforces per-scope authorization.
     const db = dbFor("director", { role: "CLUB_ADMIN" });
 
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, "userRoles/coord-1"), {
         userId: "coord",
         roleId: "LeagueCoordinator",
         clubId: "club-a",
         leagueId: null,
+        active: true,
+      }),
+    );
+
+    // The privilege-escalation path is also closed: a CLUB_ADMIN cannot
+    // write a SiteAdmin userRoles row.
+    await assertFails(
+      setDoc(doc(db, "userRoles/director-siteadmin"), {
+        userId: "director",
+        roleId: "SiteAdmin",
+        clubId: null,
+        leagueId: null,
+        active: true,
+      }),
+    );
+
+    // ...nor reactivate an existing inactive SiteAdmin row.
+    await seed("userRoles/orphan-siteadmin", {
+      userId: "former-admin",
+      roleId: "SiteAdmin",
+      clubId: null,
+      leagueId: null,
+      active: false,
+    });
+    await assertFails(
+      updateDoc(doc(db, "userRoles/orphan-siteadmin"), {
+        userId: "director",
         active: true,
       }),
     );

@@ -6,7 +6,7 @@ import { collection, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch
 import { db } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import { followClub } from "@/lib/clubs/write";
-import type { RoleKey } from "@/lib/permissions/types";
+import { callAssignRole } from "@/lib/functions/callables";
 
 export interface NewFacilityInput {
   facilityName?: string;
@@ -120,34 +120,30 @@ export async function createLeague(
 
   batch.set(leagueRef, leagueData);
 
-  // Assign coordinator role — use explicitly assigned coordinator if provided, otherwise default to creator
+  // Commit the league (and any inline facility) first. Role assignments are
+  // routed through the assignRole Cloud Function so the userRoles collection
+  // stays write-only via privileged callables (Firestore rules deny direct
+  // userRoles writes for everyone except SiteAdmin and the self-service
+  // provisional path).
+  await batch.commit();
+
   const coordinatorUserId = input.coordinatorId ?? createdBy;
-  const coordinatorRoleRef = doc(collection(database, COLLECTIONS.userRoles));
-  batch.set(coordinatorRoleRef, {
+  await callAssignRole({
     userId: coordinatorUserId,
-    roleId: "LeagueCoordinator" as RoleKey,
+    roleId: "LeagueCoordinator",
     clubId: input.clubId,
     leagueId: leagueRef.id,
-    assignedAt: serverTimestamp(),
-    assignedBy: createdBy,
-    active: true,
   });
 
-  // If creator is not the coordinator, also give creator a coordinator role so they retain access
   if (input.coordinatorId && input.coordinatorId !== createdBy) {
-    const creatorRoleRef = doc(collection(database, COLLECTIONS.userRoles));
-    batch.set(creatorRoleRef, {
+    await callAssignRole({
       userId: createdBy,
-      roleId: "LeagueCoordinator" as RoleKey,
+      roleId: "LeagueCoordinator",
       clubId: input.clubId,
       leagueId: leagueRef.id,
-      assignedAt: serverTimestamp(),
-      assignedBy: createdBy,
-      active: true,
     });
   }
 
-  await batch.commit();
   return leagueRef.id;
 }
 

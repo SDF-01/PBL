@@ -399,9 +399,26 @@ service cloud.firestore {
       // Public read — coordinator listings appear on public club pages; data contains
       // only userId + roleId, not sensitive.
       allow read: if true;
-      // Only admins / club directors can create/modify role assignments.
-      allow create, update, delete: if isAdmin()
-        || isClubDirector();
+
+      // Role mutations must flow through the privileged Cloud Functions
+      // (assignRole, setUserGlobalRole, deactivateUserRole, approveClub,
+      // rejectClub) which run as the Admin SDK and enforce per-scope
+      // authorization plus custom-claim sync. The Admin SDK bypasses these
+      // rules. Two narrow exceptions are kept in-rule:
+      //   (1) Self-service "ClubCreatorProvisional" — any signed-in user may
+      //       grant themselves this provisional role as part of submitting a
+      //       new club for review. It carries no privileges until the club is
+      //       approved by a SiteAdmin.
+      //   (2) SiteAdmin updates/deletes — needed for archive/delete-club
+      //       flows that deactivate club-scoped role rows.
+      allow create: if isAdmin()
+        || (
+          isSignedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.roleId == "ClubCreatorProvisional"
+          && request.resource.data.active == true
+        );
+      allow update, delete: if isAdmin();
     }
 
     match /leagueMemberships/{id} {

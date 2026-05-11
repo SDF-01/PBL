@@ -3,11 +3,14 @@
 export const COLLECTIONS = {
   users: "users",
   clubs: "clubs",
+  leagues: "leagues",
+  seasons: "seasons",
   userRoles: "userRoles",
   roleEvents: "roleEvents",
   notifications: "notifications",
   auditLog: "auditLog",
   // Ladder + match collections
+  playDates: "playDates",
   ladderSessions: "ladderSessions",
   ladderCourts: "ladderCourts",
   ladderMatches: "ladderMatches",

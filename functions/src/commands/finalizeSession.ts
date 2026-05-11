@@ -3,6 +3,7 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireCaller } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
 import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
+import { requireSessionScope } from "../lib/scope";
 import { FinalizeSessionInput } from "../schemas/session";
 
 interface SessionRecord {
@@ -48,6 +49,10 @@ export const finalizeSession = onCall(SECURE_CALLABLE_OPTIONS, async (request) =
   }
   const { sessionId, standingsSnapshot, updatedPlayerStats } = parsed.data;
 
+  // Staff claim is not scope-aware. Re-resolve the session's owning league
+  // and require the caller has a director/coordinator role for that scope.
+  await requireSessionScope(caller.uid, caller.isSiteAdmin, sessionId);
+
   const db = getFirestore();
 
   // Idempotency check + state guard outside the batch (a single read).
@@ -68,6 +73,29 @@ export const finalizeSession = onCall(SECURE_CALLABLE_OPTIONS, async (request) =
       "out-of-range",
       `Cannot finalize: too many players (${playerIds.length}); chunking required.`,
     );
+  }
+
+  // Restrict updatedPlayerStats to players actually assigned to a court in
+  // this session. Otherwise a coordinator could pass arbitrary player IDs in
+  // the patch map and overwrite stats for players outside the session.
+  const courtsSnap = await db
+    .collection(COLLECTIONS.ladderCourts)
+    .where("sessionId", "==", sessionId)
+    .get();
+  const sessionParticipants = new Set<string>();
+  for (const courtDoc of courtsSnap.docs) {
+    const ids = (courtDoc.data() as { playerIds?: string[] }).playerIds;
+    if (Array.isArray(ids)) {
+      for (const id of ids) sessionParticipants.add(id);
+    }
+  }
+  for (const playerId of playerIds) {
+    if (!sessionParticipants.has(playerId)) {
+      throw new HttpsError(
+        "permission-denied",
+        `Player ${playerId} is not part of session ${sessionId}.`,
+      );
+    }
   }
 
   const batch = db.batch();
