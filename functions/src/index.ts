@@ -9,7 +9,7 @@ setGlobalOptions({
 });
 
 export { approveClub } from "./commands/approveClub";
-export { onClubCreated } from "./triggers/onClubCreated";
+export { notifyAdminsOfClubSubmission } from "./commands/notifyAdminsOfClubSubmission";
 export { rejectClub } from "./commands/rejectClub";
 export { assignRole } from "./commands/assignRole";
 export { deactivateUserRole } from "./commands/deactivateUserRole";

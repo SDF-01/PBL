@@ -80,6 +80,17 @@ export interface FinalizeSessionResult {
   status: "finalized" | "already-finalized";
 }
 
+export async function callNotifyAdminsOfClubSubmission(input: {
+  clubId: string;
+  clubName: string;
+}): Promise<void> {
+  const callable = httpsCallable<{ clubId: string; clubName: string }, unknown>(
+    fns(),
+    "notifyAdminsOfClubSubmission",
+  );
+  await callable(input);
+}
+
 export async function callApproveClub(
   input: ApproveClubInput,
 ): Promise<ApproveClubResult> {

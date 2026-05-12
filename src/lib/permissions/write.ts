@@ -19,6 +19,7 @@ import {
   callRejectClub,
   callAssignRole,
   callDeactivateUserRole,
+  callNotifyAdminsOfClubSubmission,
 } from "@/lib/functions/callables";
 import type { CreateClubInput, RoleKey } from "./types";
 
@@ -66,6 +67,12 @@ export async function submitClubCreation(
   });
 
   await batch.commit();
+
+  // Fire-and-forget — notification failure must not break the submission.
+  callNotifyAdminsOfClubSubmission({ clubId: clubRef.id, clubName: input.clubName }).catch(
+    () => {},
+  );
+
   return clubRef.id;
 }
 
