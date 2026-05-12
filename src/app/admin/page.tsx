@@ -24,6 +24,7 @@ import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/lib/permissions/usePermissions";
+import { useRoleView } from "@/lib/role-view-context";
 import { useToast } from "@/lib/toast-context";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { getAdminStats, listRecentRoleEvents, type AdminStats } from "@/lib/admin/repo";
@@ -94,8 +95,10 @@ function StatCard({ label, value, icon, tone = "text-ash-400", href, badge }: St
 
 export default function AdminHubPage() {
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
+  const { isAdminView, isStaffView } = useRoleView();
   const { toast } = useToast();
-  const isStaff = isSiteAdmin || clubDirectorFor.length > 0;
+  const isStaff = (isSiteAdmin || clubDirectorFor.length > 0) && isStaffView;
+  const isAdmin = isSiteAdmin && isAdminView;
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentEvents, setRecentEvents] = useState<RoleEventDoc[]>([]);
@@ -106,7 +109,7 @@ export default function AdminHubPage() {
   const [confirmAnnounce, setConfirmAnnounce] = useState(false);
 
   useEffect(() => {
-    if (permLoading || !isSiteAdmin || !isFirebaseConfigured()) {
+    if (permLoading || !isAdmin || !isFirebaseConfigured()) {
       setStatsLoading(false);
       return;
     }
@@ -181,7 +184,7 @@ export default function AdminHubPage() {
         <div>
           <RuneChip tone="ember" className="mb-2 inline-flex items-center gap-1">
             <ShieldCheck className="h-3 w-3" />
-            {isSiteAdmin ? "Site Admin" : "Staff"}
+            {isAdmin ? "Site Admin" : "Staff"}
           </RuneChip>
           <h1 className="heading-fantasy text-display-md text-ash-100">Admin Control Panel</h1>
           <p className="text-ash-400 text-sm mt-1">
@@ -190,7 +193,7 @@ export default function AdminHubPage() {
         </div>
 
         {/* Stats grid — site admins only */}
-        {isSiteAdmin && (
+        {isAdmin && (
           <section>
             <h2 className="heading-fantasy text-xs uppercase tracking-[0.2em] text-ash-500 mb-3">
               Platform Overview
@@ -249,7 +252,7 @@ export default function AdminHubPage() {
             Quick Actions
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {isSiteAdmin && (
+            {isAdmin && (
               <>
                 <Link href="/admin/clubs">
                   <Panel
@@ -424,7 +427,7 @@ export default function AdminHubPage() {
         </section>
 
         {/* Platform announcement — site admins only */}
-        {isSiteAdmin && (
+        {isAdmin && (
           <section>
             <h2 className="heading-fantasy text-xs uppercase tracking-[0.2em] text-ash-500 mb-3 flex items-center gap-2">
               <Megaphone className="h-3.5 w-3.5" /> Platform Announcement
@@ -464,7 +467,7 @@ export default function AdminHubPage() {
         )}
 
         {/* Recent actions — site admins only */}
-        {isSiteAdmin && !statsLoading && recentEvents.length > 0 && (
+        {isAdmin && !statsLoading && recentEvents.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="heading-fantasy text-xs uppercase tracking-[0.2em] text-ash-500">

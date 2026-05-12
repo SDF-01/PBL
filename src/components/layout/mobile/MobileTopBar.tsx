@@ -7,7 +7,6 @@ import { SignInButton } from "@/components/ui/SignInButton";
 import { ModeToggle } from "@/components/ui/ModeToggle";
 import { Bell, UserSearch } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { useAdminMode } from "@/lib/admin-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { useRoleView } from "@/lib/role-view-context";
 import { RuneChip } from "@/components/ui/RuneChip";
@@ -15,16 +14,13 @@ import { subscribeNotifications } from "@/lib/firestore/repo";
 
 export function MobileTopBar() {
   const { user } = useAuth();
-  const { canAccessAdmin } = useAdminMode();
-  const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, loading } = usePermissions();
-  const { isStaffView } = useRoleView();
+  const { loading } = usePermissions();
+  const { isStaffView, activeRole, options } = useRoleView();
   const [unread, setUnread] = useState(0);
 
-  const roleChip = !loading && user
-    ? isSiteAdmin && isStaffView ? { label: "Admin", tone: "ember" as const }
-    : clubDirectorFor.length > 0 && isStaffView ? { label: "Director", tone: "rune" as const }
-    : coordinatorClubIds.length > 0 && isStaffView ? { label: "Coord", tone: "rune" as const }
-    : null
+  const chipTone = activeRole.id === "SiteAdmin" ? ("ember" as const) : ("rune" as const);
+  const roleChip = !loading && user && isStaffView
+    ? { label: activeRole.label, tone: chipTone }
     : null;
 
   useEffect(() => {
@@ -53,7 +49,7 @@ export function MobileTopBar() {
           )}
         </Link>
         <div className="flex items-center gap-2">
-          {canAccessAdmin && <ModeToggle />}
+          {options.length > 1 && <ModeToggle />}
           <Link
             href="/players/search"
             aria-label="Find a player"

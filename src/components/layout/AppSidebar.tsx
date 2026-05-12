@@ -101,7 +101,7 @@ export function AppSidebar() {
       </>)}
 
       {isStaff && section("Admin", "text-ember-600", <>
-        {navLink("/admin", "Admin Console", ShieldCheck)}
+        {isAdminView && navLink("/admin", "Admin Console", ShieldCheck)}
         {navLink("/leagues/create", "New League", ListChecks)}
         {isAdminView && navLink("/admin/clubs", "Club Approvals", Building2)}
         {isAdminView && navLink("/admin/users", "Manage Users", UserCog)}
