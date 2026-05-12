@@ -1,34 +1,29 @@
-/**
- * Admin/Player mode toggle component
- * Allows users with dual roles to switch modes quickly
- */
-
 "use client";
 
-import { useAdminMode } from "@/lib/admin-context";
+import { useRoleView } from "@/lib/role-view-context";
 import { Button } from "./Button";
 import { Shield, User } from "lucide-react";
 
 export function ModeToggle() {
-  const { isAdminMode, toggleAdminMode } = useAdminMode();
+  const { isStaffView, togglePlayerMode } = useRoleView();
 
   return (
     <Button
-      onClick={toggleAdminMode}
-      variant={isAdminMode ? "ghost" : "outline"}
+      onClick={togglePlayerMode}
+      variant={isStaffView ? "ghost" : "outline"}
       size="sm"
       className="gap-2"
-      aria-label={isAdminMode ? "Switch to Player Mode" : "Switch to Admin Mode"}
+      aria-label={isStaffView ? "Switch to Player Mode" : "Switch to Staff Mode"}
     >
-      {isAdminMode ? (
-        <>
-          <Shield className="w-4 h-4" />
-          <span className="hidden sm:inline">Admin Mode</span>
-        </>
-      ) : (
+      {isStaffView ? (
         <>
           <User className="w-4 h-4" />
           <span className="hidden sm:inline">Player Mode</span>
+        </>
+      ) : (
+        <>
+          <Shield className="w-4 h-4" />
+          <span className="hidden sm:inline">Staff Mode</span>
         </>
       )}
     </Button>

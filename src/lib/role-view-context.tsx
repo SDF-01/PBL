@@ -15,6 +15,7 @@ interface RoleViewCtx {
   options: RoleViewOption[];
   activeRole: RoleViewOption;
   setActiveRole: (id: RoleViewId) => void;
+  togglePlayerMode: () => void;
   isAdminView: boolean;
   isStaffView: boolean;
 }
@@ -25,6 +26,7 @@ const Ctx = createContext<RoleViewCtx>({
   options: [DEFAULT],
   activeRole: DEFAULT,
   setActiveRole: () => {},
+  togglePlayerMode: () => {},
   isAdminView: false,
   isStaffView: false,
 });
@@ -46,16 +48,17 @@ export function RoleViewProvider({ children }: { children: ReactNode }) {
     { id: "Player", label: "Player", tone: "neutral" },
   ];
 
-  // Once permissions resolve, restore saved role or auto-select the highest privilege.
-  // Never restore "Player" if the user now has elevated roles — that would hide
-  // the Admin section for users who previously visited without a role assigned.
+  // Once permissions resolve, restore the saved role from localStorage.
+  // If no saved role exists, auto-select the highest privilege so new staff
+  // accounts don't land in player view unexpectedly. An explicit "Player"
+  // selection is always respected — the user consciously chose that view.
   useEffect(() => {
     if (loading) return;
     const stored =
       typeof window !== "undefined"
         ? (localStorage.getItem("roleView") as RoleViewId | null)
         : null;
-    const restorable = stored && stored !== "Player" && options.some((o) => o.id === stored);
+    const restorable = stored && options.some((o) => o.id === stored);
     const highestRole = options.find((o) => o.id !== "Player") ?? options[0];
     setActiveId(restorable ? (stored as RoleViewId) : (highestRole?.id ?? "Player"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,6 +69,15 @@ export function RoleViewProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") localStorage.setItem("roleView", id);
   }
 
+  function togglePlayerMode() {
+    if (activeId === "Player") {
+      const highest = options.find((o) => o.id !== "Player");
+      if (highest) setActiveRole(highest.id);
+    } else {
+      setActiveRole("Player");
+    }
+  }
+
   const activeRole = options.find((o) => o.id === activeId) ?? options[0] ?? DEFAULT;
 
   return (
@@ -74,6 +86,7 @@ export function RoleViewProvider({ children }: { children: ReactNode }) {
         options,
         activeRole,
         setActiveRole,
+        togglePlayerMode,
         isAdminView: activeId === "SiteAdmin",
         isStaffView: activeId !== "Player",
       }}

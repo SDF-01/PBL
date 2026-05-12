@@ -5,7 +5,6 @@ import { CrestLogo } from "@/components/brand/CrestLogo";
 import { Button } from "@/components/ui/Button";
 import { SignInButton } from "@/components/ui/SignInButton";
 import { ModeToggle } from "@/components/ui/ModeToggle";
-import { useAdminMode } from "@/lib/admin-context";
 import { useAuth } from "@/lib/auth-context";
 import { usePermissions } from "@/lib/permissions/usePermissions";
 import { Building2, ShieldCheck, UserSearch } from "lucide-react";
@@ -21,16 +20,13 @@ const DISCOVERY_NAV = [
 ] as const;
 
 export function TopNav() {
-  const { canAccessAdmin } = useAdminMode();
   const { user } = useAuth();
-  const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, provisionalClubs, loading } = usePermissions();
-  const { isStaffView } = useRoleView();
+  const { provisionalClubs, clubDirectorFor, coordinatorClubIds, loading } = usePermissions();
+  const { isStaffView, isAdminView, activeRole, options } = useRoleView();
 
-  const roleChip = !loading && user
-    ? isSiteAdmin && isStaffView ? { label: "Site Admin", tone: "ember" as const }
-    : clubDirectorFor.length > 0 && isStaffView ? { label: "Club Director", tone: "rune" as const }
-    : coordinatorClubIds.length > 0 && isStaffView ? { label: "Coordinator", tone: "rune" as const }
-    : null
+  const chipTone = activeRole.id === "SiteAdmin" ? ("ember" as const) : ("rune" as const);
+  const roleChip = !loading && user && isStaffView
+    ? { label: activeRole.label, tone: chipTone }
     : null;
 
   const hasClubAccess =
@@ -94,8 +90,8 @@ export function TopNav() {
           >
             <UserSearch className="h-4 w-4" />
           </Link>
-          {canAccessAdmin && <ModeToggle />}
-          {isSiteAdmin && (
+          {options.length > 1 && <ModeToggle />}
+          {isAdminView && (
             <Link href="/admin">
               <Button variant="outline" size="sm" className="border-ember-500/50 text-ember-400 hover:bg-ember-500/10 hover:text-ember-300">
                 <ShieldCheck className="h-3.5 w-3.5" />

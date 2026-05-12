@@ -16,7 +16,7 @@ export function MobileTabBar() {
   const pathname = usePathname() ?? "/";
   const { user } = useAuth();
   const { isSiteAdmin, clubDirectorFor, coordinatorClubIds, loading } = usePermissions();
-  const { isStaffView } = useRoleView();
+  const { isStaffView, isAdminView } = useRoleView();
 
   const homeHref = user ? `/players/view?uid=${user.uid}` : "/";
 
@@ -32,11 +32,11 @@ export function MobileTabBar() {
     (clubDirectorFor.length > 0 || coordinatorClubIds.length > 0) &&
     isStaffView;
 
-  // Site admin in staff view → Admin as 5th tab
+  // Admin view → Admin as 5th tab
   // Club director / coordinator in staff view → Clubs (my) as 5th tab
   // Everyone else → Clubs (browse) as 5th tab
   const fifthTab =
-    isSiteAdmin && isStaffView
+    isAdminView
       ? ADMIN_TAB
       : isClubStaff
         ? CLUBS_STAFF_TAB

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDevice } from "@/lib/device";
-import { useAdminMode } from "@/lib/admin-context";
+import { useRoleView } from "@/lib/role-view-context";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { Button } from "@/components/ui/Button";
@@ -36,7 +36,7 @@ interface Stats {
 }
 
 export default function DashboardPage() {
-  const { isAdminMode } = useAdminMode();
+  const { isStaffView: isAdminMode } = useRoleView();
   const { isMobile } = useDevice();
   const { user } = useAuth();
   const router = useRouter();
