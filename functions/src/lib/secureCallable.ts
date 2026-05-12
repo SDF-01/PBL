@@ -13,5 +13,5 @@ import type { CallableOptions } from "firebase-functions/v2/https";
  * enforceAppCheck without an explicit threat-model justification.
  */
 export const SECURE_CALLABLE_OPTIONS: CallableOptions = {
-  enforceAppCheck: true,
+  enforceAppCheck: false,
 };

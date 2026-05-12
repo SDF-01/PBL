@@ -12,6 +12,7 @@ import type { ClubDoc } from "@/lib/permissions/types";
 
 interface ClubApprovalQueueProps {
   clubs: ClubDoc[];
+  submitterNames?: Record<string, string>;
   onApproved?: (clubId: string) => void;
   onRejected?: (clubId: string) => void;
 }
@@ -27,6 +28,7 @@ function formatDate(ts: unknown): string {
 
 export function ClubApprovalQueue({
   clubs,
+  submitterNames = {},
   onApproved,
   onRejected,
 }: ClubApprovalQueueProps) {
@@ -123,9 +125,9 @@ export function ClubApprovalQueue({
                     <Calendar className="h-3 w-3 shrink-0" />
                     Submitted {formatDate(club.createdAt)}
                   </span>
-                  <span className="flex items-center gap-1 font-mono text-ash-500">
+                  <span className="flex items-center gap-1 text-ash-500">
                     <User className="h-3 w-3 shrink-0" />
-                    {club.createdBy}
+                    {submitterNames[club.createdBy] ?? club.createdBy}
                   </span>
                 </div>
 

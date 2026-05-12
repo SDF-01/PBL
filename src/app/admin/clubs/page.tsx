@@ -2,18 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { ShieldAlert } from "lucide-react";
+import { getDoc, doc } from "firebase/firestore";
 import { ClubApprovalQueue } from "@/components/admin/ClubApprovalQueue";
 import { ResponsiveShell } from "@/components/layout/ResponsiveShell";
 import { Panel } from "@/components/ui/Panel";
 import { RuneChip } from "@/components/ui/RuneChip";
 import { listPendingClubs } from "@/lib/clubs/repo";
 import { usePermissions } from "@/lib/permissions/usePermissions";
-import { isFirebaseConfigured } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
+import { COLLECTIONS } from "@/lib/firestore/collections";
 import type { ClubDoc } from "@/lib/permissions/types";
+import type { UserProfile } from "@/lib/firestore/types";
 
 export default function AdminClubsPage() {
   const { isSiteAdmin, loading: permLoading } = usePermissions();
   const [pendingClubs, setPendingClubs] = useState<ClubDoc[]>([]);
+  const [submitterNames, setSubmitterNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,7 +26,19 @@ export default function AdminClubsPage() {
       return;
     }
     listPendingClubs()
-      .then(setPendingClubs)
+      .then(async (clubs) => {
+        setPendingClubs(clubs);
+        const uids = [...new Set(clubs.map((c) => c.createdBy))];
+        const snaps = await Promise.all(
+          uids.map((uid) => getDoc(doc(db(), COLLECTIONS.users, uid))),
+        );
+        const names: Record<string, string> = {};
+        snaps.forEach((snap, i) => {
+          const data = snap.exists() ? (snap.data() as UserProfile) : null;
+          names[uids[i]!] = data?.displayName ?? data?.email ?? uids[i]!;
+        });
+        setSubmitterNames(names);
+      })
       .finally(() => setLoading(false));
   }, [isSiteAdmin, permLoading]);
 
@@ -77,6 +93,7 @@ export default function AdminClubsPage() {
 
         <ClubApprovalQueue
           clubs={pendingClubs}
+          submitterNames={submitterNames}
           onApproved={(id) => setPendingClubs((prev) => prev.filter((c) => c.id !== id))}
           onRejected={(id) => setPendingClubs((prev) => prev.filter((c) => c.id !== id))}
         />
