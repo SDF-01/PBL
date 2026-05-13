@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireCaller } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
 import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
+import { sendPushToMany } from "../lib/push";
 
 const Input = z.object({
   clubId: z.string().min(1),
@@ -54,6 +55,10 @@ export const notifyAdminsOfClubSubmission = onCall(
     }
 
     await batch.commit();
+
+    const adminIds = adminsSnap.docs.map((d) => d.id);
+    sendPushToMany(adminIds, "New Club Submission", `"${clubName}" has been submitted for review.`, "/admin/clubs").catch(() => {});
+
     return { notified: adminsSnap.size };
   },
 );

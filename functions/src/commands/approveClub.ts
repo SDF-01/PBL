@@ -4,6 +4,7 @@ import { requireCaller, requireSiteAdmin } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
 import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { ApproveClubInput } from "../schemas/club";
+import { sendPushToUser } from "../lib/push";
 
 const LEGACY_ROLE_RANK: Record<string, number> = {
   SITE_ADMIN: 4,
@@ -118,6 +119,8 @@ export const approveClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
   });
 
   await batch.commit();
+
+  sendPushToUser(creatorUserId, "Club Approved", "Your club has been approved. You are now a Club Director.", "/clubs/my").catch(() => {});
 
   return { clubId, status: "approved" as const };
 });

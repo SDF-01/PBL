@@ -3,6 +3,7 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireCaller } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
 import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
+import { sendPushToUser } from "../lib/push";
 import { DisputeMatchInput } from "../schemas/match";
 
 interface MatchRecord {
@@ -71,23 +72,23 @@ export const disputeMatch = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
 
   // Notify the original submitter (post-tx, best-effort).
   if (submitterUid) {
+    const disputeBody = reason
+      ? `Your submitted score is under review: ${reason}`
+      : "Your submitted score is under review.";
     await db
       .collection(COLLECTIONS.notifications)
       .add({
         userId: submitterUid,
         title: "Score disputed",
-        body: reason
-          ? `Your submitted score is under review: ${reason}`
-          : "Your submitted score is under review.",
+        body: disputeBody,
         kind: "SCORE_DISPUTED",
         href: "/dashboard",
         read: false,
         createdBy: caller.uid,
         createdAt: FieldValue.serverTimestamp(),
       })
-      .catch(() => {
-        /* best-effort */
-      });
+      .catch(() => {});
+    sendPushToUser(submitterUid, "Score disputed", disputeBody, "/dashboard").catch(() => {});
   }
 
   return { matchId, status: "DISPUTED" as const };

@@ -19,4 +19,6 @@ export const COLLECTIONS = {
   // Player + ELO collections
   players: "players",
   eloEvents: "eloEvents",
+  // Push notification tokens
+  fcmTokens: "fcmTokens",
 } as const;

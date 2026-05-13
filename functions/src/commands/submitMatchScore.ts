@@ -8,6 +8,7 @@ import {
 import { requireCaller } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
 import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
+import { sendPushToMany } from "../lib/push";
 import { computeEloDeltas, STARTING_ELO } from "../lib/elo";
 import { SubmitMatchScoreInput } from "../schemas/match";
 
@@ -261,6 +262,8 @@ export const submitMatchScore = onCall(SECURE_CALLABLE_OPTIONS, async (request) 
       }),
     ),
   );
+
+  sendPushToMany(opposingSide, "Score submitted — verify now", `Game ${txResult.gameNumber} score: ${scoreA}–${scoreB}. Tap to confirm or dispute.`, "/dashboard").catch(() => {});
 
   return { matchId, status: "SUBMITTED" as const };
 });

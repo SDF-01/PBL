@@ -10,6 +10,8 @@ import {
   onAuthStateChanged,
   reauthenticateWithCredential,
   reauthenticateWithPopup,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as fbSignOut,
@@ -42,6 +44,8 @@ interface AuthCtx {
   linkGoogle: () => Promise<void>;
   unlinkGoogle: () => Promise<void>;
   setOrUpdatePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx>({
@@ -54,6 +58,8 @@ const Ctx = createContext<AuthCtx>({
   linkGoogle: async () => {},
   unlinkGoogle: async () => {},
   setOrUpdatePassword: async () => {},
+  resetPassword: async () => {},
+  resendVerificationEmail: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -153,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const displayName = `${firstName.trim()} ${lastName.trim()}`;
 
       await updateProfile(newUser, { displayName });
+      await sendEmailVerification(newUser);
 
       const role: UserRole = "PLAYER";
       const accountStatus: AccountStatus = "ACTIVE";
@@ -232,6 +239,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await updatePassword(current, newPassword);
       }
       setUser(auth().currentUser);
+    },
+    resetPassword: async (email: string) => {
+      await sendPasswordResetEmail(auth(), email);
+    },
+    resendVerificationEmail: async () => {
+      const current = auth().currentUser;
+      if (!current) throw new Error("You must be signed in.");
+      await sendEmailVerification(current);
     },
   };
 

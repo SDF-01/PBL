@@ -89,6 +89,11 @@ function SignupPageContent() {
 
   useEffect(() => {
     if (user) {
+      const isEmailUser = user.providerData.some((p) => p.providerId === "password");
+      if (isEmailUser && !user.emailVerified) {
+        router.push("/auth/verify-email");
+        return;
+      }
       const redirectTo = searchParams.get("redirect");
       if (redirectTo && redirectTo.startsWith("/")) {
         router.push(redirectTo);

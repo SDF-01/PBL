@@ -4,6 +4,7 @@ import { requireCaller, requireSiteAdmin } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
 import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { RejectClubInput } from "../schemas/club";
+import { sendPushToUser } from "../lib/push";
 
 export const rejectClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
   const caller = await requireCaller(request);
@@ -81,6 +82,8 @@ export const rejectClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
   });
 
   await batch.commit();
+
+  sendPushToUser(creatorUserId, "Club Not Approved", "Your club proposal was not approved. You remain a Player.", "/clubs/my").catch(() => {});
 
   return { clubId, status: "rejected" as const };
 });
