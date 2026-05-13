@@ -32,8 +32,8 @@ export async function sendPushToUser(
 
   // Remove stale tokens that Firebase rejected.
   const staleDeletes = response.responses
-    .map((r, i) => (r.success ? null : snap.docs[i].ref))
-    .filter(Boolean) as FirebaseFirestore.DocumentReference[];
+    .map((r, i) => (r.success ? null : (snap.docs[i]?.ref ?? null)))
+    .filter((ref): ref is FirebaseFirestore.DocumentReference => ref !== null);
 
   await Promise.allSettled(staleDeletes.map((ref) => ref.delete()));
 }
