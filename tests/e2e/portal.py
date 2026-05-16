@@ -414,6 +414,15 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
 .si2{display:flex;gap:7px;align-items:flex-start;padding:2px 0;font-size:.77rem;line-height:1.43}
 .sp{color:var(--pass);flex-shrink:0}.sf{color:var(--fail);flex-shrink:0}
 .se{display:block;color:var(--err);font-size:.71rem;font-family:monospace;margin-top:1px}
+.sshot-btn{background:none;border:1px solid var(--bor);border-radius:4px;padding:1px 7px;font-size:.65rem;color:var(--mu);cursor:pointer;flex-shrink:0;line-height:1.7;transition:border-color .15s,color .15s}
+.sshot-btn:hover{border-color:var(--ac);color:var(--ac)}
+/* lightbox */
+#lbOv{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;cursor:zoom-out}
+#lbOv.open{display:flex}
+#lbBox{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:default}
+#lbImg{max-width:min(1100px,92vw);max-height:82vh;border-radius:8px;border:1px solid var(--bor);display:block;box-shadow:0 16px 60px rgba(0,0,0,.7)}
+#lbClose{position:absolute;top:-14px;right:-14px;background:#1a1f2e;border:1px solid var(--bor);border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center;color:var(--tx)}
+#lbStep{font-size:.76rem;color:var(--mu);max-width:min(1100px,92vw);text-align:center}
 .wbox{background:#150a0a;border:1px solid #3a1010;border-radius:7px;padding:10px 12px;font-family:monospace;font-size:.75rem;color:#fca5a5;white-space:pre-wrap;word-break:break-all;max-height:110px;overflow-y:auto;line-height:1.48}
 .sugbox{font-size:.8rem;line-height:1.63;color:var(--tx);white-space:pre-line}
 /* accept row */
@@ -598,6 +607,15 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
       <button class="btn btn-ghost" onclick="closePm()">Cancel</button>
       <button class="btn btn-pri" onclick="copyAndSave()">Copy &amp; Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Screenshot lightbox ─────────────────────────────────────────────── -->
+<div id="lbOv" onclick="if(event.target===this)closeLb()">
+  <div id="lbBox">
+    <button id="lbClose" onclick="closeLb()">✕</button>
+    <img id="lbImg" src="" alt="Step screenshot">
+    <div id="lbStep"></div>
   </div>
 </div>
 
@@ -892,7 +910,7 @@ function buildResItem(r,i){
   const sug=_sugs[i]||'';
   const fs=r.steps?r.steps.find(s=>!s.passed):null;
   const cHtml=(r.criteria&&r.criteria.length)?`<ul class="clist">${r.criteria.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>`:`<p style="color:var(--mu);font-size:.76rem">No criteria defined.</p>`;
-  const stHtml=(r.steps&&r.steps.length)?`<ul class="slist">${r.steps.map(s=>`<li class="si2"><span class="${s.passed?'sp':'sf'}">${s.passed?'✓':'✗'}</span><span>${esc(s.description)}${s.error?`<span class="se">${esc(s.error.split('\n')[0].slice(0,120))}</span>`:''}</span></li>`).join('')}</ul>`:`<p style="color:var(--mu);font-size:.76rem">No steps recorded.</p>`;
+  const stHtml=(r.steps&&r.steps.length)?`<ul class="slist">${r.steps.map((s,si)=>`<li class="si2"><span class="${s.passed?'sp':'sf'}">${s.passed?'✓':'✗'}</span><span style="flex:1">${esc(s.description)}${s.error?`<span class="se">${esc(s.error.split('\n')[0].slice(0,120))}</span>`:''}</span>${s.screenshot_b64?`<button class="sshot-btn" onclick="showShot(${i},${si})">&#128247; Screenshot</button>`:''}</li>`).join('')}</ul>`:`<p style="color:var(--mu);font-size:.76rem">No steps recorded.</p>`;
   const whyHtml=(r.error_message&&r.status!=='PASS')?`<div class="dbox" style="grid-column:1/-1;margin-bottom:0"><h4>Why It Failed</h4><div class="wbox">${esc(r.error_message)}</div></div>`:'';
   const fixHtml=canFix?`<div class="dbox" style="grid-column:1/-1">
     <h4>Suggested Fix</h4>
@@ -1038,6 +1056,17 @@ function switchTab(n){
   document.querySelectorAll('.tc').forEach(c=>c.classList.toggle('act',c.id===`tc-${n}`));
 }
 function cpJson(e){e.stopPropagation();const b=document.getElementById('jbox');if(b)navigator.clipboard.writeText(b.innerText).then(()=>{e.target.textContent='Copied!';setTimeout(()=>e.target.textContent='Copy',1600);});}
+
+// ── Screenshot lightbox ───────────────────────────────────────────────────────
+function showShot(ri,si){
+  const step=_results[ri]&&_results[ri].steps&&_results[ri].steps[si];
+  if(!step||!step.screenshot_b64)return;
+  document.getElementById('lbImg').src='data:image/png;base64,'+step.screenshot_b64;
+  document.getElementById('lbStep').textContent='Step '+step.index+': '+step.description;
+  document.getElementById('lbOv').classList.add('open');
+}
+function closeLb(){document.getElementById('lbImg').src='';document.getElementById('lbOv').classList.remove('open');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('lbOv').classList.contains('open'))closeLb();});
 
 // ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

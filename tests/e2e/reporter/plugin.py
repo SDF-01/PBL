@@ -113,6 +113,7 @@ def _result_to_dict(r) -> dict:
                 "description": s.description,
                 "passed": s.passed,
                 "error": s.error,
+                "screenshot_b64": s.screenshot_b64,
             }
             for s in r.steps
         ],
