@@ -15,19 +15,21 @@ class AuthPage(BasePage):
 
     @property
     def email_field(self):
-        return self.page.get_by_label("Email", exact=False)
+        return self.page.get_by_placeholder("you@example.com")
 
     @property
     def password_field(self):
-        return self.page.get_by_label("Password", exact=False)
+        # Login form password placeholder
+        return self.page.get_by_placeholder("Your password")
 
     @property
     def sign_in_button(self):
-        return self.page.get_by_role("button", name="Sign In")
+        # The nav also has a "Sign In" button — target only the main form submit
+        return self.page.get_by_role("main").get_by_role("button", name="Sign In")
 
     @property
     def sign_up_button(self):
-        return self.page.get_by_role("button", name="Sign Up")
+        return self.page.get_by_role("main").get_by_role("button", name="Sign Up")
 
     @property
     def google_button(self):
@@ -52,17 +54,14 @@ class AuthPage(BasePage):
         self.wait_for_page_ready()
 
     def sign_in(self, email: str, password: str) -> None:
-        """Fill credentials and submit the login form."""
+        """Fill credentials and submit the login form. Does not assert redirect."""
         self.email_field.fill(email)
         self.password_field.fill(password)
         self.sign_in_button.click()
-        # Wait until redirected away from login
-        self.page.wait_for_url(
-            lambda url: "/auth/login" not in url, timeout=15_000
-        )
+        self.wait_for_page_ready()
 
     def sign_in_as(self, persona: str) -> None:
-        """Sign in using a named persona from Config."""
+        """Sign in using a named persona from Config and wait for redirect."""
         creds = {
             "player": Config.PLAYER,
             "coordinator": Config.COORDINATOR,
@@ -71,6 +70,9 @@ class AuthPage(BasePage):
         }[persona]
         self.navigate_to_login()
         self.sign_in(creds["email"], creds["password"])
+        self.page.wait_for_url(
+            lambda url: "/auth/login" not in url, timeout=20_000
+        )
 
     def sign_up(
         self,
@@ -82,12 +84,13 @@ class AuthPage(BasePage):
     ) -> None:
         """Fill and submit the registration form."""
         self.navigate_to_signup()
-        self.page.get_by_label("First Name").fill(first_name)
-        self.page.get_by_label("Last Name").fill(last_name)
-        self.page.get_by_label("Email").fill(email)
+        self.page.get_by_placeholder("Jane").fill(first_name)
+        self.page.get_by_placeholder("Smith").fill(last_name)
+        self.page.get_by_placeholder("you@example.com").fill(email)
         if phone:
-            self.page.get_by_label("Phone").fill(phone)
-        self.page.get_by_label("Password").fill(password)
+            self.page.get_by_placeholder("optional").fill(phone)
+        self.page.get_by_placeholder("At least 6 characters").fill(password)
+        self.page.get_by_placeholder("Repeat your password").fill(password)
         self.sign_up_button.click()
         self.wait_for_page_ready()
 

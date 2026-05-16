@@ -80,14 +80,43 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if not _results:
         return
 
-    from tests.e2e.config import Config
+    import json
 
     report_dir = Path(__file__).parent.parent / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / "e2e_report.html"
 
     generate_report(_results, report_path)
-    print(f"\n\n  E2E Report → {report_path.resolve()}\n")
+    print(f"\n\n  E2E Report -> {report_path.resolve()}\n")
+
+    # Write machine-readable JSON for the portal
+    json_path = report_dir / "run_results.json"
+    json_path.write_text(
+        json.dumps([_result_to_dict(r) for r in _results], indent=2),
+        encoding="utf-8",
+    )
+
+
+def _result_to_dict(r) -> dict:
+    return {
+        "node_id": r.node_id,
+        "uc_id": r.uc_id,
+        "name": r.name,
+        "persona": r.persona,
+        "criteria": r.criteria,
+        "status": r.status,
+        "duration_s": r.duration_s,
+        "error_message": r.error_message,
+        "steps": [
+            {
+                "index": s.index,
+                "description": s.description,
+                "passed": s.passed,
+                "error": s.error,
+            }
+            for s in r.steps
+        ],
+    }
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

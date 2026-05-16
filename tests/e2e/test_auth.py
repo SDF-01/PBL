@@ -5,7 +5,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.e2e.config import Config
-from tests.e2e.pages import AuthPage
+from tests.e2e.pages import AuthPage, DashboardPage
 from tests.e2e.reporter.step_logger import StepLogger
 
 
@@ -67,7 +67,7 @@ class TestEmailLogin:
         with steps.step("Navigate to login page"):
             auth_page.navigate_to_login()
         with steps.step("Fill only password, leave email blank"):
-            auth_page.page.get_by_label("Password").fill("somepassword")
+            auth_page.page.get_by_placeholder("Your password").fill("somepassword")
         with steps.step("Click Sign In without email"):
             auth_page.sign_in_button.click()
         with steps.step("Confirm still on login page"):
@@ -151,13 +151,13 @@ class TestSignup:
         with steps.step("Navigate to signup page"):
             auth_page.navigate_to_signup()
         with steps.step("Verify First Name field exists"):
-            expect(auth_page.page.get_by_label("First Name", exact=False)).to_be_visible()
+            expect(auth_page.page.get_by_placeholder("Jane")).to_be_visible()
         with steps.step("Verify Last Name field exists"):
-            expect(auth_page.page.get_by_label("Last Name", exact=False)).to_be_visible()
+            expect(auth_page.page.get_by_placeholder("Smith")).to_be_visible()
         with steps.step("Verify Email field exists"):
-            expect(auth_page.page.get_by_label("Email", exact=False)).to_be_visible()
+            expect(auth_page.page.get_by_placeholder("you@example.com")).to_be_visible()
         with steps.step("Verify Password field exists"):
-            expect(auth_page.page.get_by_label("Password", exact=False)).to_be_visible()
+            expect(auth_page.page.get_by_placeholder("At least 6 characters")).to_be_visible()
 
     @pytest.mark.use_case(
         id="UC-AUTH-008",
@@ -173,7 +173,7 @@ class TestSignup:
         with steps.step("Navigate to signup page"):
             auth_page.navigate_to_signup()
         with steps.step("Type a weak password"):
-            auth_page.page.get_by_label("Password").fill("abc")
+            auth_page.page.get_by_placeholder("At least 6 characters").fill("abc")
         with steps.step("Verify strength indicator appears"):
             strength = auth_page.page.get_by_text("Weak", exact=False).or_(
                 auth_page.page.locator(".password-strength, [data-testid='pw-strength']")
@@ -264,10 +264,11 @@ class TestSignOut:
         ],
     )
     def test_sign_out_redirects_to_login(self, player_page_ctx, steps: StepLogger):
+        dash = DashboardPage(player_page_ctx)
         auth = AuthPage(player_page_ctx)
         steps.page = player_page_ctx
         with steps.step("Navigate to dashboard as player"):
-            auth.navigate_to_dashboard()
+            dash.navigate_to_dashboard()
         with steps.step("Trigger sign-out"):
             auth.sign_out()
         with steps.step("Verify redirected to login or home"):

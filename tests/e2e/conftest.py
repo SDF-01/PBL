@@ -149,12 +149,11 @@ def admin_context(browser) -> Generator[BrowserContext, None, None]:
 
 
 def _make_page_fixture(context_fixture_name: str):
-    @pytest.fixture
+    """Return a plain function (no fixture decorator) for each persona context."""
     def _fixture(request) -> Generator[Page, None, None]:
         ctx = request.getfixturevalue(context_fixture_name)
         page = ctx.new_page()
         yield page
-        # Capture failure screenshot
         rep = getattr(request.node, "rep_call", None)
         if rep and rep.failed:
             name = request.node.nodeid.replace("/", "_").replace("::", "_")
@@ -169,11 +168,25 @@ def _make_page_fixture(context_fixture_name: str):
     return _fixture
 
 
-# Register per-persona page fixtures
-player_page_ctx     = pytest.fixture(name="player_page_ctx")(_make_page_fixture("player_context"))
-coordinator_page_ctx = pytest.fixture(name="coordinator_page_ctx")(_make_page_fixture("coordinator_context"))
-director_page_ctx   = pytest.fixture(name="director_page_ctx")(_make_page_fixture("director_context"))
-admin_page_ctx      = pytest.fixture(name="admin_page_ctx")(_make_page_fixture("admin_context"))
+# Register per-persona page fixtures (apply @pytest.fixture exactly once each)
+@pytest.fixture
+def player_page_ctx(request) -> Generator[Page, None, None]:
+    yield from _make_page_fixture("player_context")(request)
+
+
+@pytest.fixture
+def coordinator_page_ctx(request) -> Generator[Page, None, None]:
+    yield from _make_page_fixture("coordinator_context")(request)
+
+
+@pytest.fixture
+def director_page_ctx(request) -> Generator[Page, None, None]:
+    yield from _make_page_fixture("director_context")(request)
+
+
+@pytest.fixture
+def admin_page_ctx(request) -> Generator[Page, None, None]:
+    yield from _make_page_fixture("admin_context")(request)
 
 
 # ── Unauthenticated page ───────────────────────────────────────────────────────
