@@ -35,6 +35,9 @@ CUSTOM_FILE     = REPORTS_DIR / "custom_tests.json"
 CUSTOM_RUNNER   = E2E_DIR / "custom_runner.py"
 PYTHON          = sys.executable
 
+# Set in main() from --base-url arg; defaults to live site
+TARGET_BASE_URL = "https://pickleleauge.web.app"
+
 # ── Predefined test groups ─────────────────────────────────────────────────────
 
 BUILTIN_GROUPS = [
@@ -164,7 +167,7 @@ def _run_custom(run_id: str, group: dict, case_ids: list[str]) -> None:
                "--case-ids", *case_ids,
                "--output-file", str(out_file),
                "--auth-dir", str(AUTH_DIR),
-               "--base-url", "http://localhost:3000"]
+               "--base-url", TARGET_BASE_URL]
         proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, encoding="utf-8", errors="replace")
@@ -1073,16 +1076,20 @@ def _start_devserver(base_url: str) -> subprocess.Popen | None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="PBL Arena E2E Test Portal")
     parser.add_argument("--port", type=int, default=4000)
-    parser.add_argument("--no-devserver", action="store_true")
-    parser.add_argument("--base-url", default="http://localhost:3000")
+    parser.add_argument("--no-devserver", action="store_true", default=True)
+    parser.add_argument("--base-url", default="https://pickleleauge.web.app")
     args = parser.parse_args()
+
+    global TARGET_BASE_URL
+    TARGET_BASE_URL = args.base_url
 
     dev_proc = None
     if not args.no_devserver:
         dev_proc = _start_devserver(args.base_url)
 
     server = ThreadingHTTPServer(("0.0.0.0", args.port), PortalHandler)
-    print(f"\n  PBL Arena E2E Portal -> http://localhost:{args.port}\n")
+    print(f"\n  PBL Arena E2E Portal -> http://localhost:{args.port}")
+    print(f"  Testing against:       {TARGET_BASE_URL}\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
