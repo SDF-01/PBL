@@ -19,6 +19,7 @@ import time
 import traceback
 import urllib.request
 import uuid
+from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -35,8 +36,27 @@ CUSTOM_FILE     = REPORTS_DIR / "custom_tests.json"
 CUSTOM_RUNNER   = E2E_DIR / "custom_runner.py"
 PYTHON          = sys.executable
 
-# Set in main() from --base-url arg; defaults to live site
-TARGET_BASE_URL = "https://pickleleauge.web.app"
+MAX_RUNS = 20
+MAX_BODY_BYTES = 5 * 1024 * 1024  # 5 MB request body limit
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PORTAL CONFIGURATION
+# Edit this dict to adapt the portal to your project, or create a portal.json
+# file in the same directory (keys here are overridden by portal.json values).
+# ══════════════════════════════════════════════════════════════════════════════
+PORTAL_CONFIG: dict = {
+    "app_name": "PBL Arena",
+    "base_url": "https://pickleleauge.web.app",
+}
+_config_sidecar = Path(__file__).parent / "portal.json"
+if _config_sidecar.exists():
+    try:
+        PORTAL_CONFIG.update(json.loads(_config_sidecar.read_text(encoding="utf-8")))
+    except Exception:
+        pass
+
+APP_NAME = PORTAL_CONFIG.get("app_name", "My App")
+TARGET_BASE_URL = PORTAL_CONFIG.get("base_url", "http://localhost:3000")
 
 # ── Predefined test groups ─────────────────────────────────────────────────────
 
@@ -66,7 +86,9 @@ def _load_custom() -> dict:
 
 def _save_custom(data: dict) -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    CUSTOM_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp = CUSTOM_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    os.replace(tmp, CUSTOM_FILE)
 
 
 def _next_case_id() -> str:
@@ -97,7 +119,7 @@ def _next_group_id() -> str:
 
 # ── In-memory run store ────────────────────────────────────────────────────────
 
-_runs: dict[str, dict[str, Any]] = {}
+_runs: OrderedDict[str, dict] = OrderedDict()
 _runs_lock = threading.Lock()
 
 
@@ -109,6 +131,9 @@ def _new_run(label: str) -> str:
             "output": "", "results": None, "started_at": time.time(),
             "finished_at": None, "summary": None,
         }
+        # evict oldest run when over limit (screenshots in results can be large)
+        while len(_runs) > MAX_RUNS:
+            _runs.popitem(last=False)
     return run_id
 
 
@@ -133,24 +158,32 @@ def _run_pytest(run_id: str, group: dict) -> None:
                "-p", "tests.e2e.reporter.plugin", "--tb=short", "-v", "--timeout=60"]
         if group.get("marker"):
             cmd += ["-m", group["marker"]]
+        env = {**os.environ, "PORTAL_RUN_ID": run_id}
         proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, encoding="utf-8", errors="replace")
+                                text=True, encoding="utf-8", errors="replace", env=env)
         lines: list[str] = []
+        last_flush = time.monotonic()
         for line in iter(proc.stdout.readline, ""):
             lines.append(line)
-            _update_run(run_id, output="".join(lines))
+            if time.monotonic() - last_flush > 0.3:
+                _update_run(run_id, output="".join(lines))
+                last_flush = time.monotonic()
         proc.wait()
+        output = "".join(lines)
         results, summary = None, None
-        if RESULTS_JSON.exists():
+        run_json = REPORTS_DIR / f"run_{run_id}.json"
+        src = run_json if run_json.exists() else RESULTS_JSON
+        if src.exists():
             try:
-                results = json.loads(RESULTS_JSON.read_text(encoding="utf-8"))
+                results = json.loads(src.read_text(encoding="utf-8"))
                 summary = _make_summary(results, proc.returncode)
             except Exception:
                 pass
-        _update_run(run_id, status="complete" if proc.returncode == 0 else "failed",
-                    output="".join(lines), results=results, summary=summary,
-                    finished_at=time.time())
+        status = "complete" if proc.returncode == 0 else "failed"
+        _update_run(run_id, status=status, output=output,
+                    results=results, summary=summary, finished_at=time.time())
+        _save_history(run_id)
     except Exception:
         _update_run(run_id, status="error", output=traceback.format_exc(), finished_at=time.time())
 
@@ -172,10 +205,14 @@ def _run_custom(run_id: str, group: dict, case_ids: list[str]) -> None:
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, encoding="utf-8", errors="replace")
         lines: list[str] = []
+        last_flush = time.monotonic()
         for line in iter(proc.stdout.readline, ""):
             lines.append(line)
-            _update_run(run_id, output="".join(lines))
+            if time.monotonic() - last_flush > 0.3:
+                _update_run(run_id, output="".join(lines))
+                last_flush = time.monotonic()
         proc.wait()
+        output = "".join(lines)
         results, summary = None, None
         if out_file.exists():
             try:
@@ -184,10 +221,68 @@ def _run_custom(run_id: str, group: dict, case_ids: list[str]) -> None:
             except Exception:
                 pass
         _update_run(run_id, status="complete" if proc.returncode == 0 else "failed",
-                    output="".join(lines), results=results, summary=summary,
+                    output=output, results=results, summary=summary,
                     finished_at=time.time())
+        _save_history(run_id)
     except Exception:
         _update_run(run_id, status="error", output=traceback.format_exc(), finished_at=time.time())
+
+
+def _run_single_test(run_id: str, node_id: str) -> None:
+    try:
+        _update_run(run_id, status="running")
+        REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        cmd = [PYTHON, "-m", "pytest", node_id,
+               "-p", "tests.e2e.reporter.plugin", "--tb=short", "-v", "--timeout=60"]
+        env = {**os.environ, "PORTAL_RUN_ID": run_id}
+        proc = subprocess.Popen(cmd, cwd=str(REPO_ROOT),
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                text=True, encoding="utf-8", errors="replace", env=env)
+        lines: list[str] = []
+        last_flush = time.monotonic()
+        for line in iter(proc.stdout.readline, ""):
+            lines.append(line)
+            if time.monotonic() - last_flush > 0.3:
+                _update_run(run_id, output="".join(lines))
+                last_flush = time.monotonic()
+        proc.wait()
+        output = "".join(lines)
+        results, summary = None, None
+        run_json = REPORTS_DIR / f"run_{run_id}.json"
+        if run_json.exists():
+            try:
+                results = json.loads(run_json.read_text(encoding="utf-8"))
+                summary = _make_summary(results, proc.returncode)
+            except Exception:
+                pass
+        status = "complete" if proc.returncode == 0 else "failed"
+        _update_run(run_id, status=status, output=output,
+                    results=results, summary=summary, finished_at=time.time())
+        _save_history(run_id)
+    except Exception:
+        _update_run(run_id, status="error", output=traceback.format_exc(), finished_at=time.time())
+
+
+HISTORY_DIR = REPORTS_DIR / "history"
+
+
+def _save_history(run_id: str) -> None:
+    run = _get_run(run_id)
+    if not run:
+        return
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    # strip screenshots from history to keep file sizes manageable
+    summary_run = {k: v for k, v in run.items() if k != "results"}
+    if run.get("results"):
+        summary_run["results"] = [
+            {k: v for k, v in r.items() if k != "steps"} | {
+                "steps": [{k2: v2 for k2, v2 in s.items() if k2 != "screenshot_b64"}
+                           for s in r.get("steps", [])]
+            }
+            for r in run["results"]
+        ]
+    path = HISTORY_DIR / f"{run_id}.json"
+    path.write_text(json.dumps(summary_run, indent=2, default=str), encoding="utf-8")
 
 
 def _make_summary(results: list[dict], returncode: int) -> dict:
@@ -215,11 +310,22 @@ class PortalHandler(BaseHTTPRequestHandler):
             with _custom_lock: d = _load_custom()
             self._json(list(d["groups"].values()))
         elif p.startswith("/api/run/"):        run_id = p[len("/api/run/"):]; self._json(_get_run(run_id) or {"error": "not found"}, 404 if not _get_run(run_id) else 200)
+        elif p == "/api/history":
+            entries = []
+            if HISTORY_DIR.exists():
+                for f in sorted(HISTORY_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:20]:
+                    try:
+                        entries.append(json.loads(f.read_text(encoding="utf-8")))
+                    except Exception:
+                        pass
+            self._json(entries)
         else:                                  self._err(404, "Not found")
 
     def do_POST(self):
         p = self.path.split("?")[0]
         n = int(self.headers.get("Content-Length", 0))
+        if n > MAX_BODY_BYTES:
+            self._err(413, "Request body too large"); return
         body = self.rfile.read(n)
 
         if p == "/api/run":
@@ -259,6 +365,15 @@ class PortalHandler(BaseHTTPRequestHandler):
                 data["groups"][d["id"]] = d
                 _save_custom(data)
             self._json(d)
+
+        elif p == "/api/run/single":
+            d = json.loads(body)
+            node_id = d.get("node_id", "").strip()
+            if not node_id:
+                self._err(400, "node_id required"); return
+            rid = _new_run(f"single:{node_id.split('::')[-1]}")
+            threading.Thread(target=_run_single_test, args=(rid, node_id), daemon=True).start()
+            self._json({"run_id": rid}, 202)
 
         elif p == "/api/save-prompt":
             d = json.loads(body)
@@ -468,6 +583,27 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
 .case-check-row input[type=checkbox]{accent-color:var(--ac);width:15px;height:15px}
 /* prompt */
 .pta{width:100%;height:340px;background:#090b12;border:1px solid var(--bor);border-radius:7px;padding:13px 14px;color:var(--tx);font-family:'Consolas',monospace;font-size:.75rem;resize:vertical;line-height:1.52}
+/* filter bar */
+.fbar{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--bor);align-items:center;flex-wrap:wrap}
+.fbar-label{font-size:.7rem;color:var(--mu);margin-right:4px}
+.fpill{padding:3px 11px;border-radius:20px;border:1px solid var(--bor);background:transparent;font-size:.72rem;font-weight:600;color:var(--mu);cursor:pointer;transition:all .15s}
+.fpill:hover{border-color:var(--ac);color:var(--ac)}
+.fpill.act{background:var(--ac);border-color:var(--ac);color:#fff}
+.fpill.f-PASS.act{background:var(--pass);border-color:var(--pass)}
+.fpill.f-FAIL.act{background:var(--fail);border-color:var(--fail)}
+.fpill.f-ERROR.act{background:var(--err);border-color:var(--err)}
+.fpill.f-SKIP.act{background:var(--skip);border-color:var(--skip)}
+/* history */
+.hist-panel{background:var(--sur);border:1px solid var(--bor);border-radius:9px;overflow:hidden;margin-bottom:28px}
+.hist-row{display:grid;grid-template-columns:140px 1fr 80px 60px 70px;gap:8px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--bor);cursor:pointer;transition:background .12s;font-size:.78rem}
+.hist-row:last-child{border-bottom:none}
+.hist-row:hover{background:rgba(255,255,255,.024)}
+.hist-id{font-family:monospace;font-size:.72rem;color:var(--mu)}
+.hist-lbl{font-weight:500}
+.hist-ts{font-size:.72rem;color:var(--mu)}
+/* rerun btn */
+.btn-rerun{padding:2px 8px;font-size:.68rem;border-radius:4px;border:1px solid var(--bor);background:transparent;color:var(--mu);cursor:pointer;flex-shrink:0}
+.btn-rerun:hover{border-color:var(--ac);color:var(--ac)}
 /* misc */
 .empty{padding:48px;text-align:center;color:var(--mu);font-size:.85rem}
 .icopy{padding:2px 8px;font-size:.7rem;border-radius:4px;border:1px solid var(--bor);background:transparent;color:var(--mu);cursor:pointer}
@@ -498,6 +634,14 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
 
 <div id="customCases" style="margin-bottom:10px"></div>
 <div id="customGroups" style="margin-bottom:28px"></div>
+
+<!-- ── Run history ────────────────────────────────────────────────────────── -->
+<div class="sec-label">
+  Recent Runs
+  <button class="btn btn-ghost btn-sm" onclick="loadHistory()" id="histRefresh">Refresh</button>
+  <hr>
+</div>
+<div id="histPanel"><div class="empty" style="padding:20px">No previous runs yet.</div></div>
 
 <!-- ── Active run ─────────────────────────────────────────────────────── -->
 <div class="sec-label">Active Run<hr></div>
@@ -622,8 +766,9 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 const API = '';
-let currentRunId = null, pollTimer = null, activeTab = 'output';
+let currentRunId = null, pollTimer = null, activeTab = 'results';
 let _results = [], _sugs = [], _accepted = new Map();
+let _filterStatus = null;
 let _customCases = [], _customGroups = [];
 // case editor
 let _editingCase = null;
@@ -632,7 +777,7 @@ let _ceCrits = [], _ceSteps = [];
 let _editingGroup = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-loadGroups(); loadCustom(); ping(); setInterval(ping, 12000);
+loadGroups(); loadCustom(); loadHistory(); ping(); setInterval(ping, 12000);
 
 // ── Builtin groups ────────────────────────────────────────────────────────────
 async function loadGroups() {
@@ -869,6 +1014,7 @@ function startPoll(){
 }
 
 function renderRun(run){
+  _lastRun=run;
   const bc={pending:'b-pending',running:'b-running',complete:'b-complete',failed:'b-failed',error:'b-error'}[run.status]||'b-pending';
   const dur=run.finished_at&&run.started_at?`${(run.finished_at-run.started_at).toFixed(1)}s`:'';
   let sumHtml='';
@@ -903,8 +1049,21 @@ function renderRun(run){
 // ── Results list ──────────────────────────────────────────────────────────────
 function buildResList(){
   if(!_results||!_results.length) return '<div class="empty">Results will appear when the run finishes.</div>';
-  return '<div class="rl">'+_results.map((r,i)=>buildResItem(r,i)).join('')+'</div>';
+  const counts={PASS:0,FAIL:0,ERROR:0,SKIP:0};
+  _results.forEach(r=>{const k=r.status==='PASS'?'PASS':r.status==='FAIL'?'FAIL':r.status==='SKIP'?'SKIP':'ERROR';counts[k]++;});
+  const fbar=`<div class="fbar"><span class="fbar-label">Filter:</span>
+    <button class="fpill ${!_filterStatus?'act':''}" onclick="setFilter(null)">All (${_results.length})</button>
+    ${counts.PASS?`<button class="fpill f-PASS ${_filterStatus==='PASS'?'act':''}" onclick="setFilter('PASS')">Pass ${counts.PASS}</button>`:''}
+    ${counts.FAIL?`<button class="fpill f-FAIL ${_filterStatus==='FAIL'?'act':''}" onclick="setFilter('FAIL')">Fail ${counts.FAIL}</button>`:''}
+    ${counts.ERROR?`<button class="fpill f-ERROR ${_filterStatus==='ERROR'?'act':''}" onclick="setFilter('ERROR')">Error ${counts.ERROR}</button>`:''}
+    ${counts.SKIP?`<button class="fpill f-SKIP ${_filterStatus==='SKIP'?'act':''}" onclick="setFilter('SKIP')">Skip ${counts.SKIP}</button>`:''}
+  </div>`;
+  const visible=_filterStatus?_results.filter(r=>{const k=r.status==='PASS'?'PASS':r.status==='FAIL'?'FAIL':r.status==='SKIP'?'SKIP':'ERROR';return k===_filterStatus;}):_results;
+  const items=visible.map(r=>{const i=_results.indexOf(r);return buildResItem(r,i);}).join('');
+  return fbar+'<div class="rl">'+items+'</div>';
 }
+function setFilter(s){_filterStatus=s;renderRun(_lastRun);}
+let _lastRun=null;
 function buildResItem(r,i){
   const canFix=r.status==='FAIL'||r.status==='ERROR';
   const sug=_sugs[i]||'';
@@ -931,6 +1090,7 @@ function buildResItem(r,i){
       <span class="rp">${esc(r.persona)}</span>
       <span class="rdu">${r.duration_s}s</span>
       <span class="rs s-${r.status}">${r.status}</span>
+      ${r.node_id&&!r.node_id.startsWith('custom::')? `<button class="btn-rerun" onclick="event.stopPropagation();rerunSingle('${esc(r.node_id)}')" title="Re-run this test">&#8635;</button>`:''}
     </div>
     <div class="rd" id="rd-${i}">
       <div class="dgrid">
@@ -990,9 +1150,9 @@ function buildSug(r){
   if(status==='PASS'||status==='SKIP') return 'Test passed — no fix needed.';
   if(status==='ERROR'){
     if(/fixture|_context|authentication/i.test(err))
-      return `Fixture setup error: the ${persona} test account does not exist in Firebase.\n\nFix: Run \`npm run seed:test\` from the repo root (requires FIREBASE_SERVICE_ACCOUNT_JSON env var).\n\nAlternatively, manually create the account in Firebase Auth Console and assign the ${persona} role in Firestore.`;
+      return `Fixture setup error: the ${persona} test account does not exist in your auth backend.\n\nFix: Run your test account seeding script from the repo root (requires your service account credentials).\n\nAlternatively, manually create the account in your auth console and assign the ${persona} role in your database.`;
     if(/timeout/i.test(err))
-      return `Fixture timed out — authentication likely failed.\n\nFix: Verify the test account credentials in .env.test and confirm the account exists in Firebase. Also check that the login form selectors in auth_page.py match the current app HTML.`;
+      return `Fixture timed out — authentication likely failed.\n\nFix: Verify the test account credentials in .env.test and confirm the account exists in your auth backend. Also check that the login form selectors in auth_page.py match the current app HTML.`;
     return `Test infrastructure error.\n\nFix: Review the error above. Confirm fixtures are configured, test accounts are seeded, and the dev server is running at BASE_URL.\n\nError: ${err.split('\n').slice(-1)[0]}`;
   }
   if(status==='FAIL'){
@@ -1001,7 +1161,7 @@ function buildSug(r){
     if(/strict mode|StrictMode/i.test(err))
       return `Multiple elements matched the locator during: "${sd}".\n\nFix: Scope the locator, e.g.:\n  page.get_by_role("main").get_by_role("button", name="...")\n  page.locator("form").get_by_placeholder("...")`;
     if(/AssertionError/.test(err)&&(/auth\/login|url/i.test(err)))
-      return `URL assertion failed during: "${sd}".\n\nFix:\n• For login tests: verify the account exists in Firebase\n• For RBAC tests: check both URL redirect AND inline login UI rendering\n• Update the assertion to accept client-side auth guard behavior (URL may not change)`;
+      return `URL assertion failed during: "${sd}".\n\nFix:\n• For login tests: verify the account exists in your auth backend\n• For RBAC tests: check both URL redirect AND inline login UI rendering\n• Update the assertion to accept client-side auth guard behavior (URL may not change)`;
     if(/AssertionError/.test(err)&&/visible/i.test(err))
       return `Element visibility failed during: "${sd}".\n\nFix: Inspect the element in the live app and update the selector. Add a wait:\n  expect(locator).to_be_visible(timeout=8000)`;
     if(/signup|AUTH-00[789]/i.test(name+uc_id))
@@ -1057,6 +1217,42 @@ function switchTab(n){
 }
 function cpJson(e){e.stopPropagation();const b=document.getElementById('jbox');if(b)navigator.clipboard.writeText(b.innerText).then(()=>{e.target.textContent='Copied!';setTimeout(()=>e.target.textContent='Copy',1600);});}
 
+// ── History ───────────────────────────────────────────────────────────────────
+async function loadHistory(){
+  const btn=document.getElementById('histRefresh');
+  if(btn){btn.disabled=true;btn.textContent='Loading…';}
+  try{
+    const entries=await fetch(`${API}/api/history`).then(r=>r.json());
+    const el=document.getElementById('histPanel');
+    if(!entries.length){el.innerHTML='<div class="empty" style="padding:20px">No previous runs yet.</div>';return;}
+    el.innerHTML=`<div class="hist-panel">`+entries.map(e=>{
+      const dur=e.finished_at&&e.started_at?`${(e.finished_at-e.started_at).toFixed(1)}s`:'—';
+      const ts=e.started_at?new Date(e.started_at*1000).toLocaleString():'';
+      const s=e.summary||{};
+      const bc={complete:'b-complete',failed:'b-failed',error:'b-error',pending:'b-pending',running:'b-running'}[e.status]||'b-pending';
+      return `<div class="hist-row" onclick="restoreRun('${e.run_id}')">
+        <span class="hist-id">#${e.run_id.slice(0,8)}</span>
+        <span class="hist-lbl">${esc(e.label||e.run_id.slice(0,8))}</span>
+        <span class="hist-ts">${ts}</span>
+        <span style="font-size:.72rem">${s.passed!=null?`<span style="color:var(--pass)">${s.passed}✓</span> <span style="color:var(--fail)">${s.failed}✗</span>`:'—'}</span>
+        <span class="badge ${bc}" style="font-size:.6rem">${e.status}</span>
+      </div>`;
+    }).join('')+'</div>';
+  }finally{if(btn){btn.disabled=false;btn.textContent='Refresh';}}
+}
+async function restoreRun(run_id){
+  const run=await fetch(`${API}/api/run/${run_id}`).then(r=>r.json());
+  if(run.error){alert('Run not in memory — restart portal to load from disk.');return;}
+  currentRunId=run_id; _results=[]; _sugs=[]; _accepted.clear(); updateGenBar();
+  renderRun(run);
+}
+async function rerunSingle(nodeId){
+  const res=await fetch(`${API}/api/run/single`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({node_id:nodeId})});
+  const d=await res.json();
+  if(!res.ok){alert(d.error);return;}
+  beginRun(d.run_id,nodeId.split('::').pop());
+}
+
 // ── Screenshot lightbox ───────────────────────────────────────────────────────
 function showShot(ri,si){
   const step=_results[ri]&&_results[ri].steps&&_results[ri].steps[si];
@@ -1111,6 +1307,7 @@ def main() -> None:
 
     global TARGET_BASE_URL
     TARGET_BASE_URL = args.base_url
+    PORTAL_CONFIG["base_url"] = TARGET_BASE_URL
 
     dev_proc = None
     if not args.no_devserver:

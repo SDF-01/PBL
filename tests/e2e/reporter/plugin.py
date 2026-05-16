@@ -4,6 +4,7 @@ then generates the HTML report in pytest_sessionfinish.
 """
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -95,6 +96,14 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         json.dumps([_result_to_dict(r) for r in _results], indent=2),
         encoding="utf-8",
     )
+
+    run_id = os.environ.get("PORTAL_RUN_ID")
+    if run_id:
+        run_path = report_dir / f"run_{run_id}.json"
+        run_path.write_text(
+            json.dumps([_result_to_dict(r) for r in _results], indent=2),
+            encoding="utf-8",
+        )
 
 
 def _result_to_dict(r) -> dict:
