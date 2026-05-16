@@ -145,7 +145,34 @@ def _update_run(run_id: str, **kw: Any) -> None:
 
 def _get_run(run_id: str) -> dict | None:
     with _runs_lock:
-        return dict(_runs[run_id]) if run_id in _runs else None
+        if run_id in _runs:
+            return dict(_runs[run_id])
+    # Not in memory — try disk. Full results file first, then stripped history.
+    for candidate in [
+        REPORTS_DIR / f"run_{run_id}.json",
+        HISTORY_DIR / f"{run_id}.json",
+    ]:
+        if candidate.exists():
+            try:
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                # run_{id}.json is a bare list; wrap it in a run envelope.
+                if isinstance(data, list):
+                    data = {
+                        "run_id": run_id,
+                        "label": run_id[:8],
+                        "status": "complete",
+                        "results": data,
+                        "output": "",
+                        "summary": _make_summary(data, 0),
+                    }
+                with _runs_lock:
+                    _runs[run_id] = data
+                    while len(_runs) > MAX_RUNS:
+                        _runs.popitem(last=False)
+                return dict(data)
+            except Exception:
+                pass
+    return None
 
 
 # ── Builtin pytest runner ──────────────────────────────────────────────────────
@@ -1269,7 +1296,7 @@ async function loadHistory(){
 }
 async function restoreRun(run_id){
   const run=await fetch(`${API}/api/run/${run_id}`).then(r=>r.json());
-  if(run.error){alert('Run not in memory — restart portal to load from disk.');return;}
+  if(run.error){alert('Run data not found on disk. The run file may have been deleted.');return;}
   currentRunId=run_id; _results=[]; _sugs=[]; _accepted.clear(); updateGenBar();
   renderRun(run);
 }
