@@ -29,7 +29,7 @@ class AuthPage(BasePage):
 
     @property
     def sign_up_button(self):
-        return self.page.get_by_role("main").get_by_role("button", name="Sign Up")
+        return self.page.get_by_role("main").get_by_role("button", name="Create Account")
 
     @property
     def google_button(self):
@@ -96,27 +96,25 @@ class AuthPage(BasePage):
 
     def sign_out(self) -> None:
         """Click sign-out from nav or profile menu."""
-        # Try dropdown/profile menu first
         profile_trigger = self.page.locator(
             "[aria-label='Profile menu'], [data-testid='user-menu']"
         ).first
-        try:
-            profile_trigger.click(timeout=3_000)
-        except Exception:
-            pass
+        profile_trigger.wait_for(state="visible", timeout=5_000)
+        profile_trigger.click()
 
         sign_out_btn = self.page.get_by_role("button", name="Sign Out").or_(
             self.page.get_by_role("menuitem", name="Sign Out")
         )
-        sign_out_btn.click()
+        sign_out_btn.first.wait_for(state="visible", timeout=5_000)
+        sign_out_btn.first.click()
         self.page.wait_for_url(
             lambda url: "/auth/login" in url or url.endswith("/"), timeout=10_000
         )
 
     def request_password_reset(self, email: str) -> None:
         self.navigate_to_forgot_password()
-        self.page.get_by_label("Email").fill(email)
-        self.page.get_by_role("button", name="Send Reset Email").click()
+        self.page.get_by_placeholder("you@example.com").fill(email)
+        self.page.get_by_role("button", name="Send reset link").click()
         self.wait_for_page_ready()
 
     # ── Assertions ────────────────────────────────────────────────────────────

@@ -111,6 +111,9 @@ class TestEmailLogin:
             expect(signup_link.first).to_be_visible()
         with steps.step("Click signup link and verify navigation"):
             signup_link.first.click()
+            auth_page.page.wait_for_url(
+                lambda url: "/auth/signup" in url, timeout=10_000
+            )
             assert "/auth/signup" in auth_page.page.url
 
     @pytest.mark.use_case(
@@ -173,7 +176,7 @@ class TestSignup:
         with steps.step("Navigate to signup page"):
             auth_page.navigate_to_signup()
         with steps.step("Type a weak password"):
-            auth_page.page.get_by_placeholder("At least 6 characters").fill("abc")
+            auth_page.page.get_by_placeholder("At least 6 characters").fill("abcdefgh")
         with steps.step("Verify strength indicator appears"):
             strength = auth_page.page.get_by_text("Weak", exact=False).or_(
                 auth_page.page.locator(".password-strength, [data-testid='pw-strength']")
@@ -245,8 +248,8 @@ class TestPasswordReset:
         with steps.step("Submit an unknown email"):
             auth_page.request_password_reset("totally.unknown@pbl-arena.test")
         with steps.step("Verify confirmation message appears"):
-            confirmation = auth_page.page.get_by_text("Reset email", exact=False).or_(
-                auth_page.page.get_by_text("Check your email", exact=False)
+            confirmation = auth_page.page.get_by_text("reset link has been sent", exact=False).or_(
+                auth_page.page.get_by_text("Check your inbox", exact=False)
             )
             expect(confirmation.first).to_be_visible(timeout=8_000)
 
