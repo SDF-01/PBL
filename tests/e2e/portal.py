@@ -540,6 +540,9 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
 #lbStep{font-size:.76rem;color:var(--mu);max-width:min(1100px,92vw);text-align:center}
 .wbox{background:#150a0a;border:1px solid #3a1010;border-radius:7px;padding:10px 12px;font-family:monospace;font-size:.75rem;color:#fca5a5;white-space:pre-wrap;word-break:break-all;max-height:110px;overflow-y:auto;line-height:1.48}
 .sugbox{font-size:.8rem;line-height:1.63;color:var(--tx);white-space:pre-line}
+.hintbox{font-size:.8rem;line-height:1.63;color:var(--tx);white-space:pre-line;border-left:3px solid var(--pass);padding-left:10px;margin-top:4px}
+.btn-rerun-detail{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 14px;font-size:.8rem;border-radius:6px;border:1px solid var(--bor);background:transparent;color:var(--mu);cursor:pointer;transition:border-color .15s,color .15s}
+.btn-rerun-detail:hover{border-color:var(--ac);color:var(--ac)}
 /* accept row */
 .fa{margin-top:12px;display:flex;align-items:center;gap:9px;padding:10px 13px;background:rgba(79,134,247,.07);border:1px solid rgba(79,134,247,.2);border-radius:7px;cursor:pointer;transition:background .15s,border-color .15s}
 .fa:hover{background:rgba(79,134,247,.12);border-color:rgba(79,134,247,.38)}
@@ -1066,12 +1069,13 @@ function setFilter(s){_filterStatus=s;renderRun(_lastRun);}
 let _lastRun=null;
 function buildResItem(r,i){
   const canFix=r.status==='FAIL'||r.status==='ERROR';
-  const sug=_sugs[i]||'';
+  const isPass=r.status==='PASS'||r.status==='SKIP';
+  const sug=_sugs[i];
   const fs=r.steps?r.steps.find(s=>!s.passed):null;
   const cHtml=(r.criteria&&r.criteria.length)?`<ul class="clist">${r.criteria.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>`:`<p style="color:var(--mu);font-size:.76rem">No criteria defined.</p>`;
   const stHtml=(r.steps&&r.steps.length)?`<ul class="slist">${r.steps.map((s,si)=>`<li class="si2"><span class="${s.passed?'sp':'sf'}">${s.passed?'✓':'✗'}</span><span style="flex:1">${esc(s.description)}${s.error?`<span class="se">${esc(s.error.split('\n')[0].slice(0,120))}</span>`:''}</span>${s.screenshot_b64?`<button class="sshot-btn" onclick="showShot(${i},${si})">&#128247; Screenshot</button>`:''}</li>`).join('')}</ul>`:`<p style="color:var(--mu);font-size:.76rem">No steps recorded.</p>`;
-  const whyHtml=(r.error_message&&r.status!=='PASS')?`<div class="dbox" style="grid-column:1/-1;margin-bottom:0"><h4>Why It Failed</h4><div class="wbox">${esc(r.error_message)}</div></div>`:'';
-  const fixHtml=canFix?`<div class="dbox" style="grid-column:1/-1">
+  const whyHtml=(r.error_message&&!isPass)?`<div class="dbox" style="grid-column:1/-1;margin-bottom:0"><h4>Why It Failed</h4><div class="wbox">${esc(r.error_message)}</div></div>`:'';
+  const fixHtml=canFix&&sug?`<div class="dbox" style="grid-column:1/-1">
     <h4>Suggested Fix</h4>
     <div class="sugbox">${esc(sug)}</div>
     <div class="fa" id="fa-${i}" onclick="clickFa(${i})">
@@ -1079,6 +1083,11 @@ function buildResItem(r,i){
       <label for="cb-${i}">Accept this fix — include in Claude Code prompt</label>
     </div>
   </div>`:'';
+  const hintHtml=isPass&&sug?`<div class="dbox" style="grid-column:1/-1">
+    <h4 style="color:var(--pass)">Optimization Hints</h4>
+    <div class="hintbox">${esc(sug)}</div>
+  </div>`:'';
+  const rerunBtn=r.node_id&&!r.node_id.startsWith('custom::')?`<div style="grid-column:1/-1;padding-top:4px"><button class="btn-rerun-detail" onclick="rerunSingle('${esc(r.node_id)}')">&#8635; Re-run this test</button></div>`:'';
   return `<div class="ri" id="ri-${i}">
     <div class="rh" onclick="toggleExp(${i})">
       <span class="eic" id="ei-${i}">&#9658;</span>
@@ -1098,6 +1107,8 @@ function buildResItem(r,i){
         <div class="dbox"><h4>Steps Taken</h4>${stHtml}</div>
         ${whyHtml}
         ${fixHtml}
+        ${hintHtml}
+        ${rerunBtn}
       </div>
     </div>
   </div>`;
@@ -1147,7 +1158,23 @@ function buildSug(r){
   const fs=steps?steps.find(s=>!s.passed):null;
   const sd=fs?fs.description:'';
   const se=fs&&fs.error?fs.error:'';
-  if(status==='PASS'||status==='SKIP') return 'Test passed — no fix needed.';
+  if(status==='PASS'||status==='SKIP'){
+    const hints=[];
+    if(!steps||!steps.length)
+      hints.push('No steps were recorded. Add StepLogger context managers in the test body to track each action and capture per-step screenshots in the portal.');
+    else if(steps.length>8)
+      hints.push(`This test exercises ${steps.length} steps. Consider splitting it into smaller, focused tests so a single failure is easier to isolate.`);
+    if(r.duration_s>15)
+      hints.push(`Test completed in ${r.duration_s}s. Replace any generic wait_for_page_ready() calls with targeted element waits (e.g. expect(locator).to_be_visible()) to reduce flakiness and run time.`);
+    if(!criteria||!criteria.length)
+      hints.push('No acceptance criteria defined. Add a criteria list to @pytest.mark.use_case to document expected behavior in the portal.');
+    if(steps&&steps.length){
+      const allPass=steps.every(s=>s.passed);
+      if(allPass&&steps.some(s=>s.description&&/click|fill|submit/i.test(s.description)&&!s.description.toLowerCase().includes('verify')))
+        hints.push('Consider adding an assertion step after each key action to make failures self-documenting (e.g. "Verify nav shows dashboard").');
+    }
+    return hints.length?hints.join('\n\n'):null;
+  }
   if(status==='ERROR'){
     if(/fixture|_context|authentication/i.test(err))
       return `Fixture setup error: the ${persona} test account does not exist in your auth backend.\n\nFix: Run your test account seeding script from the repo root (requires your service account credentials).\n\nAlternatively, manually create the account in your auth console and assign the ${persona} role in your database.`;
