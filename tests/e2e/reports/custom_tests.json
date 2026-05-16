@@ -1,0 +1,29 @@
+{
+  "cases": {
+    "UC-CUSTOM-001": {
+      "name": "Public leaderboard loads",
+      "description": "Verify the players page is accessible without auth",
+      "persona": "anon",
+      "criteria": [
+        "Players page loads without login",
+        "Page does not show a full login wall"
+      ],
+      "steps": [
+        {
+          "type": "navigate",
+          "url": "/players"
+        },
+        {
+          "type": "assert_not_url",
+          "not_contains": "/auth/login"
+        },
+        {
+          "type": "screenshot",
+          "label": "Leaderboard loaded"
+        }
+      ],
+      "id": "UC-CUSTOM-001"
+    }
+  },
+  "groups": {}
+}
