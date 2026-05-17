@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ShieldCheck,
   Building2,
   UserCog,
-  ShieldAlert,
+
   ClipboardList,
   Clock,
   CheckCircle,
@@ -97,8 +98,16 @@ export default function AdminHubPage() {
   const { isSiteAdmin, clubDirectorFor, loading: permLoading } = usePermissions();
   const { isAdminView, isStaffView } = useRoleView();
   const { toast } = useToast();
+  const router = useRouter();
   const isStaff = (isSiteAdmin || clubDirectorFor.length > 0) && isStaffView;
   const isAdmin = isSiteAdmin && isAdminView;
+
+  // Redirect users who lack staff access once permissions have resolved
+  useEffect(() => {
+    if (!permLoading && !isStaff) {
+      router.push("/");
+    }
+  }, [permLoading, isStaff, router]);
 
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [recentEvents, setRecentEvents] = useState<RoleEventDoc[]>([]);
@@ -163,14 +172,11 @@ export default function AdminHubPage() {
   }
 
   if (!isStaff) {
+    // Show spinner while router.push("/") redirect is in-flight
     return (
       <ResponsiveShell desktopChromeless>
         <main className="container py-10 max-w-3xl">
-          <Panel variant="quest" padding="lg" className="text-center space-y-2">
-            <ShieldAlert className="h-8 w-8 text-crimson-500 mx-auto" />
-            <h2 className="heading-fantasy text-ash-100 text-base">Access Denied</h2>
-            <p className="text-ash-400 text-sm">Staff access required.</p>
-          </Panel>
+          <Panel variant="base" padding="lg" className="text-center text-ash-500 text-sm">Loading…</Panel>
         </main>
       </ResponsiveShell>
     );

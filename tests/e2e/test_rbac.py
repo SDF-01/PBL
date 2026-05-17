@@ -84,7 +84,11 @@ class TestAdminRouteProtection:
         steps.page = coordinator_page_ctx
         with steps.step("Navigate to /admin as Coordinator"):
             coordinator_page_ctx.goto(f"{Config.BASE_URL}{Config.Routes.ADMIN}")
-            coordinator_page_ctx.wait_for_load_state("networkidle")
+            # App redirects non-staff users to / once permissions resolve.
+            # Wait for that redirect rather than relying on networkidle.
+            coordinator_page_ctx.wait_for_url(
+                lambda url: Config.Routes.ADMIN not in url, timeout=15_000
+            )
         with steps.step("Verify Coordinator is denied"):
             assert (
                 Config.Routes.ADMIN not in coordinator_page_ctx.url
@@ -165,7 +169,11 @@ class TestClubManagementAccess:
         steps.page = player_page_ctx
         with steps.step("Navigate to /clubs/manage/some-id as Player"):
             player_page_ctx.goto(f"{Config.BASE_URL}/clubs/manage/some-club-id")
-            player_page_ctx.wait_for_load_state("networkidle")
+            # App redirects unauthorized users to /clubs once permissions resolve.
+            # Wait for that redirect rather than relying on networkidle.
+            player_page_ctx.wait_for_url(
+                lambda url: "/clubs/manage/" not in url, timeout=15_000
+            )
         with steps.step("Verify access is denied"):
             denied = (
                 player_page_ctx.get_by_text("Access Denied", exact=False).is_visible()
@@ -186,7 +194,11 @@ class TestClubManagementAccess:
         steps.page = director_page_ctx
         with steps.step("Navigate to /clubs/my as Director"):
             director_page_ctx.goto(f"{Config.BASE_URL}{Config.Routes.MY_CLUBS}")
-            director_page_ctx.wait_for_load_state("networkidle")
+            # networkidle unreliable with Firebase; wait for the page heading
+            # which appears once auth resolves and clubs are loaded
+            director_page_ctx.get_by_text("Your Clubs", exact=False).first.wait_for(
+                state="visible", timeout=15_000
+            )
         with steps.step("Verify not redirected to login"):
             assert "/auth/login" not in director_page_ctx.url
 
@@ -220,9 +232,11 @@ class TestUnauthenticatedRedirects:
             anon_page.wait_for_load_state("networkidle")
         with steps.step("Verify login gate is shown (URL redirect OR login UI)"):
             url_redirected = "/auth/login" in anon_page.url
-            # Client-side auth guard: page stays at original URL but renders login UI
+            # Client-side auth guard: page stays at original URL but renders login UI.
+            # Use .first to avoid strict-mode violation — nav and page may both have
+            # a "Sign In" button; either being visible is sufficient.
             login_ui_visible = (
-                anon_page.get_by_role("button", name="Sign In").is_visible()
+                anon_page.get_by_role("button", name="Sign In").first.is_visible()
                 or anon_page.get_by_label("Email").is_visible()
                 or anon_page.get_by_text("Sign in", exact=False).is_visible()
             )
@@ -244,7 +258,11 @@ class TestUnauthenticatedRedirects:
         steps.page = anon_page
         with steps.step("Navigate to /players (public leaderboard) without auth"):
             anon_page.goto(f"{Config.BASE_URL}{Config.Routes.PLAYERS}")
-            anon_page.wait_for_load_state("networkidle")
+            # networkidle unreliable with Firestore onSnapshot streaming;
+            # wait for the Leaderboard heading which renders immediately on load
+            anon_page.get_by_text("Leaderboard", exact=False).first.wait_for(
+                state="visible", timeout=15_000
+            )
         with steps.step("Verify page content loads (not a login wall)"):
             # Should show leaderboard content, NOT a full-page login form
             full_login_wall = (

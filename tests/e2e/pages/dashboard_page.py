@@ -1,6 +1,8 @@
 """Dashboard page object — role-aware home after login."""
 from __future__ import annotations
 
+import re
+
 from playwright.sync_api import Page, expect
 
 from tests.e2e.config import Config
@@ -67,7 +69,8 @@ class DashboardPage(BasePage):
         self.wait_for_page_ready()
 
     def assert_dashboard_loaded(self) -> None:
+        # not_to_have_url requires a string or re.Pattern — not a callable
         expect(self.page).not_to_have_url(
-            lambda url: "/auth/login" in url, timeout=10_000
+            re.compile(r"/auth/login"), timeout=10_000
         )
         self.wait_for_spinner_gone()

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Bell,
@@ -91,6 +91,7 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
   const routeParams = useParams<{ clubId: string }>();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useAuth();
   const { clubDirectorFor, isSiteAdmin, loading: permLoading } = usePermissions();
   const { toast } = useToast();
@@ -121,6 +122,13 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
   const canManage =
     !permLoading && (isSiteAdmin || clubDirectorFor.includes(clubId));
 
+  // Redirect users who lack director access once both data and permissions resolve
+  useEffect(() => {
+    if (!loading && !permLoading && (!club || !canManage)) {
+      router.push("/clubs");
+    }
+  }, [loading, permLoading, club, canManage, router]);
+
   if (loading || permLoading) {
     return (
       <ResponsiveShell desktopChromeless>
@@ -131,27 +139,12 @@ export function ClubManageClient({ clubId: fallbackId }: { clubId: string }) {
     );
   }
 
-  if (!club) {
+  if (!club || !canManage) {
+    // Show spinner while router.push("/clubs") redirect is in-flight
     return (
       <ResponsiveShell desktopChromeless>
-        <main className="container py-10 max-w-2xl">
-          <Panel variant="base" padding="lg">
-            <p className="text-crimson-400">Club not found.</p>
-            <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">← Back to My Clubs</Link>
-          </Panel>
-        </main>
-      </ResponsiveShell>
-    );
-  }
-
-  if (!canManage) {
-    return (
-      <ResponsiveShell desktopChromeless>
-        <main className="container py-10 max-w-2xl">
-          <Panel variant="base" padding="lg">
-            <p className="text-crimson-400">You don&apos;t have director access to this club.</p>
-            <Link href="/clubs/my" className="text-ash-400 text-sm hover:text-ash-100 mt-2 inline-block">← Back to My Clubs</Link>
-          </Panel>
+        <main className="container py-10 max-w-2xl flex items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-ember-400" />
         </main>
       </ResponsiveShell>
     );
