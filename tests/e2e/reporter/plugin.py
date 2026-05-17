@@ -78,25 +78,13 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    if not _results:
-        return
-
     import json
 
     report_dir = Path(__file__).parent.parent / "reports"
     report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / "e2e_report.html"
 
-    generate_report(_results, report_path)
-    print(f"\n\n  E2E Report -> {report_path.resolve()}\n")
-
-    # Write machine-readable JSON for the portal
-    json_path = report_dir / "run_results.json"
-    json_path.write_text(
-        json.dumps([_result_to_dict(r) for r in _results], indent=2),
-        encoding="utf-8",
-    )
-
+    # Always write the per-run file first so the portal never falls back to
+    # a stale run_results.json when a run collects zero tests.
     run_id = os.environ.get("PORTAL_RUN_ID")
     if run_id:
         run_path = report_dir / f"run_{run_id}.json"
@@ -104,6 +92,20 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             json.dumps([_result_to_dict(r) for r in _results], indent=2),
             encoding="utf-8",
         )
+
+    if not _results:
+        return
+
+    report_path = report_dir / "e2e_report.html"
+    generate_report(_results, report_path)
+    print(f"\n\n  E2E Report -> {report_path.resolve()}\n")
+
+    # Write shared machine-readable JSON (only updated when tests actually ran)
+    json_path = report_dir / "run_results.json"
+    json_path.write_text(
+        json.dumps([_result_to_dict(r) for r in _results], indent=2),
+        encoding="utf-8",
+    )
 
 
 def _result_to_dict(r) -> dict:

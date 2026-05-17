@@ -63,7 +63,7 @@ TARGET_BASE_URL = PORTAL_CONFIG.get("base_url", "http://localhost:3000")
 BUILTIN_GROUPS = [
     {"id": "auth",        "name": "Authentication",          "marker": "auth",        "file": "tests/e2e/test_auth.py",                         "description": "Login, signup, logout, password reset flows", "color": "#4f86f7"},
     {"id": "rbac",        "name": "Role-Based Access Control","marker": "rbac",        "file": "tests/e2e/test_rbac.py",                         "description": "Route protection and role-visibility checks", "color": "#f7a94f"},
-    {"id": "player",      "name": "Player Workflows",         "marker": "player",      "file": "tests/e2e/test_player.py",                        "description": "Dashboard, profile, leaderboard, ladder session, notifications", "color": "#4ff7a0"},
+    {"id": "player",      "name": "Player Workflows",         "marker": "player",      "file": "tests/e2e/personas/test_player.py",               "description": "Profile, search, leaderboard, ladder, clubs, notifications (22 use cases)", "color": "#4ff7a0"},
     {"id": "coordinator", "name": "League Coordinator",       "marker": "coordinator", "file": "tests/e2e/personas/test_league_coordinator.py",   "description": "Play dates, sessions, check-in, scores, roster", "color": "#f74f86"},
     {"id": "director",    "name": "Club Director",            "marker": "director",    "file": "tests/e2e/personas/test_club_director.py",        "description": "Club creation, editing, member management, leagues", "color": "#a04ff7"},
     {"id": "admin",       "name": "Site Admin",               "marker": "admin",       "file": "tests/e2e/personas/test_site_admin.py",           "description": "Admin hub, user management, club approval queue", "color": "#f7f74f"},
@@ -198,15 +198,14 @@ def _run_pytest(run_id: str, group: dict) -> None:
                 last_flush = time.monotonic()
         proc.wait()
         output = "".join(lines)
-        results, summary = None, None
         run_json = REPORTS_DIR / f"run_{run_id}.json"
-        src = run_json if run_json.exists() else RESULTS_JSON
-        if src.exists():
+        results: list = []
+        if run_json.exists():
             try:
-                results = json.loads(src.read_text(encoding="utf-8"))
-                summary = _make_summary(results, proc.returncode)
+                results = json.loads(run_json.read_text(encoding="utf-8"))
             except Exception:
                 pass
+        summary = _make_summary(results, proc.returncode)
         status = "complete" if proc.returncode == 0 else "failed"
         _update_run(run_id, status=status, output=output,
                     results=results, summary=summary, finished_at=time.time())
@@ -274,14 +273,14 @@ def _run_single_test(run_id: str, node_id: str) -> None:
                 last_flush = time.monotonic()
         proc.wait()
         output = "".join(lines)
-        results, summary = None, None
         run_json = REPORTS_DIR / f"run_{run_id}.json"
+        results: list = []
         if run_json.exists():
             try:
                 results = json.loads(run_json.read_text(encoding="utf-8"))
-                summary = _make_summary(results, proc.returncode)
             except Exception:
                 pass
+        summary = _make_summary(results, proc.returncode)
         status = "complete" if proc.returncode == 0 else "failed"
         _update_run(run_id, status=status, output=output,
                     results=results, summary=summary, finished_at=time.time())
@@ -1078,7 +1077,8 @@ function renderRun(run){
 
 // ── Results list ──────────────────────────────────────────────────────────────
 function buildResList(){
-  if(!_results||!_results.length) return '<div class="empty">Results will appear when the run finishes.</div>';
+  if(!_results) return '<div class="empty">Results will appear when the run finishes.</div>';
+  if(!_results.length) return '<div class="empty" style="color:var(--mu)">No tests were collected for this run — check Raw Output for details.</div>';
   const counts={PASS:0,FAIL:0,ERROR:0,SKIP:0};
   _results.forEach(r=>{const k=r.status==='PASS'?'PASS':r.status==='FAIL'?'FAIL':r.status==='SKIP'?'SKIP':'ERROR';counts[k]++;});
   const fbar=`<div class="fbar"><span class="fbar-label">Filter:</span>
