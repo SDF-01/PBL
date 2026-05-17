@@ -134,6 +134,7 @@ export default function AdminApprovedClubsPage() {
             <Button size="sm" variant="ghost" onClick={load} disabled={loading}>
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             </Button>
+          </div>
         </div>
 
         {/* Tabs */}
