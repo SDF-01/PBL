@@ -99,7 +99,8 @@ class AuthPage(BasePage):
         profile_trigger = self.page.locator(
             "[aria-label='Profile menu'], [data-testid='user-menu']"
         ).first
-        profile_trigger.wait_for(state="visible", timeout=5_000)
+        # SignInButton renders null while Firebase !ready — 10 s covers cold auth init.
+        profile_trigger.wait_for(state="visible", timeout=10_000)
         profile_trigger.click()
 
         sign_out_btn = self.page.get_by_role("button", name="Sign Out").or_(
@@ -125,8 +126,10 @@ class AuthPage(BasePage):
         )
 
     def assert_signed_in(self) -> None:
-        assert "/auth/login" not in self.page.url, (
-            f"Expected to be signed in but URL is: {self.page.url}"
+        # Redirect is client-side (Firebase → React state → router.push),
+        # so networkidle fires before the URL changes. Wait explicitly.
+        self.page.wait_for_url(
+            lambda url: "/auth/login" not in url, timeout=20_000
         )
 
     def assert_error_visible(self, text: str | None = None) -> None:
