@@ -26,7 +26,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Hold while resolving auth to prevent flash of unauthenticated content.
   if (!authReady || !user) {
-    return <div className="min-h-screen bg-obsidian-950" />;
+    return (
+      <div className="min-h-screen bg-obsidian-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-ember-500" />
+      </div>
+    );
   }
 
   if (!deviceReady) {

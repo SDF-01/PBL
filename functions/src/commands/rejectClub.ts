@@ -83,7 +83,7 @@ export const rejectClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
 
   await batch.commit();
 
-  sendPushToUser(creatorUserId, "Club Not Approved", "Your club proposal was not approved. You remain a Player.", "/clubs/my").catch(() => {});
+  sendPushToUser(creatorUserId, "Club Not Approved", "Your club proposal was not approved. You remain a Player.", "/clubs/my").catch((err) => console.error("[rejectClub] push failed:", err));
 
   return { clubId, status: "rejected" as const };
 });

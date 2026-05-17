@@ -263,7 +263,7 @@ export const submitMatchScore = onCall(SECURE_CALLABLE_OPTIONS, async (request) 
     ),
   );
 
-  sendPushToMany(opposingSide, "Score submitted — verify now", `Game ${txResult.gameNumber} score: ${scoreA}–${scoreB}. Tap to confirm or dispute.`, "/dashboard").catch(() => {});
+  sendPushToMany(opposingSide, "Score submitted — verify now", `Game ${txResult.gameNumber} score: ${scoreA}–${scoreB}. Tap to confirm or dispute.`, "/dashboard").catch((err) => console.error("[submitMatchScore] push failed:", err));
 
   return { matchId, status: "SUBMITTED" as const };
 });

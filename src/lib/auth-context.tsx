@@ -158,28 +158,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user: newUser } = credential;
       const displayName = `${firstName.trim()} ${lastName.trim()}`;
 
-      await updateProfile(newUser, { displayName });
-      await sendEmailVerification(newUser);
+      try {
+        await updateProfile(newUser, { displayName });
+        await sendEmailVerification(newUser);
 
-      const role: UserRole = "PLAYER";
-      const accountStatus: AccountStatus = "ACTIVE";
+        const role: UserRole = "PLAYER";
+        const accountStatus: AccountStatus = "ACTIVE";
 
-      await setDoc(doc(db(), COLLECTIONS.users, newUser.uid), {
-        uid: newUser.uid,
-        email: email.toLowerCase().trim(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        displayName,
-        phoneNumber: phoneNumber?.trim() || null,
-        photoURL: null,
-        role,
-        accountStatus,
-        clubId: null,
-        leagueIds: [],
-        startingSkillRating: startingSkillRating ?? null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+        await setDoc(doc(db(), COLLECTIONS.users, newUser.uid), {
+          uid: newUser.uid,
+          email: email.toLowerCase().trim(),
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          displayName,
+          phoneNumber: phoneNumber?.trim() || null,
+          photoURL: null,
+          role,
+          accountStatus,
+          clubId: null,
+          leagueIds: [],
+          startingSkillRating: startingSkillRating ?? null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        // Roll back the Auth user so the email is free to retry and doesn't leave
+        // an orphaned account with no Firestore document.
+        await newUser.delete().catch(() => {});
+        throw err;
+      }
     },
     signInWithEmail: async (email: string, password: string) => {
       await signInWithEmailAndPassword(auth(), email, password);

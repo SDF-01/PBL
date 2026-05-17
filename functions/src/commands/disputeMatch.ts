@@ -87,8 +87,8 @@ export const disputeMatch = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
         createdBy: caller.uid,
         createdAt: FieldValue.serverTimestamp(),
       })
-      .catch(() => {});
-    sendPushToUser(submitterUid, "Score disputed", disputeBody, "/dashboard").catch(() => {});
+      .catch((err) => console.error("[disputeMatch] notification write failed:", err));
+    sendPushToUser(submitterUid, "Score disputed", disputeBody, "/dashboard").catch((err) => console.error("[disputeMatch] push failed:", err));
   }
 
   return { matchId, status: "DISPUTED" as const };

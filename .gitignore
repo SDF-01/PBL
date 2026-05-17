@@ -15,9 +15,7 @@ prisma/*.db-journal
 tsconfig.tsbuildinfo
 pickleballleague-firebase-adminsdk-*.json
 .firebase/
-automation/*
-!automation/
-!automation/*.toon
+automation/
 .claude/
 Development Summaries
 ENHANCEMENTS.md   

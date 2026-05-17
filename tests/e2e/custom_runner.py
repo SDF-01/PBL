@@ -200,7 +200,17 @@ def main() -> None:
     all_cases: dict = cases_data.get("cases", {})
 
     requested = args.case_ids
+    missing = [cid for cid in requested if cid not in all_cases]
+    for cid in missing:
+        print(f"  WARNING: unknown case ID skipped: {cid}", flush=True, file=sys.stderr)
+
     cases_to_run = [all_cases[cid] for cid in requested if cid in all_cases]
+
+    if not cases_to_run:
+        print("  ERROR: no valid cases to run — all requested IDs are unknown", flush=True, file=sys.stderr)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(json.dumps([], indent=2), encoding="utf-8")
+        sys.exit(1)
 
     results = []
     with sync_playwright() as pw:

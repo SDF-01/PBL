@@ -57,7 +57,7 @@ export const notifyAdminsOfClubSubmission = onCall(
     await batch.commit();
 
     const adminIds = adminsSnap.docs.map((d) => d.id);
-    sendPushToMany(adminIds, "New Club Submission", `"${clubName}" has been submitted for review.`, "/admin/clubs").catch(() => {});
+    sendPushToMany(adminIds, "New Club Submission", `"${clubName}" has been submitted for review.`, "/admin/clubs").catch((err) => console.error("[notifyAdminsOfClubSubmission] push failed:", err));
 
     return { notified: adminsSnap.size };
   },

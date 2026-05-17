@@ -33,7 +33,7 @@ class AuthPage(BasePage):
 
     @property
     def google_button(self):
-        return self.page.get_by_role("button", name="Google")
+        return self.page.get_by_role("main").get_by_role("button", name="Google")
 
     @property
     def error_message(self):

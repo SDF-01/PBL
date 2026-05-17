@@ -195,7 +195,11 @@ def admin_page_ctx(request) -> Generator[Page, None, None]:
 @pytest.fixture
 def anon_page(browser) -> Generator[Page, None, None]:
     ctx = _make_context(browser, persona=None)
-    page = ctx.new_page()
+    try:
+        page = ctx.new_page()
+    except Exception:
+        ctx.close()
+        raise
     yield page
     page.close()
     ctx.close()

@@ -63,7 +63,7 @@ TARGET_BASE_URL = PORTAL_CONFIG.get("base_url", "http://localhost:3000")
 BUILTIN_GROUPS = [
     {"id": "auth",        "name": "Authentication",          "marker": "auth",        "file": "tests/e2e/test_auth.py",                         "description": "Login, signup, logout, password reset flows", "color": "#4f86f7"},
     {"id": "rbac",        "name": "Role-Based Access Control","marker": "rbac",        "file": "tests/e2e/test_rbac.py",                         "description": "Route protection and role-visibility checks", "color": "#f7a94f"},
-    {"id": "player",      "name": "Player Persona",           "marker": "player",      "file": "tests/e2e/personas/test_player.py",               "description": "Profile, search, leaderboard, ladder, clubs, notifications", "color": "#4ff7a0"},
+    {"id": "player",      "name": "Player Workflows",         "marker": "player",      "file": "tests/e2e/test_player.py",                        "description": "Dashboard, profile, leaderboard, ladder session, notifications", "color": "#4ff7a0"},
     {"id": "coordinator", "name": "League Coordinator",       "marker": "coordinator", "file": "tests/e2e/personas/test_league_coordinator.py",   "description": "Play dates, sessions, check-in, scores, roster", "color": "#f74f86"},
     {"id": "director",    "name": "Club Director",            "marker": "director",    "file": "tests/e2e/personas/test_club_director.py",        "description": "Club creation, editing, member management, leagues", "color": "#a04ff7"},
     {"id": "admin",       "name": "Site Admin",               "marker": "admin",       "file": "tests/e2e/personas/test_site_admin.py",           "description": "Admin hub, user management, club approval queue", "color": "#f7f74f"},

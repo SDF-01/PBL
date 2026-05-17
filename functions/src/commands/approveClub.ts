@@ -120,7 +120,7 @@ export const approveClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
 
   await batch.commit();
 
-  sendPushToUser(creatorUserId, "Club Approved", "Your club has been approved. You are now a Club Director.", "/clubs/my").catch(() => {});
+  sendPushToUser(creatorUserId, "Club Approved", "Your club has been approved. You are now a Club Director.", "/clubs/my").catch((err) => console.error("[approveClub] push failed:", err));
 
   return { clubId, status: "approved" as const };
 });

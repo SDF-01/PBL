@@ -79,30 +79,42 @@ function PlayerSessionContent() {
   useEffect(() => {
     if (!isFirebaseConfigured() || !user || !playDateId) return;
 
+    let cancelled = false;
     let unsubMatches: (() => void) | null = null;
 
-    getPlayerSessionData(user.uid, playDateId).then((data) => {
-      setSessionData(data);
+    getPlayerSessionData(user.uid, playDateId)
+      .then((data) => {
+        if (cancelled) return;
+        setSessionData(data);
 
-      if (data.currentSession && data.assignedCourt) {
-        const sessionId = data.currentSession.id;
-        const courtNumber = data.assignedCourt.courtNumber;
-        const playerId = user.uid;
+        if (data.currentSession && data.assignedCourt) {
+          const sessionId = data.currentSession.id;
+          const courtNumber = data.assignedCourt.courtNumber;
+          const playerId = user.uid;
 
-        unsubMatches = subscribeSessionMatches(sessionId, (matches) => {
-          setSessionData((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  ...deriveMatchesForPlayer(playerId, matches, courtNumber),
-                }
-              : prev,
-          );
-        });
-      }
-    });
+          unsubMatches = subscribeSessionMatches(sessionId, (matches) => {
+            if (cancelled) return;
+            setSessionData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    ...deriveMatchesForPlayer(playerId, matches, courtNumber),
+                  }
+                : prev,
+            );
+          });
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[PlayerSession] failed to load session data:", err);
+        setSessionData(null);
+      });
 
-    return () => { unsubMatches?.(); };
+    return () => {
+      cancelled = true;
+      unsubMatches?.();
+    };
   }, [user, playDateId]);
 
   if (!sessionData?.currentSession) {
