@@ -27,10 +27,13 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    if report.when != "call":
+    # Capture both call-phase results and setup-phase errors (fixture failures).
+    # Setup errors never reach "call" so without this they are invisible in the portal.
+    if report.when == "setup" and not report.failed:
+        return
+    if report.when not in ("call", "setup"):
         return
 
-    item = _find_item_by_nodeid(report.nodeid)
     uc_mark = _get_use_case_mark(report.nodeid)
 
     uc_id = uc_mark.get("id", "UC-???") if uc_mark else "UC-???"
@@ -48,6 +51,17 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
         status = "SKIP"
         error_msg = str(report.longrepr) if report.longrepr else None
         tb = None
+    elif report.when == "setup":
+        # Fixture setup error — distinguish from a test assertion failure
+        status = "ERROR"
+        if report.longrepr:
+            lines = str(report.longrepr).splitlines()
+            # Last non-empty line is the exception message
+            error_msg = next((l for l in reversed(lines) if l.strip()), "Fixture error")
+            tb = str(report.longrepr)
+        else:
+            error_msg = "Fixture setup failed"
+            tb = None
     else:
         status = "FAIL"
         if report.longrepr:

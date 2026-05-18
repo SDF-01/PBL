@@ -18,4 +18,7 @@ pickleballleague-firebase-adminsdk-*.json
 automation/
 .claude/
 Development Summaries
-ENHANCEMENTS.md   
+ENHANCEMENTS.md
+*.toon
+tests/e2e/.env.test
+tests/e2e/.auth/
