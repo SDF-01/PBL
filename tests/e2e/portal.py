@@ -336,6 +336,7 @@ class PortalHandler(BaseHTTPRequestHandler):
             with _custom_lock: d = _load_custom()
             self._json(list(d["groups"].values()))
         elif p.startswith("/api/run/"):        run_id = p[len("/api/run/"):]; self._json(_get_run(run_id) or {"error": "not found"}, 404 if not _get_run(run_id) else 200)
+        elif p.startswith("/videos/"):         self._serve_video(p[len("/videos/"):])
         elif p == "/api/history":
             entries = []
             if HISTORY_DIR.exists():
@@ -447,6 +448,20 @@ class PortalHandler(BaseHTTPRequestHandler):
 
     def _err(self, status: int, msg: str) -> None:
         self._json({"error": msg}, status)
+
+    def _serve_video(self, filename: str) -> None:
+        path = REPORTS_DIR / "videos" / filename
+        if not path.exists() or path.suffix != ".webm":
+            self._err(404, "Video not found")
+            return
+        data = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "video/webm")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
+        self._cors()
+        self.end_headers()
+        self.wfile.write(data)
 
     def _html(self) -> None:
         body = _HTML.encode("utf-8")
@@ -622,6 +637,10 @@ main{padding:24px 28px;max-width:1480px;margin:0 auto}
 .fpill.f-FAIL.act{background:var(--fail);border-color:var(--fail)}
 .fpill.f-ERROR.act{background:var(--err);border-color:var(--err)}
 .fpill.f-SKIP.act{background:var(--skip);border-color:var(--skip)}
+/* video player */
+.video-wrap{grid-column:1/-1;margin-top:4px}
+.video-wrap h4{margin-bottom:8px}
+.video-wrap video{width:100%;max-height:420px;border-radius:6px;background:#000;border:1px solid var(--bor)}
 /* history */
 .hist-panel{background:var(--sur);border:1px solid var(--bor);border-radius:9px;overflow:hidden;margin-bottom:28px}
 .hist-row{display:grid;grid-template-columns:140px 1fr 80px 60px 70px;gap:8px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--bor);cursor:pointer;transition:background .12s;font-size:.78rem}
@@ -1115,6 +1134,7 @@ function buildResItem(r,i){
     <div class="hintbox">${esc(sug)}</div>
   </div>`:'';
   const rerunBtn=r.node_id&&!r.node_id.startsWith('custom::')?`<div style="grid-column:1/-1;padding-top:4px"><button class="btn-rerun-detail" onclick="rerunSingle('${esc(r.node_id)}')">&#8635; Re-run this test</button></div>`:'';
+  const videoHtml=r.video_path?`<div class="dbox video-wrap" style="grid-column:1/-1"><h4>&#9654; Session Recording</h4><video src="/${esc(r.video_path)}" controls preload="metadata"></video></div>`:'';
   return `<div class="ri" id="ri-${i}">
     <div class="rh" onclick="toggleExp(${i})">
       <span class="eic" id="ei-${i}">&#9658;</span>
@@ -1126,6 +1146,7 @@ function buildResItem(r,i){
       <span class="rp">${esc(r.persona)}</span>
       <span class="rdu">${r.duration_s}s</span>
       <span class="rs s-${r.status}">${r.status}</span>
+      ${r.video_path?`<span title="Recording available" style="font-size:.75rem;color:var(--mu)">&#9654;</span>`:''}
       ${r.node_id&&!r.node_id.startsWith('custom::')? `<button class="btn-rerun" onclick="event.stopPropagation();rerunSingle('${esc(r.node_id)}')" title="Re-run this test">&#8635;</button>`:''}
     </div>
     <div class="rd" id="rd-${i}">
@@ -1135,6 +1156,7 @@ function buildResItem(r,i){
         ${whyHtml}
         ${fixHtml}
         ${hintHtml}
+        ${videoHtml}
         ${rerunBtn}
       </div>
     </div>

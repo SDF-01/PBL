@@ -108,7 +108,16 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     )
 
 
+def _safe_name(nodeid: str) -> str:
+    return (
+        nodeid.replace("/", "_").replace("::", "_")
+              .replace("[", "_").replace("]", "_")
+    )
+
+
 def _result_to_dict(r) -> dict:
+    from tests.e2e.config import Config
+    video_file = Config.VIDEOS_DIR / f"{_safe_name(r.node_id)}.webm"
     return {
         "node_id": r.node_id,
         "uc_id": r.uc_id,
@@ -118,6 +127,7 @@ def _result_to_dict(r) -> dict:
         "status": r.status,
         "duration_s": r.duration_s,
         "error_message": r.error_message,
+        "video_path": f"videos/{_safe_name(r.node_id)}.webm" if video_file.exists() else None,
         "steps": [
             {
                 "index": s.index,

@@ -148,6 +148,14 @@ def admin_context(browser) -> Generator[BrowserContext, None, None]:
 # ── Per-test page fixtures (function-scoped) ──────────────────────────────────
 
 
+def _safe_name(nodeid: str) -> str:
+    """Filesystem-safe version of a pytest node ID."""
+    return (
+        nodeid.replace("/", "_").replace("::", "_")
+              .replace("[", "_").replace("]", "_")
+    )
+
+
 def _make_page_fixture(context_fixture_name: str):
     """Return a plain function (no fixture decorator) for each persona context."""
     def _fixture(request) -> Generator[Page, None, None]:
@@ -156,7 +164,7 @@ def _make_page_fixture(context_fixture_name: str):
         yield page
         rep = getattr(request.node, "rep_call", None)
         if rep and rep.failed:
-            name = request.node.nodeid.replace("/", "_").replace("::", "_")
+            name = _safe_name(request.node.nodeid)
             path = Config.SCREENSHOTS_DIR / f"FAIL_{name}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -164,6 +172,17 @@ def _make_page_fixture(context_fixture_name: str):
             except Exception:
                 pass
         page.close()
+        # Rename Playwright's UUID video file to the test node ID so the
+        # portal can link it to the result without extra bookkeeping.
+        if page.video:
+            try:
+                src = Path(page.video.path())
+                if src.exists():
+                    dest = Config.VIDEOS_DIR / f"{_safe_name(request.node.nodeid)}.webm"
+                    Config.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
+                    src.rename(dest)
+            except Exception:
+                pass
 
     return _fixture
 
