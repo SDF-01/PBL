@@ -86,11 +86,13 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
           echo "service account: $(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/sa.json"))["client_email"])')"
 
+      # Non-blocking on purpose. A deploy-scoped service account may legitimately
+      # lack projects.list while still being able to deploy, and this step must
+      # never mask the deploy's own error by short-circuiting the job. It runs
+      # purely to put a real authenticated round-trip in the log.
       - name: Verify Firebase credentials
+        continue-on-error: true
         run: |
-          # Cheap authenticated round-trip. If the key is expired/revoked or the
-          # service account lost its roles, this fails with Google's actual
-          # message instead of surfacing as a generic deploy failure.
           npx firebase-tools projects:list --non-interactive
 
       - name: Deploy Cloud Functions
