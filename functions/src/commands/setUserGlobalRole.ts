@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { requireCaller, requireSiteAdmin } from "../lib/auth";
+import { requireSiteAdmin, type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import {
   syncRoleArtifacts,
   type LegacyRole,
@@ -24,11 +23,13 @@ const LEGACY_TO_ROLE_KEY: Record<LegacyRole, RoleKey> = {
  * adds a new one for the requested role, writes a roleEvents audit row,
  * and recomputes the target's custom claim + users.role mirror.
  */
-export const setUserGlobalRole = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function setUserGlobalRoleCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
   requireSiteAdmin(caller);
 
-  const parsed = SetUserGlobalRoleInput.safeParse(request.data);
+  const parsed = SetUserGlobalRoleInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -97,4 +98,4 @@ export const setUserGlobalRole = onCall(SECURE_CALLABLE_OPTIONS, async (request)
     userRoleId: newRoleRef.id,
     effectiveLegacyRole: effective,
   };
-});
+}

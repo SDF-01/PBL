@@ -2,7 +2,10 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "noImplicitReturns": true,
     "noUnusedLocals": true,
     "outDir": "lib",
@@ -15,5 +18,7 @@
     "resolveJsonModule": true
   },
   "compileOnSave": true,
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }

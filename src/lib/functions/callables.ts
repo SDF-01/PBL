@@ -1,12 +1,19 @@
 "use client";
 
-import { httpsCallable, FunctionsError } from "firebase/functions";
-import { fns } from "./client";
+// Typed wrappers for the privileged command layer.
+//
+// Each wrapper validates its input with the canonical Zod schema before the
+// request leaves the browser (the server re-validates with the mirrored copy —
+// client validation is for fast feedback, never for trust) and returns the
+// command's typed result.
+//
+// The transport lives in ./client. These names and payloads are identical
+// whether the commands are served by Cloud Functions or the HTTP host, so
+// switching between them touches no call site.
+
 import { auth } from "@/lib/firebase";
-import {
-  ApproveClubInput,
-  RejectClubInput,
-} from "@/lib/schemas/club";
+import { callCommand } from "./client";
+import { ApproveClubInput, RejectClubInput } from "@/lib/schemas/club";
 import {
   AssignRoleInput,
   DeactivateUserRoleInput,
@@ -22,6 +29,9 @@ import {
   PersistGeneratedSessionInput,
   FinalizeSessionInput,
 } from "@/lib/schemas/session";
+
+export { formatFunctionsError, CommandError } from "./client";
+export type { CommandErrorCode } from "./client";
 
 export type LegacyRole =
   | "SITE_ADMIN"
@@ -84,147 +94,110 @@ export async function callNotifyAdminsOfClubSubmission(input: {
   clubId: string;
   clubName: string;
 }): Promise<void> {
-  const callable = httpsCallable<{ clubId: string; clubName: string }, unknown>(
-    fns(),
-    "notifyAdminsOfClubSubmission",
-  );
-  await callable(input);
+  await callCommand<unknown>("notifyAdminsOfClubSubmission", input);
 }
 
 export async function callApproveClub(
   input: ApproveClubInput,
 ): Promise<ApproveClubResult> {
-  const parsed = ApproveClubInput.parse(input);
-  const callable = httpsCallable<ApproveClubInput, ApproveClubResult>(
-    fns(),
+  return callCommand<ApproveClubResult>(
     "approveClub",
+    ApproveClubInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 export async function callRejectClub(
   input: RejectClubInput,
 ): Promise<RejectClubResult> {
-  const parsed = RejectClubInput.parse(input);
-  const callable = httpsCallable<RejectClubInput, RejectClubResult>(
-    fns(),
+  return callCommand<RejectClubResult>(
     "rejectClub",
+    RejectClubInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 export async function callAssignRole(
   input: AssignRoleInput,
 ): Promise<AssignRoleResult> {
-  const parsed = AssignRoleInput.parse(input);
-  const callable = httpsCallable<AssignRoleInput, AssignRoleResult>(
-    fns(),
+  return callCommand<AssignRoleResult>(
     "assignRole",
+    AssignRoleInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 export async function callDeactivateUserRole(
   input: DeactivateUserRoleInput,
 ): Promise<DeactivateUserRoleResult> {
-  const parsed = DeactivateUserRoleInput.parse(input);
-  const callable = httpsCallable<
-    DeactivateUserRoleInput,
-    DeactivateUserRoleResult
-  >(fns(), "deactivateUserRole");
-  const res = await callable(parsed);
-  return res.data;
+  return callCommand<DeactivateUserRoleResult>(
+    "deactivateUserRole",
+    DeactivateUserRoleInput.parse(input),
+  );
 }
 
 export async function callSetUserGlobalRole(
   input: SetUserGlobalRoleInput,
 ): Promise<SetUserGlobalRoleResult> {
-  const parsed = SetUserGlobalRoleInput.parse(input);
-  const callable = httpsCallable<
-    SetUserGlobalRoleInput,
-    SetUserGlobalRoleResult
-  >(fns(), "setUserGlobalRole");
-  const res = await callable(parsed);
-  return res.data;
+  return callCommand<SetUserGlobalRoleResult>(
+    "setUserGlobalRole",
+    SetUserGlobalRoleInput.parse(input),
+  );
 }
 
 // ============================================================
-// LADDER MATCH + SESSION CALLABLES
+// LADDER MATCH + SESSION COMMANDS
 // ============================================================
 
 export async function callSubmitMatchScore(
   input: SubmitMatchScoreInput,
 ): Promise<SubmitMatchScoreResult> {
-  const parsed = SubmitMatchScoreInput.parse(input);
-  const callable = httpsCallable<SubmitMatchScoreInput, SubmitMatchScoreResult>(
-    fns(),
+  return callCommand<SubmitMatchScoreResult>(
     "submitMatchScore",
+    SubmitMatchScoreInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 export async function callVerifyMatchScore(
   input: VerifyMatchScoreInput,
 ): Promise<VerifyMatchScoreResult> {
-  const parsed = VerifyMatchScoreInput.parse(input);
-  const callable = httpsCallable<VerifyMatchScoreInput, VerifyMatchScoreResult>(
-    fns(),
+  return callCommand<VerifyMatchScoreResult>(
     "verifyMatchScore",
+    VerifyMatchScoreInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 export async function callDisputeMatch(
   input: DisputeMatchInput,
 ): Promise<DisputeMatchResult> {
-  const parsed = DisputeMatchInput.parse(input);
-  const callable = httpsCallable<DisputeMatchInput, DisputeMatchResult>(
-    fns(),
+  return callCommand<DisputeMatchResult>(
     "disputeMatch",
+    DisputeMatchInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 export async function callAdminAssignMatchResult(
   input: AdminAssignMatchResultInput,
 ): Promise<AdminAssignMatchResultResult> {
-  const parsed = AdminAssignMatchResultInput.parse(input);
-  const callable = httpsCallable<
-    AdminAssignMatchResultInput,
-    AdminAssignMatchResultResult
-  >(fns(), "adminAssignMatchResult");
-  const res = await callable(parsed);
-  return res.data;
+  return callCommand<AdminAssignMatchResultResult>(
+    "adminAssignMatchResult",
+    AdminAssignMatchResultInput.parse(input),
+  );
 }
 
 export async function callPersistGeneratedSession(
   input: PersistGeneratedSessionInput,
 ): Promise<PersistGeneratedSessionResult> {
-  const parsed = PersistGeneratedSessionInput.parse(input);
-  const callable = httpsCallable<
-    PersistGeneratedSessionInput,
-    PersistGeneratedSessionResult
-  >(fns(), "persistGeneratedSession");
-  const res = await callable(parsed);
-  return res.data;
+  return callCommand<PersistGeneratedSessionResult>(
+    "persistGeneratedSession",
+    PersistGeneratedSessionInput.parse(input),
+  );
 }
 
 export async function callFinalizeSession(
   input: FinalizeSessionInput,
 ): Promise<FinalizeSessionResult> {
-  const parsed = FinalizeSessionInput.parse(input);
-  const callable = httpsCallable<FinalizeSessionInput, FinalizeSessionResult>(
-    fns(),
+  return callCommand<FinalizeSessionResult>(
     "finalizeSession",
+    FinalizeSessionInput.parse(input),
   );
-  const res = await callable(parsed);
-  return res.data;
 }
 
 /**
@@ -232,22 +205,7 @@ export async function callFinalizeSession(
  * refresh so the new claim is active in this session immediately.
  */
 export async function callSyncMyClaims(): Promise<SyncMyClaimsResult> {
-  const callable = httpsCallable<undefined, SyncMyClaimsResult>(
-    fns(),
-    "syncMyClaims",
-  );
-  const res = await callable();
+  const result = await callCommand<SyncMyClaimsResult>("syncMyClaims", {});
   await auth().currentUser?.getIdToken(true);
-  return res.data;
-}
-
-/** Format a Functions error for user-facing toast messages. */
-export function formatFunctionsError(err: unknown): string {
-  if (err instanceof FunctionsError) {
-    return err.message;
-  }
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return "Unknown error.";
+  return result;
 }

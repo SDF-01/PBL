@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { requireSessionScope } from "../lib/scope";
 import { FinalizeSessionInput } from "../schemas/session";
 
@@ -34,8 +33,10 @@ function stripUndefined<T extends Record<string, unknown>>(
  * row. Status is set last so a partial failure leaves the session NOT
  * finalized rather than finalized-but-missing-snapshot.
  */
-export const finalizeSession = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function finalizeSessionCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
   if (!callerIsStaff(caller)) {
     throw new HttpsError(
       "permission-denied",
@@ -43,7 +44,7 @@ export const finalizeSession = onCall(SECURE_CALLABLE_OPTIONS, async (request) =
     );
   }
 
-  const parsed = FinalizeSessionInput.safeParse(request.data);
+  const parsed = FinalizeSessionInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -139,4 +140,4 @@ export const finalizeSession = onCall(SECURE_CALLABLE_OPTIONS, async (request) =
   await batch.commit();
 
   return { sessionId, status: "finalized" as const };
-});
+}

@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { requirePlayDateScope } from "../lib/scope";
 import { PersistGeneratedSessionInput } from "../schemas/session";
 
@@ -30,8 +29,10 @@ function stripUndefined<T extends Record<string, unknown>>(
  * at 500 ops; the schema caps courts at 20 and matches at 200, so the upper
  * bound is well within budget.
  */
-export const persistGeneratedSession = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function persistGeneratedSessionCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
   if (!callerIsStaff(caller)) {
     throw new HttpsError(
       "permission-denied",
@@ -39,7 +40,7 @@ export const persistGeneratedSession = onCall(SECURE_CALLABLE_OPTIONS, async (re
     );
   }
 
-  const parsed = PersistGeneratedSessionInput.safeParse(request.data);
+  const parsed = PersistGeneratedSessionInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -125,4 +126,4 @@ export const persistGeneratedSession = onCall(SECURE_CALLABLE_OPTIONS, async (re
     courtCount: courts.length,
     matchCount: matches.length,
   };
-});
+}

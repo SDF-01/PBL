@@ -1,4 +1,4 @@
-import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
+import { HttpsError } from "./errors";
 
 export interface CallerContext {
   uid: string;
@@ -7,36 +7,32 @@ export interface CallerContext {
 }
 
 /**
- * Resolves the calling user's authority from their Firebase Auth custom claim.
+ * Builds a caller's authority from their Firebase Auth custom claim.
  *
- * Authority comes exclusively from `request.auth.token.role`, which is the
- * same source firestore.rules trusts. users/{uid}.role is deliberately NOT
- * consulted: it is a UI cache mirrored by syncRoleArtifacts, it lives in a
- * client-readable document, and honouring it here would let the Functions
- * layer grant privileges that the rules layer would refuse — the two must
- * agree or the security model has a seam in it.
+ * Authority comes exclusively from the `role` claim, which is the same source
+ * firestore.rules trusts. users/{uid}.role is deliberately NOT consulted: it is
+ * a UI cache mirrored by syncRoleArtifacts, it lives in a client-readable
+ * document, and honouring it here would let the command layer grant privileges
+ * the rules layer would refuse — the two must agree or the model has a seam.
  *
- * A user whose claim is missing resolves to PLAYER-level authority. To
- * provision a claim, call the syncMyClaims callable (recomputes from
- * userRoles), or scripts/grant-site-admin.ts for the very first site admin.
- * Either way the affected user must refresh their ID token —
- * getIdToken(true) — before the new claim is active in their session.
+ * A caller whose claim is missing resolves to PLAYER-level authority. To
+ * provision a claim, call syncMyClaims (recomputes from userRoles), or
+ * scripts/grant-site-admin.ts for the very first site admin. Either way the
+ * user must refresh their ID token — getIdToken(true) — before it takes effect.
  *
- * Declared async so the 14 existing `await requireCaller(request)` call sites
- * keep working, and so a future claim-lookup that does need IO can slot in
- * without touching every command.
+ * This is transport-neutral on purpose. Each adapter extracts the uid and claim
+ * from its own request shape and calls this:
+ *   Cloud Functions -> request.auth.uid / request.auth.token.role
+ *   HTTP host       -> verified ID token's uid / role
  */
-export async function requireCaller(
-  request: CallableRequest<unknown>,
-): Promise<CallerContext> {
-  const uid = request.auth?.uid;
+export function callerFromClaim(
+  uid: string | undefined | null,
+  claimRole: unknown,
+): CallerContext {
   if (!uid) {
     throw new HttpsError("unauthenticated", "Sign-in is required.");
   }
-
-  const claimRole = request.auth?.token?.role;
   const legacyRole = typeof claimRole === "string" ? claimRole : null;
-
   return {
     uid,
     legacyRole,

@@ -1,16 +1,17 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireCaller, requireSiteAdmin } from "../lib/auth";
+import { requireSiteAdmin, type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { RejectClubInput } from "../schemas/club";
 import { sendPushToUser } from "../lib/push";
 
-export const rejectClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function rejectClubCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
   requireSiteAdmin(caller);
 
-  const parsed = RejectClubInput.safeParse(request.data);
+  const parsed = RejectClubInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -86,4 +87,4 @@ export const rejectClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
   sendPushToUser(creatorUserId, "Club Not Approved", "Your club proposal was not approved. You remain a Player.", "/clubs/my").catch((err) => console.error("[rejectClub] push failed:", err));
 
   return { clubId, status: "rejected" as const };
-});
+}

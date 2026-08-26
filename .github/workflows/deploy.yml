@@ -95,7 +95,17 @@ jobs:
         run: |
           npx firebase-tools projects:list --non-interactive
 
+      # Cloud Functions require the Blaze plan, and this project is on Spark —
+      # so this step is skipped by default and the identical commands are served
+      # by the HTTP host instead (netlify/functions + functions/src/server).
+      # Nothing about the command logic differs between the two; see
+      # functions/src/registry.ts.
+      #
+      # To switch back: enable Blaze, then set the repository variable
+      # DEPLOY_FUNCTIONS=true (Settings -> Secrets and variables -> Actions ->
+      # Variables). No code change is required.
       - name: Deploy Cloud Functions
+        if: vars.DEPLOY_FUNCTIONS == 'true'
         run: npx firebase-tools deploy --only functions --project pickleleauge --non-interactive --force --debug
 
       # firebase-debug.log holds the underlying HTTP status and API error body,

@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { requireMatchScope } from "../lib/scope";
 import { AdminAssignMatchResultInput } from "../schemas/match";
 
@@ -18,8 +17,10 @@ function callerIsStaff(caller: { isSiteAdmin: boolean; legacyRole: string | null
   );
 }
 
-export const adminAssignMatchResult = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function adminAssignMatchResultCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
   if (!callerIsStaff(caller)) {
     throw new HttpsError(
       "permission-denied",
@@ -27,7 +28,7 @@ export const adminAssignMatchResult = onCall(SECURE_CALLABLE_OPTIONS, async (req
     );
   }
 
-  const parsed = AdminAssignMatchResultInput.safeParse(request.data);
+  const parsed = AdminAssignMatchResultInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -87,4 +88,4 @@ export const adminAssignMatchResult = onCall(SECURE_CALLABLE_OPTIONS, async (req
   });
 
   return { matchId, status: "ADMIN_ASSIGNED" as const };
-});
+}

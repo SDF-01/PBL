@@ -1,6 +1,4 @@
-import { onCall } from "firebase-functions/v2/https";
-import { requireCaller } from "../lib/auth";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
+import { type CallerContext } from "../lib/auth";
 import { syncRoleArtifacts } from "../lib/roles";
 
 /**
@@ -12,8 +10,10 @@ import { syncRoleArtifacts } from "../lib/roles";
  * Client should call await user.getIdToken(true) afterwards to pull the
  * new claim into the active session.
  */
-export const syncMyClaims = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function syncMyClaimsCommand(
+  caller: CallerContext,
+  _data: unknown,
+) {
   const effective = await syncRoleArtifacts(caller.uid);
   return { effectiveLegacyRole: effective };
-});
+}

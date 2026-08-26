@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { VerifyMatchScoreInput } from "../schemas/match";
 
 interface MatchRecord {
@@ -12,10 +11,11 @@ interface MatchRecord {
   submittedBy?: string;
 }
 
-export const verifyMatchScore = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
-
-  const parsed = VerifyMatchScoreInput.safeParse(request.data);
+export async function verifyMatchScoreCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
+  const parsed = VerifyMatchScoreInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -72,4 +72,4 @@ export const verifyMatchScore = onCall(SECURE_CALLABLE_OPTIONS, async (request) 
   });
 
   return { matchId, status: "VERIFIED" as const };
-});
+}

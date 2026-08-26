@@ -1,13 +1,12 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import {
   getFirestore,
   FieldValue,
   Timestamp,
   type DocumentReference,
 } from "firebase-admin/firestore";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { sendPushToMany } from "../lib/push";
 import { computeEloDeltas, STARTING_ELO } from "../lib/elo";
 import { SubmitMatchScoreInput } from "../schemas/match";
@@ -44,10 +43,11 @@ interface PlayerRecord {
  *   8. Writes one audits row.
  *   9. Writes notification docs to the opposing side (post-tx, best-effort).
  */
-export const submitMatchScore = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
-
-  const parsed = SubmitMatchScoreInput.safeParse(request.data);
+export async function submitMatchScoreCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
+  const parsed = SubmitMatchScoreInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -266,4 +266,4 @@ export const submitMatchScore = onCall(SECURE_CALLABLE_OPTIONS, async (request) 
   sendPushToMany(opposingSide, "Score submitted — verify now", `Game ${txResult.gameNumber} score: ${scoreA}–${scoreB}. Tap to confirm or dispute.`, "/dashboard").catch((err) => console.error("[submitMatchScore] push failed:", err));
 
   return { matchId, status: "SUBMITTED" as const };
-});
+}

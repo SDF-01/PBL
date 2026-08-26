@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { syncRoleArtifacts, type RoleKey } from "../lib/roles";
 import { AssignRoleInput } from "../schemas/role";
 
@@ -33,10 +32,11 @@ async function callerCanAssign(
   return !directorSnap.empty;
 }
 
-export const assignRole = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
-
-  const parsed = AssignRoleInput.safeParse(request.data);
+export async function assignRoleCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
+  const parsed = AssignRoleInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -110,4 +110,4 @@ export const assignRole = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
     userRoleId: userRoleRef.id,
     effectiveLegacyRole: effective,
   };
-});
+}

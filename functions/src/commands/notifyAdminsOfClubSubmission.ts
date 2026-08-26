@@ -1,9 +1,8 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { z } from "zod";
-import { requireCaller } from "../lib/auth";
+import { type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { sendPushToMany } from "../lib/push";
 
 const Input = z.object({
@@ -11,12 +10,11 @@ const Input = z.object({
   clubName: z.string().min(1),
 });
 
-export const notifyAdminsOfClubSubmission = onCall(
-  SECURE_CALLABLE_OPTIONS,
-  async (request) => {
-    const caller = await requireCaller(request);
-
-    const parsed = Input.safeParse(request.data);
+export async function notifyAdminsOfClubSubmissionCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
+    const parsed = Input.safeParse(data);
     if (!parsed.success) {
       throw new HttpsError("invalid-argument", parsed.error.message);
     }
@@ -60,5 +58,4 @@ export const notifyAdminsOfClubSubmission = onCall(
     sendPushToMany(adminIds, "New Club Submission", `"${clubName}" has been submitted for review.`, "/admin/clubs").catch((err) => console.error("[notifyAdminsOfClubSubmission] push failed:", err));
 
     return { notified: adminsSnap.size };
-  },
-);
+}

@@ -13,7 +13,9 @@
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "deploy": "firebase deploy --only functions --project pickleleauge",
-    "logs": "firebase functions:log --project pickleleauge"
+    "logs": "firebase functions:log --project pickleleauge",
+    "serve:http": "npm run build && node lib/server/node.js",
+    "start": "node lib/server/node.js"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0",

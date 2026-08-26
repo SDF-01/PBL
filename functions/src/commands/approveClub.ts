@@ -1,8 +1,7 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { HttpsError } from "../lib/errors";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireCaller, requireSiteAdmin } from "../lib/auth";
+import { requireSiteAdmin, type CallerContext } from "../lib/auth";
 import { COLLECTIONS } from "../lib/collections";
-import { SECURE_CALLABLE_OPTIONS } from "../lib/secureCallable";
 import { ApproveClubInput } from "../schemas/club";
 import { sendPushToUser } from "../lib/push";
 
@@ -17,11 +16,13 @@ function outranks(newRole: string, currentRole: string | null | undefined): bool
   return (LEGACY_ROLE_RANK[newRole] ?? 0) > (LEGACY_ROLE_RANK[currentRole ?? ""] ?? 0);
 }
 
-export const approveClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
-  const caller = await requireCaller(request);
+export async function approveClubCommand(
+  caller: CallerContext,
+  data: unknown,
+) {
   requireSiteAdmin(caller);
 
-  const parsed = ApproveClubInput.safeParse(request.data);
+  const parsed = ApproveClubInput.safeParse(data);
   if (!parsed.success) {
     throw new HttpsError("invalid-argument", parsed.error.message);
   }
@@ -123,4 +124,4 @@ export const approveClub = onCall(SECURE_CALLABLE_OPTIONS, async (request) => {
   sendPushToUser(creatorUserId, "Club Approved", "Your club has been approved. You are now a Club Director.", "/clubs/my").catch((err) => console.error("[approveClub] push failed:", err));
 
   return { clubId, status: "approved" as const };
-});
+}

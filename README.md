@@ -21,7 +21,7 @@ Remaining gaps before production are listed under [Production Gate](#production-
 | Styling | Tailwind CSS + CSS variables | Obsidian/ember/rune visual system. |
 | Auth | Firebase Auth | Email/password and Google OAuth; authority via custom claims. |
 | Database | Cloud Firestore | Client SDK for reads + self-service writes; privileged writes are Functions-only. |
-| Backend | Cloud Functions (gen 2) | 13 callables in `functions/`. Node 20, region `us-central1`. |
+| Backend | Transport-agnostic command layer | 13 commands in `functions/src/commands/`. Runs on a free HTTP host while the project is on Spark; Cloud Functions adapter kept for Blaze. See [COMMAND_SERVICE.md](COMMAND_SERVICE.md). |
 | Storage | Firebase Storage | Player photos and club logos; rules enforce role, owner path, size, and content type. |
 | Push/PWA | Service workers + FCM | App SW, Messaging SW, client token registration, Admin SDK sender with stale-token cleanup. |
 | Hosting | Firebase Hosting | Serves `out/`; rewrites map dynamic routes to `__fallback` pages. |
@@ -70,11 +70,11 @@ scripts/                       Seeding, admin bootstrap, migrations
 automation/                    TOON implementation handoff specs (gitignored)
 ```
 
-## Cloud Functions
+## Command Layer
 
-All callables live in [functions/src/commands/](functions/src/commands/) and are exported from [functions/src/index.ts](functions/src/index.ts). Typed client wrappers are in [src/lib/functions/callables.ts](src/lib/functions/callables.ts).
+All 13 commands live in [functions/src/commands/](functions/src/commands/) as pure `(caller, data)` functions with no transport imports, registered once in [functions/src/registry.ts](functions/src/registry.ts). Two adapters serve them: [index.ts](functions/src/index.ts) for Cloud Functions and [server/handler.ts](functions/src/server/handler.ts) for any HTTP host. Cloud Functions require the Blaze plan and this project is on Spark, so the HTTP adapter is the live one — see [COMMAND_SERVICE.md](COMMAND_SERVICE.md). Typed client wrappers are in [src/lib/functions/callables.ts](src/lib/functions/callables.ts).
 
-| Callable | Purpose |
+| Command | Purpose |
 |---|---|
 | `approveClub` / `rejectClub` | Club approval workflow with role + audit writes. |
 | `notifyAdminsOfClubSubmission` | Fan-out notification on club submission. |
