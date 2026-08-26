@@ -109,10 +109,19 @@ jobs:
           # Job logs need an authenticated token to read, but annotations are
           # exposed on the public check-runs API. Emitting each matching line as
           # its own annotation makes the real cause visible without log access.
+          # The fatal error is at the END of the log. Matching generically on
+          # "error" hits the apiv2 request tracing near the start instead, so
+          # target real error markers and always include the tail as a fallback.
           if [ -f firebase-debug.log ]; then
-            grep -aiE "error|denied|billing|not enabled|HTTP Error|quota|PERMISSION" firebase-debug.log | head -n 6 > deploy-errors.txt || true
+            {
+              grep -aE "^\[error\]|Error:|HTTP Error|FirebaseError|billing|not been used|is disabled" firebase-debug.log | tail -n 8
+              echo "----- tail of firebase-debug.log -----"
+              tail -n 14 firebase-debug.log
+            } > deploy-errors.txt 2>/dev/null || true
             while IFS= read -r line; do
-              echo "::error title=Functions deploy::${line}"
+              if [ -n "$line" ]; then
+                echo "::error title=Functions deploy::${line}"
+              fi
             done < deploy-errors.txt
           fi
 
