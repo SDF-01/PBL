@@ -45,6 +45,11 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID:              "1:481849102562:web:ec4ba61bcf1e5eaa1fcebb"
           NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID:      "G-KD1JTE4ET6"
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY:           ${{ secrets.RECAPTCHA_SITE_KEY }}
+          # Base URL of the privileged command service (see COMMAND_SERVICE.md).
+          # Set the repository variable COMMANDS_BASE_URL to your host, e.g.
+          # https://<site>.netlify.app/api. Until it is set, privileged actions
+          # fail with a clear "not configured" message rather than silently.
+          NEXT_PUBLIC_COMMANDS_BASE_URL:            ${{ vars.COMMANDS_BASE_URL }}
           NEXT_PUBLIC_APP_VERSION: "0.1.0"
           NEXT_PUBLIC_BUILD_SHA: ${{ github.sha }}
           NEXT_PUBLIC_BUILD_TIME: ${{ github.run_number }}
