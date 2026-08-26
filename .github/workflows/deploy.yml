@@ -104,8 +104,17 @@ jobs:
       - name: Dump Firebase debug log on failure
         if: failure()
         run: |
-          echo "===== firebase-debug.log ====="
+          echo "===== firebase-debug.log (tail) ====="
           tail -n 300 firebase-debug.log 2>/dev/null || echo "(no firebase-debug.log produced)"
+          # Job logs need an authenticated token to read, but annotations are
+          # exposed on the public check-runs API. Emitting each matching line as
+          # its own annotation makes the real cause visible without log access.
+          if [ -f firebase-debug.log ]; then
+            grep -aiE "error|denied|billing|not enabled|HTTP Error|quota|PERMISSION" firebase-debug.log | head -n 6 > deploy-errors.txt || true
+            while IFS= read -r line; do
+              echo "::error title=Functions deploy::${line}"
+            done < deploy-errors.txt
+          fi
 
       - name: Deploy Firestore rules and indexes
         run: npx firebase-tools deploy --only firestore:rules,firestore:indexes --project pickleleauge --non-interactive --force
