@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { COLLECTIONS } from "@/lib/firestore/collections";
 import { useAuth } from "@/lib/auth-context";
-import type { UserProfile } from "@/lib/firestore/types";
 import type { RoleKey, UserRoleDoc } from "./types";
 
 export interface PermissionState {
   roles: UserRoleDoc[];
-  /** Raw role field from users/{uid} — exposed for debugging only. */
-  primaryRole: string | null;
+  /**
+   * The `role` custom claim on the caller's ID token — the same value
+   * firestore.rules and the Cloud Functions authorize against. Exposed for
+   * debugging; prefer the derived booleans below.
+   */
+  claimRole: string | null;
   loading: boolean;
   isSiteAdmin: boolean;
   clubDirectorFor: string[];
@@ -26,19 +29,25 @@ export interface PermissionState {
 export function usePermissions(): PermissionState {
   const { user, ready } = useAuth();
   const [roles, setRoles] = useState<UserRoleDoc[]>([]);
-  const [primaryRole, setPrimaryRole] = useState<string | null>(null);
+  const [claimRole, setClaimRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!ready) return;
     if (!user || !isFirebaseConfigured()) {
       setRoles([]);
-      setPrimaryRole(null);
+      setClaimRole(null);
       setLoading(false);
       return;
     }
 
-    // Run both reads in parallel: userRoles collection + users/{uid}.role fallback.
+    // Guards against a stale response from a previous user landing in state
+    // after a fast sign-out/sign-in swap (the admin test-account switcher
+    // does exactly that).
+    let cancelled = false;
+
+    // Two parallel reads: scoped role documents, and the ID token whose
+    // `role` claim is the authoritative site-admin signal.
     Promise.all([
       getDocs(
         query(
@@ -47,22 +56,36 @@ export function usePermissions(): PermissionState {
           where("active", "==", true),
         ),
       ),
-      getDoc(doc(db(), COLLECTIONS.users, user.uid)),
+      user.getIdTokenResult(),
     ])
-      .then(([rolesSnap, userSnap]) => {
+      .then(([rolesSnap, token]) => {
+        if (cancelled) return;
         setRoles(rolesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as UserRoleDoc));
-        if (userSnap.exists()) {
-          setPrimaryRole((userSnap.data() as UserProfile).role ?? null);
-        }
+        const claim = token.claims.role;
+        setClaimRole(typeof claim === "string" ? claim : null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user, ready]);
 
-  // isSiteAdmin: either a SiteAdmin userRoles doc exists OR the primary role
-  // field on the user document is SITE_ADMIN (fallback until userRoles doc is added).
+  // Site admin comes from the custom claim, matching firestore.rules and
+  // functions/src/lib/auth.ts. It deliberately does NOT fall back to
+  // users/{uid}.role: that field is a UI cache the rules stopped trusting,
+  // and reading it here would show admin surfaces to a user whose every
+  // privileged write the backend then rejects.
+  //
+  // A SiteAdmin userRoles document is still honoured, because assignRole
+  // writes that document and the claim in the same batch — but the claim
+  // needs an ID-token refresh to appear, so the document covers the window
+  // between "role granted" and "token refreshed".
   const isSiteAdminUser =
-    roles.some((r) => r.roleId === "SiteAdmin" && r.clubId === null) ||
-    primaryRole === "SITE_ADMIN";
+    claimRole === "SITE_ADMIN" ||
+    roles.some((r) => r.roleId === "SiteAdmin" && r.clubId === null);
 
   const clubDirectorFor = roles
     .filter((r) => r.roleId === "ClubDirector" && r.clubId)
@@ -92,7 +115,7 @@ export function usePermissions(): PermissionState {
 
   return {
     roles,
-    primaryRole,
+    claimRole,
     loading,
     isSiteAdmin: isSiteAdminUser,
     clubDirectorFor,

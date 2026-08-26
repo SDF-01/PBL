@@ -1,24 +1,57 @@
-// Mirror of src/lib/firestore/collections.ts. Kept in sync manually until
-// a shared package or codegen step is introduced.
+// Mirror of src/lib/firestore/collections.ts. Do NOT edit directly —
+// edit the client copy, then re-run `npm test`, which fails on drift
+// (see src/lib/mirrors.test.ts).
+
 export const COLLECTIONS = {
   users: "users",
-  clubs: "clubs",
+  organizations: "organizations",
+  venues: "venues",
+  courts: "courts",
   leagues: "leagues",
   seasons: "seasons",
-  userRoles: "userRoles",
-  roleEvents: "roleEvents",
+  divisions: "divisions",
+  tournaments: "tournaments",
+  brackets: "brackets",
+  bracketNodes: "bracketNodes",
+  registrations: "registrations",
+  teams: "teams",
+  matches: "matches",
+  matchGames: "matchGames",
+  standings: "standings",
+  announcements: "announcements",
+  achievements: "achievements",
+  playerAchievements: "playerAchievements",
+  trophies: "trophies",
   notifications: "notifications",
   auditLog: "auditLog",
-  // Ladder + match collections
+  // ==== Ladder League (spec v4) ====
   playDates: "playDates",
   ladderSessions: "ladderSessions",
   ladderCourts: "ladderCourts",
   ladderMatches: "ladderMatches",
+  checkIns: "checkIns",
   standingsSnapshots: "standingsSnapshots",
   audits: "audits",
-  // Player + ELO collections
+  // ==== Player profiles + ELO ====
   players: "players",
   eloEvents: "eloEvents",
-  // Push notification tokens
+  // ==== Permissions / Roles (schema v1) ====
+  clubs: "clubs",
+  clubFacilities: "clubFacilities",
+  clubFollowers: "clubFollowers",
+  clubPosts: "clubPosts",
+  userRoles: "userRoles",
+  leagueMemberships: "leagueMemberships",
+  roleEvents: "roleEvents",
+  // ==== Player social ====
+  playerFollows: "playerFollows",
+  playerChallenges: "playerChallenges",
+  // ==== FCM push tokens ====
   fcmTokens: "fcmTokens",
+  // ==== Play-date RSVP ====
+  playDateRsvps: "playDateRsvps",
+  // ==== League round-robin schedule ====
+  leagueScheduleMatches: "leagueScheduleMatches",
 } as const;
+
+export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

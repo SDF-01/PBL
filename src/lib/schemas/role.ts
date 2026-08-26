@@ -1,5 +1,7 @@
 // Canonical Zod schemas for role command payloads.
-// Mirror in functions/src/schemas/role.ts must remain byte-equivalent.
+// Canonical copy. A byte-equivalent mirror lives at functions/src/schemas/role.ts;
+// src/lib/mirrors.test.ts fails the build if the two drift apart.
+
 import { z } from "zod";
 
 const NonEmptyId = z.string().trim().min(1).max(128);

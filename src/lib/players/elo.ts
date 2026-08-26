@@ -1,3 +1,6 @@
+// Canonical copy. A byte-equivalent mirror lives at functions/src/lib/elo.ts;
+// src/lib/mirrors.test.ts fails the build if the two drift apart.
+
 /**
  * Classic Elo with a doubles-match adaptation.
  *

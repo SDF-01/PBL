@@ -2,35 +2,32 @@
 
 Mobile-first pickleball league software for clubs, ladder play, player profiles, tournaments, and admin operations.
 
-This repository is currently a **Next.js static export backed by Firebase Auth, Cloud Firestore, Firebase Storage, and Firebase Cloud Messaging client SDKs**. It is not a Prisma/Postgres application and it does not currently run a production server API. The app is deployed as static HTML/JS to Firebase Hosting, and client code talks directly to Firebase services.
+The app is a **Next.js static export** (`output: "export"`) served from Firebase Hosting. There is no application server. The browser talks directly to Firebase Auth, Cloud Firestore, and Cloud Storage for reads and self-service writes, and calls **Cloud Functions** for every privileged command.
 
 ## Current Status
 
-The application has working UI, pure domain engines, Firebase-backed reads/writes, Storage uploads, PWA scaffolding, and FCM token registration. It is still in a security transition because the production architecture remains a static client talking directly to Firebase.
+The privileged-write migration is **done**. Role changes, club approval, ladder score submission/verification/disputes, admin result assignment, session generation, and session finalization all run in Cloud Functions under the Admin SDK. The client cannot write to `ladderSessions`, `ladderCourts`, `ladderMatches`, `standingsSnapshots`, or `eloEvents` at all — Firestore rules deny those paths outright.
 
-Several privileged workflows are still browser-driven and protected only by Firestore/Storage rules. Some helper paths are documented as backend-required, and the shared guard throws:
+Authorization has a single source of truth: the **Firebase Auth custom claim** `request.auth.token.role`. `firestore.rules`, `functions/src/lib/auth.ts`, and `usePermissions()` all read that claim and nothing else. `users/{uid}.role` still exists but is now only a UI cache, mirrored by the role-mutation functions.
 
-```ts
-trustedBackendRequired("action name")
-```
-
-That guard is intentional where it is used, but it is not yet wired into every high-risk write helper. Treat role changes, club approval, league administration, ladder generation/finalization, score/ELO mutation, audit logging, notifications, and tournament operations as workflows that need Cloud Functions or another trusted Admin SDK backend before production.
+Remaining gaps before production are listed under [Production Gate](#production-gate). The significant ones are App Check enforcement (wired but off), public read access on several collections, and `users/{uid}` not being split into public/private halves.
 
 ## Stack
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Framework | Next.js 15 App Router | Built with `output: "export"` for static hosting. |
+| Framework | Next.js 15 App Router | `output: "export"` — static HTML/JS, no server runtime. |
 | Language | TypeScript strict mode | `noUncheckedIndexedAccess` enabled. |
 | Styling | Tailwind CSS + CSS variables | Obsidian/ember/rune visual system. |
-| Auth | Firebase Auth | Email/password and Google OAuth. |
-| Database | Cloud Firestore | Client SDK reads/writes; rules enforce the current boundary; privileged writes need backend. |
-| Storage | Firebase Storage | Player photos and club logos; rules restrict file type/size but club-logo authorization still needs backend/scope hardening. |
-| Push/PWA | Web service workers + FCM | Static app SW and Firebase Messaging SW exist; token registration is client-side; server send trigger is not implemented. |
-| Hosting | Firebase Hosting | Serves `out/`; rewrites for static dynamic-route fallbacks. |
+| Auth | Firebase Auth | Email/password and Google OAuth; authority via custom claims. |
+| Database | Cloud Firestore | Client SDK for reads + self-service writes; privileged writes are Functions-only. |
+| Backend | Cloud Functions (gen 2) | 14 callables in `functions/`. Node 20, region `us-central1`. |
+| Storage | Firebase Storage | Player photos and club logos; rules enforce role, owner path, size, and content type. |
+| Push/PWA | Service workers + FCM | App SW, Messaging SW, client token registration, Admin SDK sender with stale-token cleanup. |
+| Hosting | Firebase Hosting | Serves `out/`; rewrites map dynamic routes to `__fallback` pages. |
 | Analytics | Firebase Analytics | Lazy client-only initialization. |
-| Tests | Vitest | Domain tests plus Firebase rules test harness. |
-| Backend | Not yet implemented | Required for secure admin/RBAC/score/ELO workflows. |
+| App Check | reCAPTCHA Enterprise | Client wired; server enforcement env-gated (off by default). |
+| Tests | Vitest + pytest/Playwright | Domain + rules + mirror guard; persona E2E suite with a local portal. |
 
 ## Repository Map
 
@@ -38,12 +35,12 @@ That guard is intentional where it is used, but it is not yet wired into every h
 src/
   app/                         Next.js routes and static-export pages
     (authenticated)/dashboard  Authenticated dashboard shell
-    admin/                     Admin hub, club approvals, users, audit views
-    auth/                      Login and signup
+    admin/                     Admin hub, club approvals, users, audit, testing
+    auth/                      Login, signup, verify, forgot-password
     clubs/                     Club creation, owned clubs, club management
-    ladder/                    Seasons, play dates, check-in, session surfaces
-    leagues/                   League create/detail views
-    players/                   Leaderboard, profile edit/view
+    ladder/                    Seasons, play dates, check-in, coordinator, session
+    leagues/                   League create/detail/roster/schedule/standings
+    players/                   Leaderboard, search, profile edit/view
     tournaments/               Tournament list/create/detail
   components/                  UI, layout, admin, player, bracket components
   domain/
@@ -52,113 +49,103 @@ src/
   lib/
     firebase.ts                Lazy Firebase client initialization
     auth-context.tsx           Firebase Auth provider
+    appcheck.ts                App Check (reCAPTCHA Enterprise) init
     fcm.ts                     FCM token registration and foreground listener
     storage.ts                 Firebase Storage image upload helpers
-    firestore/                 Collection names, types, general repo/write helpers
-    permissions/               Client-side role display helpers and pending club writes
-    ladder/                    Ladder reads plus backend-required write stubs
-    players/                   Player profile and ELO domain adapters
-    security/                  Backend-required guard
+    mirrors.test.ts            Drift guard for client/functions duplicated files
+    firestore/                 Collection names, types, repo/write helpers
+    functions/                 Callable client wrappers (typed)
+    permissions/               Role types, claim-based usePermissions hook
+    ladder/                    Ladder reads, check-in writes, geofence
+    players/                   Player profile, ELO, follows, challenges
+    schemas/                   Zod payload schemas (canonical; mirrored to functions/)
+functions/
+  src/commands/                One file per callable — the privileged command layer
+  src/lib/                     Caller auth, scope checks, roles, ELO, push, collections
+  src/schemas/                 Mirrors of src/lib/schemas
 tests/
-  firebase/                    Firestore rules tests
-automation/                    TOON implementation handoff specs
-Development Summaries/         Historical and current project summaries/audits
+  firebase/                    Firestore rules tests (emulator)
+  e2e/                         pytest + Playwright persona suite and test portal
+scripts/                       Seeding, admin bootstrap, migrations
+automation/                    TOON implementation handoff specs (gitignored)
 ```
 
-## Firebase Services
+## Cloud Functions
 
-Detected and used:
+All callables live in [functions/src/commands/](functions/src/commands/) and are exported from [functions/src/index.ts](functions/src/index.ts). Typed client wrappers are in [src/lib/functions/callables.ts](src/lib/functions/callables.ts).
 
-- Firebase Hosting
-- Firebase Auth
-- Cloud Firestore
-- Firebase Storage
-- Firebase Analytics
-- Firebase Cloud Messaging client SDK
-- Firebase Admin SDK in `scripts/seed-firestore.ts` only
+| Callable | Purpose |
+|---|---|
+| `approveClub` / `rejectClub` | Club approval workflow with role + audit writes. |
+| `notifyAdminsOfClubSubmission` | Fan-out notification on club submission. |
+| `assignRole` / `deactivateUserRole` | Scoped role grants; syncs claim + `users.role` mirror. |
+| `setUserGlobalRole` | Site-admin global role assignment. |
+| `syncMyClaims` | Self-service claim recompute from `userRoles`. |
+| `submitMatchScore` | Transactional score + ELO deltas + `eloEvents` + audit + push. |
+| `verifyMatchScore` / `disputeMatch` | Participant-driven score state transitions. |
+| `adminAssignMatchResult` | Staff override for unresolved matches. |
+| `persistGeneratedSession` | Writes engine-generated courts/matches atomically. |
+| `finalizeSession` | Movement calculation, standings snapshots, finalization. |
 
-Partially scaffolded:
-
-- PWA service worker in `public/sw.js`.
-- Firebase Messaging service worker in `public/firebase-messaging-sw.js`.
-- FCM token writes to `fcmTokens`; no Cloud Function or Admin SDK sender exists yet.
-
-Not present:
-
-- Cloud Functions
-- Realtime Database
-- App Check initialization
+Every callable takes its options from [`SECURE_CALLABLE_OPTIONS`](functions/src/lib/secureCallable.ts) and resolves its caller through [`requireCaller`](functions/src/lib/auth.ts), which is claim-only by design — it must not diverge from what the rules enforce.
 
 ## Security Posture
 
-Read these before implementing privileged features:
+Authority is the `role` custom claim. Provision it with [scripts/grant-site-admin.ts](scripts/grant-site-admin.ts) for the first site admin, then via `assignRole` / `syncMyClaims`. A claim change requires an ID-token refresh (`getIdToken(true)`) before it takes effect in a live session.
 
-- [Development Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md](Development%20Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md)
-- [automation/firebase_database_security_remediation_handoff.toon](automation/firebase_database_security_remediation_handoff.toon)
-- [automation/facility_venue_geocheckin_consolidation_handoff.toon](automation/facility_venue_geocheckin_consolidation_handoff.toon)
+**Important:** deploying `firestore.rules` requires at least one user to already hold the `SITE_ADMIN` claim, or admin write paths become unreachable.
 
 Current rules posture:
 
-- Staff checks prefer Firebase Auth custom claims, but still fall back to `users/{uid}.role`.
-- Users cannot self-promote by editing `users/{uid}.role`.
-- `userRoles` are client-writable by site admins and club directors; scope validation still needs backend/rules hardening.
-- Ladder sessions/courts are staff-only from rules; participants can submit, verify, or dispute limited ladder match fields.
-- ELO/stat mutations and `eloEvents` are not client-writable.
-- Audit collections are append-only or admin-readable depending on collection, but audit creation is not yet centralized around trusted commands.
-- Public reads still exist for several catalog and operational surfaces; privacy hardening remains a future phase.
-- Player profile reads require authentication, but `users/{uid}` remains publicly readable and should be split from private account data.
-- Storage club-logo writes are allowed for any authenticated user under `/clubs/**`; director/tenant scope is currently enforced only by application UI and needs rules/backend enforcement.
-- FCM token registration can store device tokens, but actual push delivery requires a trusted server trigger.
+- Staff checks read `request.auth.token.role` exclusively. Users cannot self-promote — `users/{uid}.role` is not consulted for authorization anywhere.
+- `ladderSessions`, `ladderCourts`, `ladderMatches`, `standingsSnapshots` are `write: if false`. Functions-only.
+- `eloEvents` is admin-create, never update/delete. ELO mutation happens only inside `submitMatchScore` / `adminAssignMatchResult`.
+- `userRoles` is admin-write; scoped assignment authority is enforced in `assignRole`, not in rules.
+- Check-ins are self-service create with staff-only update/delete. Participants may submit, verify, or dispute limited ladder match fields via callables.
+- `auditLog` and `roleEvents` are append-only and admin-readable.
+- A terminal `match /{document=**} { allow read, write: if false; }` denies anything not explicitly matched.
+- Storage: player photos are owner-scoped; `/clubs/pending/{uid}/` is uploader-scoped; `/clubs/{clubId}/` requires a `SITE_ADMIN` or `CLUB_ADMIN` claim. Per-club scoping within `CLUB_ADMIN` is still application-level only.
 
-Important: custom claims are not set by this repository yet. Firestore rules still fall back to `users/{uid}.role` for staff checks, so role authority must be moved to custom claims or backend-owned role state before production.
+Known open items:
 
-## Backend-Required Workflows
+- **Public reads remain** on catalog and operational surfaces, including `users/{uid}`. Splitting public profile from private account data is still pending.
+- **App Check is not enforced.** The client mints tokens ([src/lib/appcheck.ts](src/lib/appcheck.ts)) but `enforceAppCheck` defaults to `false`. See below.
+- **`fcmTokens` has no rule**, so it falls through to the terminal deny and client token registration cannot write. Push delivery is implemented server-side but has nothing to deliver to until this is resolved.
 
-The following flows must be moved to Cloud Functions or another trusted Admin SDK backend before production use:
+### Enabling App Check
 
-- user role assignment and revocation
-- club approval and rejection
-- league creation under a club
-- ladder season/venue/play-date administrative creation
-- ladder session generation and finalization
-- ladder score verification and admin result assignment
-- tournament bracket publishing
-- tournament match score recording
-- ELO/stat mutation
-- audit and role event creation
-- bulk notifications and announcements
-- achievement/trophy awards
-- push notification fanout
-- Storage authorization for club-owned assets
+`enforceAppCheck` is env-gated in [functions/src/lib/secureCallable.ts](functions/src/lib/secureCallable.ts) because enforcing it before the app is registered rejects every callable request. It is a **deploy-time** option, so the variable must be set in whatever environment runs `firebase deploy`.
 
-The client helper [src/lib/security/backendRequired.ts](src/lib/security/backendRequired.ts) marks backend-required paths, but current write helpers also contain TODO comments where migration is still pending.
+1. Firebase Console → App Check → Apps → register the web app with reCAPTCHA Enterprise; copy the site key.
+2. Set `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` for the web build (see `.env.example` and the deploy workflow).
+3. Watch Console → App Check → Metrics until verified requests appear and unverified is ~0.
+4. Set `ENFORCE_APP_CHECK=true` and redeploy functions.
 
 ## Domain Engines
 
-The pure domain layer is the strongest part of the codebase.
+The pure domain layer is the strongest part of the codebase and is the only code with meaningful unit-test coverage.
 
 ### Brackets
 
-`src/domain/bracket/` contains deterministic logic for:
-
-- single elimination
-- double elimination
-- round robin / pool play helpers
-- seeding and seeded shuffle
-- match progression and undo
-- pickleball score validation
-- standings computation
+`src/domain/bracket/` — single elimination, double elimination, round robin / pool play, seeding and seeded shuffle, match progression and undo, pickleball score validation, standings computation.
 
 ### Ladder
 
-`src/domain/ladder/` contains pure logic for:
+`src/domain/ladder/` — 4- and 5-player court rotations, court distribution, session generation, session finalization and movement calculation.
 
-- 4-player and 5-player court rotations
-- court distribution
-- session generation
-- session finalization and movement calculation
+These modules must remain framework-agnostic. Do not import React, Firebase, or UI code into `src/domain`.
 
-These modules should remain framework-agnostic. Do not import React, Firebase, or UI code into `src/domain`.
+## Duplicated Files
+
+The web app and `functions/` are separate TypeScript projects and cannot import from each other, so six files are duplicated by hand:
+
+| Canonical | Mirror |
+|---|---|
+| `src/lib/firestore/collections.ts` | `functions/src/lib/collections.ts` |
+| `src/lib/players/elo.ts` | `functions/src/lib/elo.ts` |
+| `src/lib/schemas/{club,match,role,session}.ts` | `functions/src/schemas/{...}.ts` |
+
+Edit the canonical copy, then copy its body over the mirror keeping the mirror's header comment. [src/lib/mirrors.test.ts](src/lib/mirrors.test.ts) fails `npm test` if the two ever diverge.
 
 ## Running Locally
 
@@ -180,12 +167,14 @@ NEXT_PUBLIC_FIREBASE_APP_ID=
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
 ```
 
-The Admin seed script additionally requires `FIREBASE_SERVICE_ACCOUNT_JSON`. Never commit that value.
+Set `NEXT_PUBLIC_FUNCTIONS_EMULATOR=true` to route callables at the local Functions emulator.
+
+The Admin scripts additionally require `FIREBASE_SERVICE_ACCOUNT_JSON`. Never commit that value.
 
 ## Verification
 
 ```bash
-npm test
+npm test          # domain engines + mirror drift guard
 npm run build
 npm run typecheck
 ```
@@ -198,52 +187,55 @@ npm run test:rules
 
 `test:rules` uses the Firebase Emulator Suite and requires Java on PATH. If Java is missing, the emulator exits with `spawn java ENOENT`.
 
-Known verification detail: `npm run typecheck` may fail on a fresh checkout if `.next/types` has not been generated yet. Run `npm run build` first, then rerun `npm run typecheck`.
+Known detail: `npm run typecheck` may fail on a fresh checkout if `.next/types` has not been generated. Run `npm run build` first, then rerun.
+
+## End-to-End Tests
+
+A pytest + Playwright suite lives in [tests/e2e/](tests/e2e/), organised by persona (player, coordinator, director, admin) plus auth and RBAC suites, with page objects and an HTML report.
+
+```bash
+pip install -r tests/e2e/requirements.txt
+playwright install chromium
+cp tests/e2e/.env.test.example tests/e2e/.env.test   # then fill in real credentials
+python tests/e2e/run_e2e.py
+```
+
+`tests/e2e/.env.test` holds live account credentials and is gitignored — keep it that way. Run artifacts under `tests/e2e/reports/` (videos, `run_*.json`, screenshots) are generated output and are gitignored too; only `custom_tests.json` is tracked.
+
+See [tests/e2e/README.md](tests/e2e/README.md) for the full runner reference and [tests/e2e/PORTAL_SETUP.md](tests/e2e/PORTAL_SETUP.md) for the local test portal.
 
 ## Deployment
 
-Firebase Hosting deploy:
-
 ```bash
-npm run deploy
+npm run deploy          # hosting only
+npm run deploy:all      # everything
+npm run rules:deploy    # firestore rules
+npm run indexes:deploy  # firestore indexes
+npm run functions:deploy
 ```
 
-Rules-only deploy:
+CI ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)) runs typecheck + tests, builds the static export, then deploys functions, rules, indexes, storage rules, and hosting in that order on every push to `main`.
 
-```bash
-npm run rules:deploy
-```
-
-Indexes-only deploy:
-
-```bash
-npm run indexes:deploy
-```
-
-The current Firebase project id used by scripts is `pickleleauge`. Keep `.firebaserc`, package scripts, and GitHub Actions in sync before deploying.
+The Firebase project id is `pickleleauge`. Keep `.firebaserc`, package scripts, and GitHub Actions in sync before deploying.
 
 ## Documentation Index
 
-- `Development Summaries/FIREBASE_DATABASE_SECURITY_AUDIT.md` - Firebase/database security audit.
-- `Development Summaries/REPO_ARCHITECTURE_DATA_INTEGRITY_AUDIT.md` - architecture and integrity audit, partly historical.
-- `Development Summaries/IMPLEMENTATION_GUIDE.md` - current implementation guide and secure-backend TODOs.
-- `Development Summaries/DEPLOYMENT_SUMMARY.md` - deployment and verification notes.
-- `automation/firebase_database_security_remediation_handoff.toon` - phased security remediation handoff.
-- `automation/facility_venue_geocheckin_consolidation_handoff.toon` - Facility/Venue merge, geocoding, open-play, and GPS-assisted check-in handoff.
-- `USE_CASE_TESTING.md` - role-based manual QA script and security regression checklist.
-- `ENHANCEMENTS.md` - reviewed feature backlog and recommended improvements.
+- [REPO_ARCHITECTURE_DATA_INTEGRITY_AUDIT.md](REPO_ARCHITECTURE_DATA_INTEGRITY_AUDIT.md) — architecture and integrity audit. Partly historical; predates the Cloud Functions migration.
+- [UX_UI_DESKTOP_MOBILE_PERSONA_AUDIT.md](UX_UI_DESKTOP_MOBILE_PERSONA_AUDIT.md) — UX/UI audit and design fix plan.
+- [USE_CASE_TESTING.md](USE_CASE_TESTING.md) — role-based manual QA script and security regression checklist.
+- [NEXT_AGENT_TODO.md](NEXT_AGENT_TODO.md) — current open enhancement queue.
+- [tests/e2e/README.md](tests/e2e/README.md) — E2E suite reference.
+- `automation/*.toon` — phased implementation handoff specs (present locally, gitignored).
 
 ## Production Gate
 
 Do not treat this app as production-ready until:
 
-- trusted backend functions replace blocked privileged client writes
-- custom claims or backend-only role docs are implemented
-- Firestore rules tests pass in CI
-- App Check is configured and enforced
-- Storage rules enforce owner/director scope, not just authentication and image constraints
-- FCM has a backend sender, token cleanup, and notification preferences
-- public/private profile data is split
+- App Check is enforced (`ENFORCE_APP_CHECK=true`) with reCAPTCHA Enterprise registered
+- `fcmTokens` has a Firestore rule so push registration can write
+- Storage rules enforce per-club scope for `CLUB_ADMIN`, not just the role
+- public/private profile data is split and public reads are narrowed
+- Firestore rules tests pass in CI (they are not currently part of the deploy workflow)
 - CI has protected production deploy environments
 
 ## License

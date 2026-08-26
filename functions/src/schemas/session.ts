@@ -1,4 +1,6 @@
-// Parallel copy of src/lib/schemas/session.ts. Kept in sync manually.
+// Mirror of src/lib/schemas/session.ts. Do NOT edit directly — edit the client copy,
+// then re-run `npm test`, which fails on drift (src/lib/mirrors.test.ts).
+
 import { z } from "zod";
 
 const NonEmptyId = z.string().trim().min(1).max(128);

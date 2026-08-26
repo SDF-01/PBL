@@ -2,81 +2,57 @@
 
 ## Context
 
-This is a Next.js 15 + React 19 + Firebase app for pickleball leagues, clubs, ladder play dates, check-ins, sessions, scoring, standings, and admin workflows.
+Next.js 15 + React 19 static export on Firebase, with a Cloud Functions command layer for every privileged write. See [README.md](README.md) for the architecture, the claim-based authorization model, and the mirrored-file rule.
 
-Key files:
+The previous contents of this file — gating check-in behind league match-day selection, plus a five-item "next enhancement bundle" — are **all shipped**. Verified present:
 
-- `src/app/leagues/[leagueId]/LeagueDetailsClient.tsx`: league detail page and member/staff action panels.
-- `src/app/ladder/check-in/page.tsx`: current check-in flow; global page with play-date selector and optional `?playDate=`.
-- `src/app/ladder/play-dates/page.tsx`: global play-date list and direct check-in links.
-- `src/lib/ladder/repo.ts`: ladder read helpers.
-- `src/lib/ladder/write.ts`: check-in and ladder write helpers.
-- `src/lib/firestore/types.ts`: `LeagueDoc`, `PlayDateDoc`, and `CheckInDoc` shapes.
-- `UX_UI_DESKTOP_MOBILE_PERSONA_AUDIT.md`: existing product/UX audit with many enhancement ideas.
+- `listPlayDatesByLeague` in [src/lib/ladder/repo.ts](src/lib/ladder/repo.ts), consumed by the league detail page and club management.
+- Match-day selector with a `CHECK_IN_OPEN`-gated CTA in [LeagueDetailsClient.tsx](src/app/leagues/[leagueId]/LeagueDetailsClient.tsx) (`PlayDateCheckInCta`), deep-linking to `/ladder/check-in?playDate=`.
+- Composite index `playDates(leagueId, date)` in [firestore.indexes.json](firestore.indexes.json).
+- Coordinator live dashboard with check-ins, no-shows, late arrivals, court assignment, and score status in [CoordinatorDashboardClient.tsx](src/app/ladder/coordinator/[playDateId]/CoordinatorDashboardClient.tsx).
+- Check-in fallback via play-date code (`setPlayDateCheckInCode` / `createCheckInByCode`) and `adminOverrideCheckIn`.
+- Club-scoped league list and coordinator assignment in [ClubManageClient.tsx](src/app/clubs/manage/[clubId]/ClubManageClient.tsx).
+- Regeneration confirmation dialog plus schedule snapshots in [ScheduleClient.tsx](src/app/leagues/[leagueId]/schedule/ScheduleClient.tsx).
 
-## Primary Enhancement
+What follows is the current open queue, highest-risk first.
 
-Check-in should only be available from the league page after the user has selected a match day.
+## 1. `fcmTokens` has no Firestore rule — push is dead
 
-Current behavior:
+`firestore.rules` has no `match /fcmTokens/{...}` block, so it falls through to the terminal `allow read, write: if false`. [src/lib/fcm.ts](src/lib/fcm.ts) writes token documents with `setDoc`, and that write can only fail with permission-denied.
 
-- Many surfaces link to `/ladder/check-in` directly.
-- The check-in page can list/select play dates globally.
-- The league page member card has a generic `Check In` button linking to `/ladder/check-in`.
+The server half is already built: `sendPushToUser` / `sendPushToMany` in [functions/src/lib/push.ts](functions/src/lib/push.ts) read `fcmTokens` and prune rejected tokens. It has nothing to read.
 
-Target behavior:
+Two viable designs — pick one deliberately:
 
-- League detail page shows that league's match days/play dates.
-- User selects a match day on the league page.
-- Check-in button appears/enables only for the selected match day when check-in is open.
-- Check-in link includes the selected play date: `/ladder/check-in?playDate={playDateId}`.
-- Regular players should not use `/ladder/check-in` as a global "pick any play date" entry point.
+- **Client-write rule.** Add a rule scoping each document to its owner (`request.resource.data.userId == request.auth.uid` on create, `resource.data.userId == request.auth.uid` on read/update/delete). Simplest, keeps `fcm.ts` unchanged. Note the document id is not the uid, so both the request and resource forms are needed.
+- **Callable.** Route registration through a `registerFcmToken` function and leave the collection Functions-only. Consistent with how every other sensitive write behaves, at the cost of another callable.
 
-## Suggested Implementation
+Add rules-test coverage either way — a test asserting one user cannot write another user's token document.
 
-1. Add `listPlayDatesByLeague(leagueId: string)` in `src/lib/ladder/repo.ts`.
-   - Query `COLLECTIONS.playDates`.
-   - Filter `where("leagueId", "==", leagueId)`.
-   - Order by `date` ascending.
-   - Return `PlayDateDoc[]`.
+## 2. Enforce App Check
 
-2. Update `src/app/leagues/[leagueId]/LeagueDetailsClient.tsx`.
-   - Import `listPlayDatesByLeague` and `PlayDateDoc`.
-   - Add `playDates` and `selectedPlayDateId` state.
-   - Fetch play dates after the league loads.
-   - In the active member panel, replace the generic Check In link with a match-day selector plus a gated button.
-   - Enable the button only when `selectedPlayDate.status === "CHECK_IN_OPEN"`.
+`enforceAppCheck` in [functions/src/lib/secureCallable.ts](functions/src/lib/secureCallable.ts) is env-gated and defaults to `false`. The client already mints tokens. Follow the rollout in the README's "Enabling App Check" section — in particular, confirm verified requests in Console → App Check → Metrics *before* setting `ENFORCE_APP_CHECK=true`, because it is a deploy-time option and flipping it blind rejects every callable.
 
-3. Tighten `src/app/ladder/check-in/page.tsx`.
-   - If there is no `playDate` query param, guide regular players back to the league page or play-date list instead of showing a global selector.
-   - Keep `?playDate=` deep links working.
-   - Decide whether coordinators/admins should retain global management access.
+## 3. Per-club scope on Storage club logos
 
-4. Remove or redirect generic check-in entry points.
-   - `src/app/(authenticated)/dashboard/page.tsx`
-   - `src/app/HomeMobile.tsx`
-   - `src/app/HomeDesktop.tsx`
-   - `src/components/layout/AppSidebar.tsx`
-   - `src/components/layout/SiteFooter.tsx`
-   - `src/components/player/PlayerDashboardFallback.tsx`
-   - `src/app/ladder/session/page.tsx`
-   - Review `src/app/games/page.tsx` and `src/app/ladder/play-dates/page.tsx`; those already pass `?playDate=`, so decide whether they remain acceptable.
+[storage.rules](storage.rules) lets any `CLUB_ADMIN` write `/clubs/{clubId}/**`, so a director of club A can overwrite club B's logo. Scope is currently enforced only by UI. Storage rules cannot query Firestore, so this needs either a claim carrying the director's club ids or an upload callable that issues scoped write access.
 
-## Next Enhancement Bundle
+## 4. Split public and private profile data
 
-- Coordinator live session dashboard: combine check-ins, no-shows, court assignment, and score status in one screen.
-- Check-in fallback: QR/manual code or coordinator override when GPS fails.
-- No-show and late-arrival workflow on the check-in management panel.
-- Club director league management: club-scoped league list, participation stats, coordinator assignments.
-- Schedule safety: confirmation dialog before regenerating league schedules.
+`users/{uid}` is `allow read: if true` and holds email, phone number, and account status alongside display fields. Split into a public profile document and a private account document, then narrow the public read. This is the largest remaining item and touches most read paths.
+
+## 5. Run rules tests in CI
+
+[.github/workflows/deploy.yml](.github/workflows/deploy.yml) runs `npm test` but not `npm run test:rules`, so `firestore.rules` deploys to production with no automated verification. Needs a Java-provisioned job step running the emulator. Given the rules are now the entire client-side authorization boundary, this is worth more than it looks.
+
+## 6. Rotate the leaked test-admin credential
+
+`tests/e2e/.env.test` was committed with a live password for the `SITE_ADMIN` account. It is now untracked and gitignored, and history has been rewritten locally, but **the password itself must still be rotated in Firebase Console** — the rewrite does not invalidate a credential that was already published. Rotate, then update the local `.env.test`.
 
 ## Verification
 
-Run:
-
 ```bash
+npm test          # domain engines + mirror drift guard
 npm run typecheck
-npm test
+npm run test:rules   # requires Java on PATH
 ```
-
-If Firebase index errors appear for the new league play-date query, add the required Firestore composite index for `playDates` on `leagueId` plus `date`.

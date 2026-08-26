@@ -1,4 +1,7 @@
 // Firestore collection names — single source of truth.
+// Canonical copy. A byte-equivalent mirror lives at functions/src/lib/collections.ts;
+// src/lib/mirrors.test.ts fails the build if the two drift apart.
+
 export const COLLECTIONS = {
   users: "users",
   organizations: "organizations",

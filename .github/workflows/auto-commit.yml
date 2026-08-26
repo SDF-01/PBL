@@ -1,9 +1,19 @@
 name: Auto Commit and Push
 
+# NOTE: the nightly `schedule:` trigger was removed deliberately.
+#
+# This job runs `git add .` and commits whatever it finds. With no generation
+# step wired up it had nothing to commit, but it was scheduled to run every
+# night with `contents: write` — so the moment anyone added a build step that
+# emits files into the working tree, it would start pushing them to main
+# unreviewed. Manual dispatch keeps the scaffolding available without leaving
+# an unattended writer pointed at the default branch.
+#
+# Before re-enabling `schedule:`, replace the placeholder step below with a
+# real generation command and narrow `git add .` to just the paths it emits.
+
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * *'
 
 permissions:
   contents: write

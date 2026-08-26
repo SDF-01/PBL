@@ -1,5 +1,17 @@
-// Parallel copy of src/lib/players/elo.ts. Keep in sync with the client
-// copy until a shared package extracts pure domain logic.
+// Mirror of src/lib/players/elo.ts. Do NOT edit directly — edit the client copy,
+// then re-run `npm test`, which fails on drift (src/lib/mirrors.test.ts).
+
+/**
+ * Classic Elo with a doubles-match adaptation.
+ *
+ * We compute expected score using the *average* rating of each side and
+ * apply one symmetric delta to the winning side and the mirror delta to
+ * the losing side. Partners on the same side receive the same delta
+ * so teammates share credit / blame equally.
+ *
+ * K-factor scales with experience (provisional up to 30 matches) and
+ * with the absolute score margin — blowouts swing more than nail-biters.
+ */
 
 export const STARTING_ELO = 1500;
 
@@ -10,14 +22,16 @@ export function expectedScore(ratingA: number, ratingB: number): number {
 export interface PlayerRating {
   userId: string;
   elo: number;
+  /** Number of matches previously played. Drives provisional K. */
   matches: number;
 }
 
 export interface MatchOutcome {
-  sideA: PlayerRating[];
+  sideA: PlayerRating[]; // length 1 (singles) or 2 (doubles)
   sideB: PlayerRating[];
   scoreA: number;
   scoreB: number;
+  /** Configured target points for the match. Used to scale margin weight. */
   targetPoints: number;
 }
 
@@ -29,12 +43,17 @@ export interface EloDelta {
 }
 
 function kFactor(matches: number): number {
+  // Provisional boost for first 30 matches, then steady 24.
   if (matches < 5) return 40;
   if (matches < 15) return 32;
   if (matches < 30) return 28;
   return 24;
 }
 
+/**
+ * Returns per-player ELO deltas for a completed match. Side with the
+ * higher score is the winner; ties are not accepted (throws).
+ */
 export function computeEloDeltas(m: MatchOutcome): EloDelta[] {
   if (m.sideA.length === 0 || m.sideB.length === 0) {
     throw new Error("Both sides must have at least one player.");
@@ -50,6 +69,8 @@ export function computeEloDeltas(m: MatchOutcome): EloDelta[] {
   const actualA = winnerA ? 1 : 0;
   const actualB = 1 - actualA;
 
+  // Margin multiplier: 1.0 at exactly target-points-to-1, scaling toward
+  // 1.5 for a shutout. Never below 0.8 for a 1-point win.
   const margin = Math.abs(m.scoreA - m.scoreB);
   const marginMult = Math.max(
     0.8,
@@ -82,4 +103,21 @@ export function computeEloDeltas(m: MatchOutcome): EloDelta[] {
 
 function avg(xs: number[]): number {
   return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
+export function skillBand(
+  elo: number,
+):
+  | "NOVICE"
+  | "BEGINNER"
+  | "INTERMEDIATE"
+  | "ADVANCED"
+  | "EXPERT"
+  | "ELITE" {
+  if (elo < 1200) return "NOVICE";
+  if (elo < 1400) return "BEGINNER";
+  if (elo < 1600) return "INTERMEDIATE";
+  if (elo < 1800) return "ADVANCED";
+  if (elo < 2000) return "EXPERT";
+  return "ELITE";
 }
