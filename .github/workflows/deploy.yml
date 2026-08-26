@@ -65,6 +65,11 @@ jobs:
           npm ci --prefer-online
           npm run build
 
+      # This step used to only check the secret was non-empty and write it to
+      # disk, then call itself "Authenticate". It never contacted Google, so an
+      # expired, revoked, or malformed key passed it and failed several steps
+      # later with an unattributable "exit code 1". The preflight below makes a
+      # real authenticated API call so credential problems fail HERE, named.
       - name: Authenticate Firebase CLI
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -73,11 +78,32 @@ jobs:
             echo "::error::FIREBASE_SERVICE_ACCOUNT secret is not set"
             exit 1
           fi
-          echo "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          if ! printf '%s' "$SA_JSON" | python3 -c 'import json,sys; json.load(sys.stdin)' 2>/dev/null; then
+            echo "::error::FIREBASE_SERVICE_ACCOUNT is not valid JSON (check for truncation or added quotes)"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+          echo "service account: $(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/sa.json"))["client_email"])')"
+
+      - name: Verify Firebase credentials
+        run: |
+          # Cheap authenticated round-trip. If the key is expired/revoked or the
+          # service account lost its roles, this fails with Google's actual
+          # message instead of surfacing as a generic deploy failure.
+          npx firebase-tools projects:list --non-interactive
 
       - name: Deploy Cloud Functions
-        run: npx firebase-tools deploy --only functions --project pickleleauge --non-interactive --force
+        run: npx firebase-tools deploy --only functions --project pickleleauge --non-interactive --force --debug
+
+      # firebase-debug.log holds the underlying HTTP status and API error body,
+      # which is the only place the real cause of a functions deploy failure
+      # appears. Without this the job reports nothing but "exit code 1".
+      - name: Dump Firebase debug log on failure
+        if: failure()
+        run: |
+          echo "===== firebase-debug.log ====="
+          tail -n 300 firebase-debug.log 2>/dev/null || echo "(no firebase-debug.log produced)"
 
       - name: Deploy Firestore rules and indexes
         run: npx firebase-tools deploy --only firestore:rules,firestore:indexes --project pickleleauge --non-interactive --force

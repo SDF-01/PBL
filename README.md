@@ -21,7 +21,7 @@ Remaining gaps before production are listed under [Production Gate](#production-
 | Styling | Tailwind CSS + CSS variables | Obsidian/ember/rune visual system. |
 | Auth | Firebase Auth | Email/password and Google OAuth; authority via custom claims. |
 | Database | Cloud Firestore | Client SDK for reads + self-service writes; privileged writes are Functions-only. |
-| Backend | Cloud Functions (gen 2) | 14 callables in `functions/`. Node 20, region `us-central1`. |
+| Backend | Cloud Functions (gen 2) | 13 callables in `functions/`. Node 20, region `us-central1`. |
 | Storage | Firebase Storage | Player photos and club logos; rules enforce role, owner path, size, and content type. |
 | Push/PWA | Service workers + FCM | App SW, Messaging SW, client token registration, Admin SDK sender with stale-token cleanup. |
 | Hosting | Firebase Hosting | Serves `out/`; rewrites map dynamic routes to `__fallback` pages. |
