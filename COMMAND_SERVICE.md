@@ -73,7 +73,7 @@ Point the web app at it with `NEXT_PUBLIC_COMMANDS_BASE_URL=http://localhost:878
 ## Deploying to Netlify (free tier, no card)
 
 1. Create a Netlify site from this GitHub repo.
-2. Build settings: the functions directory is `netlify/functions`; no build command is needed for the API alone.
+2. Build settings come from `netlify.toml`: it installs `functions/` dependencies, deploys `netlify/functions`, and skips the Next.js build (Firebase Hosting serves the site). Leave the build fields in the Netlify UI empty.
 3. Environment variables:
    - `FIREBASE_SERVICE_ACCOUNT` — the service account JSON as a single line. Same value as the GitHub secret.
    - `ALLOWED_ORIGINS` — optional, comma-separated. Defaults to the two Firebase Hosting origins plus `http://localhost:3000`. Set this when you add a custom domain.

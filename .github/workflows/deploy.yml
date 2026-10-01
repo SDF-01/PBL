@@ -1,7 +1,16 @@
 name: Deploy to Firebase
 
+# Two jobs:
+#   verify  runs on every pull request and every push to main. It is the check
+#           branch protection should require, so code that does not typecheck,
+#           test, or build is stopped before it reaches main.
+#   deploy  runs only on main, only after verify passes, and ships the exact
+#           static export verify built.
+
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -9,8 +18,11 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
+  verify:
     runs-on: ubuntu-latest
+    concurrency:
+      group: verify-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -18,22 +30,28 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "npm"
-
-      - name: Clean npm cache
-        run: |
-          npm cache clean --force
-          rm -rf ~/.npm/_cacache
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
 
       - name: Install dependencies
-        run: npm ci --prefer-online
+        run: npm ci
+
+      - name: Install Cloud Functions dependencies
+        run: npm --prefix functions ci
 
       - name: Typecheck
         run: npm run typecheck
 
       - name: Test
         run: npm test
+
+      # The command service compiles from functions/src for both Netlify and
+      # Cloud Functions, so a type error there must fail the check too.
+      - name: Build command service
+        run: npm --prefix functions run build
 
       - name: Build static export
         env:
@@ -44,6 +62,7 @@ jobs:
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "481849102562"
           NEXT_PUBLIC_FIREBASE_APP_ID:              "1:481849102562:web:ec4ba61bcf1e5eaa1fcebb"
           NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID:      "G-KD1JTE4ET6"
+          # Only read when App Check is enforced, which it currently is not.
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY:           ${{ secrets.RECAPTCHA_SITE_KEY }}
           # Base URL of the privileged command service (see COMMAND_SERVICE.md).
           # Set the repository variable COMMANDS_BASE_URL to your host, e.g.
@@ -55,26 +74,52 @@ jobs:
           NEXT_PUBLIC_BUILD_TIME: ${{ github.run_number }}
         run: npm run build
 
-      # ---- Firebase backend deploys ---------------------------------------
-      # Functions, Firestore rules, Firestore indexes, and Storage rules are
-      # deployed via the Firebase CLI (the hosting action below only handles
-      # hosting). Each step is idempotent — unchanged config is a no-op.
-      #
-      # Order matters: functions first so any tightened rules don't lock
-      # out callable paths that haven't shipped yet; rules + indexes next;
-      # storage last (the only one with no cross-dependencies).
+      - name: Warn if the command service URL is missing
+        if: github.ref == 'refs/heads/main' && vars.COMMANDS_BASE_URL == ''
+        run: echo "::warning::Repository variable COMMANDS_BASE_URL is not set, so privileged actions on the deployed site will report 'not configured'."
 
-      - name: Build Cloud Functions
-        run: |
-          cd functions
-          npm ci --prefer-online
-          npm run build
+      - name: Upload static export
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: out
+          retention-days: 3
 
-      # This step used to only check the secret was non-empty and write it to
-      # disk, then call itself "Authenticate". It never contacted Google, so an
-      # expired, revoked, or malformed key passed it and failed several steps
-      # later with an unattributable "exit code 1". The preflight below makes a
-      # real authenticated API call so credential problems fail HERE, named.
+  deploy:
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Never run two production deploys at once, and never cancel one midway.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      # Installs the pinned firebase-tools from devDependencies, so every deploy
+      # uses the same CLI version rather than whatever npx fetches that day.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download static export
+        uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: out
+
+      # Fails here, named, if the secret is missing or mangled, instead of
+      # several steps later with an unattributed "exit code 1".
       - name: Authenticate Firebase CLI
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
@@ -91,63 +136,44 @@ jobs:
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
           echo "service account: $(python3 -c 'import json;print(json.load(open("'"$RUNNER_TEMP"'/sa.json"))["client_email"])')"
 
-      # Non-blocking on purpose. A deploy-scoped service account may legitimately
-      # lack projects.list while still being able to deploy, and this step must
-      # never mask the deploy's own error by short-circuiting the job. It runs
-      # purely to put a real authenticated round-trip in the log.
-      - name: Verify Firebase credentials
-        continue-on-error: true
-        run: |
-          npx firebase-tools projects:list --non-interactive
-
-      # Cloud Functions require the Blaze plan, and this project is on Spark —
-      # so this step is skipped by default and the identical commands are served
-      # by the HTTP host instead (netlify/functions + functions/src/server).
-      # Nothing about the command logic differs between the two; see
-      # functions/src/registry.ts.
+      # Cloud Functions require the Blaze plan, and this project is on Spark,
+      # so these steps are skipped and the identical commands are served by the
+      # Netlify host instead (netlify/functions + functions/src/server). See
+      # COMMAND_SERVICE.md.
       #
       # To switch back: enable Blaze, then set the repository variable
-      # DEPLOY_FUNCTIONS=true (Settings -> Secrets and variables -> Actions ->
-      # Variables). No code change is required.
+      # DEPLOY_FUNCTIONS=true. No code change is required.
+      - name: Install Cloud Functions dependencies
+        if: vars.DEPLOY_FUNCTIONS == 'true'
+        run: npm --prefix functions ci
+
       - name: Deploy Cloud Functions
         if: vars.DEPLOY_FUNCTIONS == 'true'
-        run: npx firebase-tools deploy --only functions --project pickleleauge --non-interactive --force --debug
+        run: npx firebase deploy --only functions --project pickleleauge --non-interactive --force --debug
 
-      # firebase-debug.log holds the underlying HTTP status and API error body,
-      # which is the only place the real cause of a functions deploy failure
-      # appears. Without this the job reports nothing but "exit code 1".
-      - name: Dump Firebase debug log on failure
-        if: failure()
+      # firebase-debug.log holds the underlying API error, which is the only
+      # place the real cause of a functions deploy failure appears. Each line is
+      # emitted as an annotation so it is readable without opening the logs.
+      - name: Show Cloud Functions deploy error
+        if: failure() && vars.DEPLOY_FUNCTIONS == 'true'
         run: |
-          echo "===== firebase-debug.log (tail) ====="
-          tail -n 300 firebase-debug.log 2>/dev/null || echo "(no firebase-debug.log produced)"
-          # Job logs need an authenticated token to read, but annotations are
-          # exposed on the public check-runs API. Emitting each matching line as
-          # its own annotation makes the real cause visible without log access.
-          # The fatal error is at the END of the log. Matching generically on
-          # "error" hits the apiv2 request tracing near the start instead, so
-          # target real error markers and always include the tail as a fallback.
-          if [ -f firebase-debug.log ]; then
-            {
-              grep -aE "^\[error\]|Error:|HTTP Error|FirebaseError|billing|not been used|is disabled" firebase-debug.log | tail -n 8
-              echo "----- tail of firebase-debug.log -----"
-              tail -n 14 firebase-debug.log
-            } > deploy-errors.txt 2>/dev/null || true
-            while IFS= read -r line; do
-              if [ -n "$line" ]; then
-                echo "::error title=Functions deploy::${line}"
-              fi
-            done < deploy-errors.txt
+          if [ ! -f firebase-debug.log ]; then
+            echo "(no firebase-debug.log produced)"
+            exit 0
           fi
+          tail -n 300 firebase-debug.log
+          grep -aE "^\[error\]|HTTP Error|FirebaseError|billing|not been used|is disabled" firebase-debug.log \
+            | tail -n 8 \
+            | while IFS= read -r line; do
+                [ -n "$line" ] && echo "::error title=Functions deploy::${line}"
+              done
 
       - name: Deploy Firestore rules and indexes
-        run: npx firebase-tools deploy --only firestore:rules,firestore:indexes --project pickleleauge --non-interactive --force
+        run: npx firebase deploy --only firestore:rules,firestore:indexes --project pickleleauge --non-interactive --force
 
       - name: Deploy Storage rules
-        run: npx firebase-tools deploy --only storage --project pickleleauge --non-interactive --force
+        run: npx firebase deploy --only storage --project pickleleauge --non-interactive --force
 
-      # ---- Hosting --------------------------------------------------------
-      # Kept as a separate action for the PR-preview channel features.
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:

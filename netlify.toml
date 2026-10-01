@@ -1,0 +1,19 @@
+# Netlify hosts only the privileged command service (see COMMAND_SERVICE.md).
+# The web app itself is served by Firebase Hosting, so nothing here builds it.
+
+[build]
+  # Install the command service's dependencies and create an empty
+  # publish folder. Firebase Hosting serves the real site.
+  command   = "npm --prefix functions ci && mkdir -p netlify/public"
+  publish   = "netlify/public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # Stop Netlify from auto-building the Next.js app.
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+[functions]
+  node_bundler = "esbuild"
+  # Ship firebase-admin as a normal dependency instead of bundling it.
+  external_node_modules = ["firebase-admin"]
