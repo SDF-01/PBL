@@ -34,3 +34,7 @@ __pycache__/
 # definitions, which are source, not output.
 tests/e2e/reports/*
 !tests/e2e/reports/custom_tests.json
+
+# Netlify local state and the empty publish folder its build creates
+.netlify/
+netlify/public/
